@@ -1,90 +1,94 @@
 import { Request, Response } from 'express';
-
-// Mock Data - In a real app, import Article model
-let ARTICLES_DB: any[] = [
-  {
-    id: '1',
-    title: 'India\'s Economic Growth Hits 8%',
-    content: 'India\'s economy has shown remarkable growth...',
-    authorId: 'u1',
-    authorName: 'Akash Solanki',
-    category: 'Business',
-    publishedAt: '2025-10-01T08:00:00Z',
-    tags: ['India', 'Economy', 'Growth']
-  },
-  {
-    id: '2',
-    title: 'Tech Innovation in Bangalore',
-    content: 'Bangalore continues to lead in tech innovation...',
-    authorId: 'u1',
-    authorName: 'Akash Solanki',
-    category: 'Tech',
-    publishedAt: '2025-10-02T09:30:00Z',
-    tags: ['Tech', 'Innovation', 'Bangalore']
-  },
-  {
-    id: '3',
-    title: 'Sustainable Development Goals',
-    content: 'India\'s progress on SDGs...',
-    authorId: 'u2',
-    authorName: 'Hemant Sharma',
-    category: 'Lifestyle',
-    publishedAt: '2025-10-03T10:15:00Z',
-    tags: ['Sustainability', 'Development']
-  },
-  {
-    id: '4',
-    title: 'Startup Ecosystem Expansion',
-    content: 'India\'s startup ecosystem continues to expand...',
-    authorId: 'u2',
-    authorName: 'Hemant Sharma',
-    category: 'Business',
-    publishedAt: '2025-10-04T11:00:00Z',
-    tags: ['Startups', 'Business', 'India']
-  }
-];
+import { Article } from '../models/Article.js';
+import { normalizeDoc, normalizeDocs } from '../utils/db.js';
+import { createArticleSchema, updateArticleSchema } from '../utils/validation.js';
 
 export const getArticles = async (req: Request, res: Response) => {
-  const { authorId } = req.query;
-  let articles = ARTICLES_DB;
-  
-  if (authorId) {
-    articles = articles.filter(a => a.authorId === authorId);
+  try {
+    const { authorId } = req.query;
+    
+    let query: any = {};
+    if (authorId) {
+      query.authorId = authorId;
+    }
+    
+    const articles = await Article.find(query).sort({ publishedAt: -1 });
+    res.json(normalizeDocs(articles));
+  } catch (error: any) {
+    console.error('[Articles] Get articles error:', error);
+    res.status(500).json({ message: 'Internal server error' });
   }
-  
-  res.json(articles);
 };
 
 export const getArticleById = async (req: Request, res: Response) => {
-  const article = ARTICLES_DB.find(a => a.id === req.params.id);
-  if (!article) return res.status(404).json({ message: 'Article not found' });
-  res.json(article);
+  try {
+    const article = await Article.findById(req.params.id);
+    if (!article) return res.status(404).json({ message: 'Article not found' });
+    res.json(normalizeDoc(article));
+  } catch (error: any) {
+    console.error('[Articles] Get article by ID error:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
 };
 
 export const createArticle = async (req: Request, res: Response) => {
-  const newArticle = {
-    ...req.body,
-    id: Date.now().toString(),
-    publishedAt: new Date().toISOString()
-  };
-  ARTICLES_DB.unshift(newArticle);
-  res.status(201).json(newArticle);
+  try {
+    // Validate input
+    const validationResult = createArticleSchema.safeParse(req.body);
+    if (!validationResult.success) {
+      return res.status(400).json({ 
+        message: 'Validation failed', 
+        errors: validationResult.error.errors 
+      });
+    }
+
+    const data = validationResult.data;
+    const newArticle = await Article.create({
+      ...data,
+      publishedAt: data.publishedAt || new Date().toISOString()
+    });
+    
+    res.status(201).json(normalizeDoc(newArticle));
+  } catch (error: any) {
+    console.error('[Articles] Create article error:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
 };
 
 export const updateArticle = async (req: Request, res: Response) => {
-  const index = ARTICLES_DB.findIndex(a => a.id === req.params.id);
-  if (index === -1) return res.status(404).json({ message: 'Article not found' });
-  
-  ARTICLES_DB[index] = { ...ARTICLES_DB[index], ...req.body };
-  res.json(ARTICLES_DB[index]);
+  try {
+    // Validate input
+    const validationResult = updateArticleSchema.safeParse(req.body);
+    if (!validationResult.success) {
+      return res.status(400).json({ 
+        message: 'Validation failed', 
+        errors: validationResult.error.errors 
+      });
+    }
+
+    const article = await Article.findByIdAndUpdate(
+      req.params.id,
+      validationResult.data,
+      { new: true, runValidators: true }
+    );
+    
+    if (!article) return res.status(404).json({ message: 'Article not found' });
+    res.json(normalizeDoc(article));
+  } catch (error: any) {
+    console.error('[Articles] Update article error:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
 };
 
 export const deleteArticle = async (req: Request, res: Response) => {
-  const index = ARTICLES_DB.findIndex(a => a.id === req.params.id);
-  if (index === -1) return res.status(404).json({ message: 'Article not found' });
-  
-  ARTICLES_DB = ARTICLES_DB.filter(a => a.id !== req.params.id);
-  res.status(204).send();
+  try {
+    const article = await Article.findByIdAndDelete(req.params.id);
+    if (!article) return res.status(404).json({ message: 'Article not found' });
+    res.status(204).send();
+  } catch (error: any) {
+    console.error('[Articles] Delete article error:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
 };
 
 

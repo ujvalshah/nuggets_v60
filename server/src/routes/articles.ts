@@ -1,6 +1,6 @@
-
 import { Router } from 'express';
-import * as articlesController from '../controllers/articlesController';
+import * as articlesController from '../controllers/articlesController.js';
+import { authenticateToken } from '../middleware/authenticateToken.js';
 
 const router = Router();
 
@@ -10,13 +10,13 @@ router.get('/', articlesController.getArticles);
 // GET /api/articles/:id - Get specific article
 router.get('/:id', articlesController.getArticleById);
 
-// POST /api/articles - Create new article
-router.post('/', articlesController.createArticle);
+// POST /api/articles - Create new article (requires authentication)
+router.post('/', authenticateToken, articlesController.createArticle);
 
-// PUT /api/articles/:id - Update article
-router.put('/:id', articlesController.updateArticle);
+// PUT /api/articles/:id - Update article (requires authentication)
+router.put('/:id', authenticateToken, articlesController.updateArticle);
 
-// DELETE /api/articles/:id - Delete article
-router.delete('/:id', articlesController.deleteArticle);
+// DELETE /api/articles/:id - Delete article (requires authentication)
+router.delete('/:id', authenticateToken, articlesController.deleteArticle);
 
 export default router;
