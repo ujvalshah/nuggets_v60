@@ -15,3 +15,4 @@ if (adapterType === 'rest') {
 
 export const getAdapter = (): IAdapter => adapter;
 
+

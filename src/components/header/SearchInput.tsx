@@ -21,3 +21,4 @@ export const SearchInput: React.FC<SearchInputProps> = ({ value, onChange, place
   );
 };
 
+

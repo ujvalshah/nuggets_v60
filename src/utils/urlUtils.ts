@@ -21,3 +21,4 @@ export const detectProviderFromUrl = (url: string): 'image' | 'video' | 'documen
   return 'link';
 };
 
+

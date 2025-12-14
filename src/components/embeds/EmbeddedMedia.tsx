@@ -37,3 +37,4 @@ export const EmbeddedMedia: React.FC<EmbeddedMediaProps> = ({ media, onClick }) 
   );
 };
 
+

@@ -105,3 +105,4 @@ export class RestAdapter implements IAdapter {
   }
 }
 
+

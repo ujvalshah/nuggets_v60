@@ -39,3 +39,4 @@ export const NewsCardMedia: React.FC<NewsCardMediaProps> = ({ article, onClick }
   );
 };
 
+

@@ -36,3 +36,4 @@ export interface IAdapter {
   flagEntryAsIrrelevant(collectionId: string, articleId: string, userId: string): Promise<void>;
 }
 
+

@@ -74,3 +74,4 @@ export const normalizeCategoryLabel = (input: string): string => {
   return `#${cleaned}`;
 };
 
+

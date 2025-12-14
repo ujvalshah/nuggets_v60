@@ -24,3 +24,4 @@ export interface PasswordFormValues {
   newPassword: string;
   confirmPassword: string;
 }
+

@@ -36,3 +36,4 @@ export const AddToCollectionModal: React.FC<AddToCollectionModalProps> = ({
   );
 };
 
+
