@@ -5,10 +5,10 @@ import { AdminSummaryBar } from '../components/AdminSummaryBar';
 import { AdminNugget } from '../types/admin';
 import { adminNuggetsService } from '../services/adminNuggetsService';
 import { AlertTriangle, Trash2, Eye, EyeOff, Globe, Lock, Video, Image as ImageIcon, Link as LinkIcon, StickyNote, CheckCircle2, FileText, PlusCircle, Edit2, Save, X, Filter, Layout } from 'lucide-react';
-import { useToast } from '../../hooks/useToast';
+import { useToast } from '@/hooks/useToast';
 import { useAdminPermissions } from '../hooks/useAdminPermissions';
 import { AdminDrawer } from '../components/AdminDrawer';
-import { ConfirmActionModal } from '../../components/settings/ConfirmActionModal';
+import { ConfirmActionModal } from '@/components/settings/ConfirmActionModal';
 import { useAdminHeader } from '../layout/AdminLayout';
 
 export const AdminNuggetsPage: React.FC = () => {

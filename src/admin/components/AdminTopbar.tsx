@@ -2,8 +2,8 @@
 import React from 'react';
 import { Menu, ExternalLink } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { Avatar } from '../../components/shared/Avatar';
-import { useAuth } from '../../hooks/useAuth';
+import { Avatar } from '@/components/shared/Avatar';
+import { useAuth } from '@/hooks/useAuth';
 
 interface AdminTopbarProps {
   onMenuClick: () => void;

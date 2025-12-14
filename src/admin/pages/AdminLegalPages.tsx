@@ -2,12 +2,12 @@
 import React, { useEffect, useState } from 'react';
 import { useAdminHeader } from '../layout/AdminLayout';
 import { adminConfigService } from '../services/adminConfigService';
-import { LegalPage, LegalPageSlug } from '../../types/legal';
-import { useToast } from '../../hooks/useToast';
-import { RichTextEditor } from '../../components/RichTextEditor';
+import { LegalPage, LegalPageSlug } from '@/types/legal';
+import { useToast } from '@/hooks/useToast';
+import { RichTextEditor } from '@/components/RichTextEditor';
 import { ToggleLeft, ToggleRight, Edit3, Globe, Save, ExternalLink } from 'lucide-react';
 import { AdminDrawer } from '../components/AdminDrawer';
-import { formatDate } from '../../utils/formatters';
+import { formatDate } from '@/utils/formatters';
 
 export const AdminLegalPages: React.FC = () => {
   const { setPageHeader } = useAdminHeader();

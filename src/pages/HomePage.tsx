@@ -1,14 +1,14 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Article, SortOrder, Collection } from '../types';
-import { useBookmarks } from '../hooks/useBookmarks';
-import { useArticles } from '../hooks/useArticles';
+import { Article, SortOrder, Collection } from '@/types';
+import { useBookmarks } from '@/hooks/useBookmarks';
+import { useArticles } from '@/hooks/useArticles';
 import { Loader2, AlertCircle, TrendingUp, Folder, Hash } from 'lucide-react';
-import { ArticleModal } from '../components/ArticleModal';
-import { ArticleGrid } from '../components/ArticleGrid';
-import { storageService } from '../services/storageService';
-import { Badge } from '../components/UI/Badge';
-import { useAuth } from '../hooks/useAuth';
+import { ArticleModal } from '@/components/ArticleModal';
+import { ArticleGrid } from '@/components/ArticleGrid';
+import { storageService } from '@/services/storageService';
+import { Badge } from '@/components/UI/Badge';
+import { useAuth } from '@/hooks/useAuth';
 import { Link } from 'react-router-dom';
 
 interface HomePageProps {

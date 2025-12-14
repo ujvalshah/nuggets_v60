@@ -22,8 +22,8 @@ let COLLECTIONS_DB = [
     updatedAt: '2025-10-02T11:30:00Z',
     followersCount: 15420,
     entries: [
-        { articleId: '1', addedByUserId: 'u1', addedAt: '2025-10-01T10:00:00Z', flaggedBy: [] },
-        { articleId: '4', addedByUserId: 'u2', addedAt: '2025-10-02T11:30:00Z', flaggedBy: [] },
+        { articleId: '1', addedByUserId: 'u1', addedAt: '2025-10-01T10:00:00Z', flaggedBy: [] as string[] },
+        { articleId: '4', addedByUserId: 'u2', addedAt: '2025-10-02T11:30:00Z', flaggedBy: [] as string[] },
     ],
     type: 'public'
   }
@@ -79,7 +79,7 @@ export const addEntry = async (req: Request, res: Response) => {
       articleId,
       addedByUserId: userId,
       addedAt: new Date().toISOString(),
-      flaggedBy: []
+      flaggedBy: [] as string[]
     });
     col.updatedAt = new Date().toISOString();
   }

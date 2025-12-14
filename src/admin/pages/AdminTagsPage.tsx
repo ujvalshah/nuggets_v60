@@ -6,9 +6,9 @@ import { AdminSummaryBar } from '../components/AdminSummaryBar';
 import { AdminTag } from '../types/admin';
 import { adminTagsService } from '../services/adminTagsService';
 import { Trash2, Plus, Edit2, Hash, Tag, Layers, GitMerge } from 'lucide-react';
-import { useToast } from '../../hooks/useToast';
+import { useToast } from '@/hooks/useToast';
 import { AdminDrawer } from '../components/AdminDrawer';
-import { ConfirmActionModal } from '../../components/settings/ConfirmActionModal';
+import { ConfirmActionModal } from '@/components/settings/ConfirmActionModal';
 import { useAdminHeader } from '../layout/AdminLayout';
 
 // --- Merge Modal Component ---

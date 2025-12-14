@@ -5,11 +5,11 @@ import { AdminSummaryBar } from '../components/AdminSummaryBar';
 import { AdminCollection } from '../types/admin';
 import { adminCollectionsService } from '../services/adminCollectionsService';
 import { Eye, Trash2, Lock, Globe, EyeOff, Folder, Layers } from 'lucide-react';
-import { useToast } from '../../hooks/useToast';
+import { useToast } from '@/hooks/useToast';
 import { AdminDrawer } from '../components/AdminDrawer';
-import { ConfirmActionModal } from '../../components/settings/ConfirmActionModal';
+import { ConfirmActionModal } from '@/components/settings/ConfirmActionModal';
 import { useAdminPermissions } from '../hooks/useAdminPermissions';
-import { formatDate } from '../../utils/formatters';
+import { formatDate } from '@/utils/formatters';
 import { useAdminHeader } from '../layout/AdminLayout';
 
 export const AdminCollectionsPage: React.FC = () => {

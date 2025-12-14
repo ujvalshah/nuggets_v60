@@ -18,3 +18,4 @@ Write-Host "2. Push to remote:" -ForegroundColor Cyan
 Write-Host "   git push -u origin main" -ForegroundColor White
 Write-Host "`nCurrent status:" -ForegroundColor Yellow
 git status
+

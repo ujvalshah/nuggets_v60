@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Download, Save, Check } from 'lucide-react';
-import { useToast } from '../../hooks/useToast';
+import { useToast } from '@/hooks/useToast';
 import { useAdminHeader } from '../layout/AdminLayout';
 
 export const AdminDownloadsPage: React.FC = () => {

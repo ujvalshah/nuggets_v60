@@ -1,21 +1,21 @@
 
 import React, { useState, forwardRef, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Article } from '../types';
-import { formatDate } from '../utils/formatters';
+import { Article } from '@/types';
+import { formatDate } from '@/utils/formatters';
 import { Bookmark, FolderPlus, MoreVertical, Flag, Trash2, Edit2, FileText, StickyNote, Lightbulb } from 'lucide-react';
 import { ShareMenu } from './shared/ShareMenu';
 import { CollectionPopover } from './CollectionPopover';
 import { ReportModal } from './ReportModal';
-import { useToast } from '../hooks/useToast';
-import { storageService } from '../services/storageService';
+import { useToast } from '@/hooks/useToast';
+import { storageService } from '@/services/storageService';
 import { ArticleModal } from './ArticleModal';
 import { Tooltip } from './UI/Tooltip';
 import { NewsCardMedia } from './newscard/NewsCardMedia';
 import { ImageLightbox } from './ImageLightbox';
-import { useAuth } from '../hooks/useAuth';
-import { queryClient } from '../queryClient';
-import { useRequireAuth } from '../hooks/useRequireAuth';
+import { useAuth } from '@/hooks/useAuth';
+import { queryClient } from '@/queryClient';
+import { useRequireAuth } from '@/hooks/useRequireAuth';
 
 interface NewsCardProps {
   article: Article;

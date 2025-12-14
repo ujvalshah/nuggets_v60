@@ -2,9 +2,9 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Mail, Lock, Phone, ArrowRight, Loader2, Linkedin, Chrome, ChevronLeft, Shield, User as UserIcon, MapPin, AtSign, Calendar } from 'lucide-react';
-import { useAuth } from '../../hooks/useAuth';
+import { useAuth } from '@/hooks/useAuth';
 import { Input } from '../UI/Input';
-import { ENABLED_SOCIAL_PROVIDERS } from '../../types/auth';
+import { ENABLED_SOCIAL_PROVIDERS } from '@/types/auth';
 
 // Simple mock for Pincode lookup
 const mockPincodeLookup = async (pincode: string) => {

@@ -6,10 +6,10 @@ import { AdminSummaryBar } from '../components/AdminSummaryBar';
 import { AdminUser, AdminRole, AdminUserStatus } from '../types/admin';
 import { adminUsersService } from '../services/adminUsersService';
 import { Shield, Ban, CheckCircle, Edit, Users, UserPlus, Bookmark, BarChart3, ChevronDown, Layout } from 'lucide-react';
-import { useToast } from '../../hooks/useToast';
+import { useToast } from '@/hooks/useToast';
 import { useAdminPermissions } from '../hooks/useAdminPermissions';
-import { Avatar } from '../../components/shared/Avatar';
-import { ConfirmActionModal } from '../../components/settings/ConfirmActionModal';
+import { Avatar } from '@/components/shared/Avatar';
+import { ConfirmActionModal } from '@/components/settings/ConfirmActionModal';
 import { AdminDrawer } from '../components/AdminDrawer';
 import { useAdminHeader } from '../layout/AdminLayout';
 

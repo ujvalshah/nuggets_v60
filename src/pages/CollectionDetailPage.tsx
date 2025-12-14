@@ -1,0 +1,137 @@
+import React, { useEffect, useState } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { Collection, Article, Contributor } from '@/types';
+import { storageService } from '@/services/storageService';
+import { ArrowLeft, Folder, Users, Layers, Plus, Info } from 'lucide-react';
+import { ArticleGrid } from '@/components/ArticleGrid';
+import { useBookmarks } from '@/hooks/useBookmarks';
+import { useToast } from '@/hooks/useToast';
+import { ArticleModal } from '@/components/ArticleModal';
+import { getCollectionTheme } from '@/constants/theme';
+import { ShareMenu } from '@/components/shared/ShareMenu';
+import { useAuth } from '@/hooks/useAuth';
+
+export const CollectionDetailPage: React.FC = () => {
+  const { collectionId } = useParams<{ collectionId: string }>();
+  const navigate = useNavigate();
+  const toast = useToast();
+  const { isBookmarked, toggleBookmark } = useBookmarks();
+  const { currentUserId } = useAuth();
+
+  const [collection, setCollection] = useState<Collection | null>(null);
+  const [nuggets, setNuggets] = useState<Article[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [selectedArticle, setSelectedArticle] = useState<Article | null>(null);
+
+  useEffect(() => {
+    if (collectionId) loadData(collectionId);
+  }, [collectionId]);
+
+  const loadData = async (id: string) => {
+    setIsLoading(true);
+    try {
+      const col = await storageService.getCollectionById(id);
+      if (!col) { navigate('/collections'); return; }
+      
+      const [allArticles, allUsers] = await Promise.all([
+          storageService.getAllArticles(),
+          storageService.getUsers()
+      ]);
+
+      const collectionNuggets = col.entries.map(entry => {
+          const article = allArticles.find(a => a.id === entry.articleId);
+          if (!article) return null;
+          
+          // Inject addedBy data for display
+          const adder = allUsers.find(u => u.id === entry.addedByUserId);
+          const contributor: Contributor | undefined = adder ? {
+              userId: adder.id,
+              name: adder.name,
+              username: adder.email.split('@')[0], 
+              addedAt: entry.addedAt
+          } : undefined;
+
+          return {
+              ...article,
+              addedBy: contributor
+          };
+      }).filter(Boolean) as Article[];
+
+      setCollection(col);
+      setNuggets(collectionNuggets);
+    } catch (e) { console.error(e); } finally { setIsLoading(false); }
+  };
+
+  const handleAddNugget = () => {
+      toast.info("To add a nugget:", {
+          description: "Find any nugget in your feed, click the 'Add to Collection' folder icon, and select this collection.",
+          duration: 5000
+      });
+  };
+
+  if (isLoading) return <div className="min-h-screen flex items-center justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500"></div></div>;
+  if (!collection) return null;
+
+  const theme = getCollectionTheme(collection.id);
+
+  return (
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 pb-20">
+      <div className="bg-slate-900 border-b border-slate-800">
+        <div className="max-w-[1800px] mx-auto px-4 sm:px-6 lg:px-8 py-8">
+            <button onClick={() => navigate('/collections')} className="flex items-center gap-2 text-sm font-bold text-slate-400 hover:text-white mb-6 transition-colors">
+                <ArrowLeft size={16} /> Back to Collections
+            </button>
+            <div className="flex flex-col md:flex-row gap-6 md:items-start justify-between">
+                <div className="flex gap-5">
+                    <div className={`w-16 h-16 rounded-2xl flex items-center justify-center shrink-0 ${theme.light} ${theme.text} dark:bg-slate-800`}>
+                        <Folder size={32} strokeWidth={1.5} />
+                    </div>
+                    <div>
+                        <h1 className="text-3xl font-bold text-white mb-2">{collection.name}</h1>
+                        <p className="text-slate-400 max-w-2xl leading-relaxed">{collection.description || "No description provided."}</p>
+                        <div className="flex items-center gap-6 mt-4 text-sm text-slate-400 font-medium">
+                            <span className="flex items-center gap-1.5"><Layers size={16} /> {nuggets.length} nuggets</span>
+                            <span className="flex items-center gap-1.5"><Users size={16} /> {collection.followersCount} followers</span>
+                            <span className="flex items-center gap-1.5"><Info size={16} /> Created by u1</span>
+                        </div>
+                    </div>
+                </div>
+                <div className="flex gap-3 shrink-0 items-center">
+                    <ShareMenu 
+                        data={{
+                            type: 'collection',
+                            id: collection.id,
+                            title: collection.name,
+                            shareUrl: `${window.location.origin}/#/collections/${collection.id}`
+                        }}
+                        meta={{
+                            text: collection.description
+                        }}
+                        className="hover:!bg-slate-800 hover:text-white w-10 h-10"
+                        iconSize={20}
+                    />
+                    <button onClick={handleAddNugget} className="px-4 py-2 bg-white text-slate-900 rounded-xl text-sm font-bold hover:opacity-90 transition-colors flex items-center gap-2 shadow-sm">
+                        <Plus size={16} /> Add Nugget
+                    </button>
+                </div>
+            </div>
+        </div>
+      </div>
+      <div className="max-w-[1800px] mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <ArticleGrid 
+            articles={nuggets}
+            viewMode="grid"
+            isLoading={false}
+            onArticleClick={setSelectedArticle}
+            isBookmarked={isBookmarked}
+            onToggleBookmark={toggleBookmark}
+            onCategoryClick={() => {}}
+            emptyTitle="Empty Collection"
+            emptyMessage="This collection has no nuggets yet. Be the first to add one!"
+            currentUserId={currentUserId}
+        />
+      </div>
+      {selectedArticle && <ArticleModal isOpen={!!selectedArticle} onClose={() => setSelectedArticle(null)} article={selectedArticle} />}
+    </div>
+  );
+};

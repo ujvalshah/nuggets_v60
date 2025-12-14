@@ -1,31 +1,31 @@
 
 import React, { useState, useEffect, Suspense, lazy } from 'react';
 import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { Header } from './components/Header';
-import { BackToTopButton } from './components/UI/BackToTopButton';
-import { FeedbackButton } from './components/UI/FeedbackButton';
-import { ToastContainer } from './components/UI/Toast';
-import { ToastProvider } from './context/ToastContext';
-import { AuthProvider } from './context/AuthContext';
-import { MainLayout } from './components/layouts/MainLayout';
-import { SortOrder } from './types';
+import { Header } from '@/components/Header';
+import { BackToTopButton } from '@/components/UI/BackToTopButton';
+import { FeedbackButton } from '@/components/UI/FeedbackButton';
+import { ToastContainer } from '@/components/UI/Toast';
+import { ToastProvider } from '@/context/ToastContext';
+import { AuthProvider } from '@/context/AuthContext';
+import { MainLayout } from '@/components/layouts/MainLayout';
+import { SortOrder } from '@/types';
 import { Loader2 } from 'lucide-react';
-import { CreateNuggetModal } from './components/CreateNuggetModal';
-import { useAuth } from './hooks/useAuth';
-import { AuthModal } from './components/auth/AuthModal';
-import { ProtectedRoute } from './components/auth/ProtectedRoute';
-import { LegalPageRenderer } from './pages/LegalPageRenderer';
+import { CreateNuggetModal } from '@/components/CreateNuggetModal';
+import { useAuth } from '@/hooks/useAuth';
+import { AuthModal } from '@/components/auth/AuthModal';
+import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
+import { LegalPageRenderer } from '@/pages/LegalPageRenderer';
 
 // Lazy Load Pages
-const HomePage = lazy(() => import('./pages/HomePage').then(module => ({ default: module.HomePage })));
-const CollectionsPage = lazy(() => import('./pages/CollectionsPage').then(module => ({ default: module.CollectionsPage })));
-const CollectionDetailPage = lazy(() => import('./pages/CollectionDetailPage').then(module => ({ default: module.CollectionDetailPage })));
-const MySpacePage = lazy(() => import('./pages/MySpacePage').then(module => ({ default: module.MySpacePage })));
-const AccountSettingsPage = lazy(() => import('./pages/AccountSettingsPage').then(module => ({ default: module.AccountSettingsPage })));
-const AdminPanelPage = lazy(() => import('./pages/AdminPanelPage').then(module => ({ default: module.AdminPanelPage })));
-const VerifyEmailPage = lazy(() => import('./pages/VerifyEmailPage').then(module => ({ default: module.VerifyEmailPage })));
-const ResetPasswordPage = lazy(() => import('./pages/ResetPasswordPage').then(module => ({ default: module.ResetPasswordPage })));
-const BulkCreateNuggetsPage = lazy(() => import('./pages/BulkCreateNuggetsPage').then(module => ({ default: module.BulkCreateNuggetsPage })));
+const HomePage = lazy(() => import('@/pages/HomePage').then(module => ({ default: module.HomePage })));
+const CollectionsPage = lazy(() => import('@/pages/CollectionsPage').then(module => ({ default: module.CollectionsPage })));
+const CollectionDetailPage = lazy(() => import('@/pages/CollectionDetailPage').then(module => ({ default: module.CollectionDetailPage })));
+const MySpacePage = lazy(() => import('@/pages/MySpacePage').then(module => ({ default: module.MySpacePage })));
+const AccountSettingsPage = lazy(() => import('@/pages/AccountSettingsPage').then(module => ({ default: module.AccountSettingsPage })));
+const AdminPanelPage = lazy(() => import('@/pages/AdminPanelPage').then(module => ({ default: module.AdminPanelPage })));
+const VerifyEmailPage = lazy(() => import('@/pages/VerifyEmailPage').then(module => ({ default: module.VerifyEmailPage })));
+const ResetPasswordPage = lazy(() => import('@/pages/ResetPasswordPage').then(module => ({ default: module.ResetPasswordPage })));
+const BulkCreateNuggetsPage = lazy(() => import('@/pages/BulkCreateNuggetsPage').then(module => ({ default: module.BulkCreateNuggetsPage })));
 
 const AppContent: React.FC = () => {
   const [isDark, setIsDark] = useState(false);

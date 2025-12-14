@@ -1,6 +1,6 @@
 
 import { RolePermissions, ServiceDefinition, FeatureFlags, SignupConfig } from '../types/admin';
-import { LegalPage, LegalPageSlug, LegalConfig } from '../../types/legal';
+import { LegalPage, LegalPageSlug, LegalConfig } from '@/types/legal';
 
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 

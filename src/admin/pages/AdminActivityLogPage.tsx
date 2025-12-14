@@ -5,9 +5,9 @@ import { AdminSummaryBar } from '../components/AdminSummaryBar';
 import { AdminActivityEvent } from '../types/admin';
 import { adminActivityService } from '../services/adminActivityService';
 import { Activity, ShieldAlert, CheckCircle2, Info, AlertTriangle } from 'lucide-react';
-import { useToast } from '../../hooks/useToast';
-import { Avatar } from '../../components/shared/Avatar';
-import { formatDate } from '../../utils/formatters';
+import { useToast } from '@/hooks/useToast';
+import { Avatar } from '@/components/shared/Avatar';
+import { formatDate } from '@/utils/formatters';
 import { useAdminHeader } from '../layout/AdminLayout';
 
 export const AdminActivityLogPage: React.FC = () => {

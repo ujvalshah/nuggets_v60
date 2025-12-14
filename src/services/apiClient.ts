@@ -30,25 +30,37 @@ class ApiClient {
       },
     };
 
-    const response = await fetch(`${BASE_URL}${endpoint}`, config);
+    try {
+      const response = await fetch(`${BASE_URL}${endpoint}`, config);
 
-    if (!response.ok) {
-      if (response.status === 404) {
-        throw new Error('Resource not found');
+      if (!response.ok) {
+        if (response.status === 404) {
+          throw new Error('Resource not found');
+        }
+        if (response.status === 401) {
+          // Optional: Trigger global logout here if needed
+          console.warn("Unauthorized request");
+        }
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || `API Error: ${response.status}`);
       }
-      if (response.status === 401) {
-        // Optional: Trigger global logout here if needed
-        console.warn("Unauthorized request");
+
+      if (response.status === 204) {
+        return {} as T;
       }
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.message || `API Error: ${response.status}`);
-    }
 
-    if (response.status === 204) {
-      return {} as T;
+      return response.json();
+    } catch (error: any) {
+      // Handle network errors (connection refused, timeout, etc.)
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        throw new Error(
+          `Server connection failed. Please ensure the backend server is running on port 5000. ` +
+          `Run 'npm run dev:server' in a separate terminal.`
+        );
+      }
+      // Re-throw other errors as-is
+      throw error;
     }
-
-    return response.json();
   }
 
   get<T>(url: string, headers?: HeadersInit) {

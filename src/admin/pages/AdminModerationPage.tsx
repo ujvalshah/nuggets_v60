@@ -5,10 +5,10 @@ import { AdminSummaryBar } from '../components/AdminSummaryBar';
 import { AdminReport } from '../types/admin';
 import { adminModerationService } from '../services/adminModerationService';
 import { AlertCircle, CheckCircle, XCircle, FileText, User, Layers, Info, ExternalLink } from 'lucide-react';
-import { useToast } from '../../hooks/useToast';
+import { useToast } from '@/hooks/useToast';
 import { AdminDrawer } from '../components/AdminDrawer';
-import { ConfirmActionModal } from '../../components/settings/ConfirmActionModal';
-import { formatDate } from '../../utils/formatters';
+import { ConfirmActionModal } from '@/components/settings/ConfirmActionModal';
+import { formatDate } from '@/utils/formatters';
 import { useAdminHeader } from '../layout/AdminLayout';
 
 export const AdminModerationPage: React.FC = () => {

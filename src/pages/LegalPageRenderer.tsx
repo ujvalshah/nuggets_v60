@@ -1,11 +1,11 @@
 
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { adminConfigService } from '../services/adminConfigService';
-import { LegalPage } from '../types/legal';
-import { RichTextRenderer } from '../components/RichTextRenderer';
+import { adminConfigService } from '@/admin/services/adminConfigService';
+import { LegalPage } from '@/types/legal';
+import { RichTextRenderer } from '@/components/RichTextRenderer';
 import { Loader2, ArrowLeft, Clock } from 'lucide-react';
-import { formatDate } from '../utils/formatters';
+import { formatDate } from '@/utils/formatters';
 
 export const LegalPageRenderer: React.FC = () => {
   // Use a catch-all route param if possible, or specific slug

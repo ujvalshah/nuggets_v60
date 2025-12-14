@@ -2,8 +2,8 @@
 import React, { useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Check, Upload, Image as ImageIcon } from 'lucide-react';
-import { AvatarColor, AVATAR_COLORS } from '../../types/settings';
-import { getInitials } from '../../utils/formatters';
+import { AvatarColor, AVATAR_COLORS } from '@/types/settings';
+import { getInitials } from '@/utils/formatters';
 
 interface AvatarSelectorModalProps {
   isOpen: boolean;

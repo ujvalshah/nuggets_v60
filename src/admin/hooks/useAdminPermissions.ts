@@ -1,6 +1,6 @@
 
 import { useCallback } from 'react';
-import { useAuth } from '../../hooks/useAuth';
+import { useAuth } from '@/hooks/useAuth';
 import { checkPermission } from '../auth/adminPermissions';
 import { AdminPermission } from '../types/admin';
 

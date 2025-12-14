@@ -2,8 +2,8 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ChevronDown, ChevronUp } from 'lucide-react';
-import { adminConfigService } from '../services/adminConfigService';
-import { LegalPage } from '../types/legal';
+import { adminConfigService } from '@/admin/services/adminConfigService';
+import { LegalPage } from '@/types/legal';
 
 export const LegalFooter: React.FC = () => {
   const [pages, setPages] = useState<LegalPage[]>([]);

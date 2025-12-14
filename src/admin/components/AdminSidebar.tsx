@@ -2,7 +2,7 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
 import { LayoutDashboard, Users, FileText, Layers, Hash, Settings, LogOut, Flag, Activity, MessageSquare, Download, Scale } from 'lucide-react';
-import { useAuth } from '../../hooks/useAuth';
+import { useAuth } from '@/hooks/useAuth';
 
 interface AdminSidebarProps {
   isOpen: boolean;

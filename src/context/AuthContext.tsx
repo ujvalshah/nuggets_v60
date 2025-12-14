@@ -1,11 +1,11 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
-import { User as LegacyUser } from '../types';
-import { User as ModularUser } from '../types/user';
-import { LoginPayload, SignupPayload, AuthProvider as AuthProviderType } from '../types/auth';
-import { authService } from '../services/authService';
-import { FeatureFlags } from '../admin/types/admin';
-import { adminConfigService } from '../admin/services/adminConfigService';
+import { User as LegacyUser } from '@/types';
+import { User as ModularUser } from '@/types/user';
+import { LoginPayload, SignupPayload, AuthProvider as AuthProviderType } from '@/types/auth';
+import { authService } from '@/services/authService';
+import { FeatureFlags, SignupConfig } from '@/admin/types/admin';
+import { adminConfigService } from '@/admin/services/adminConfigService';
 
 interface AuthContextType {
   user: LegacyUser | null; // Backward compatibility
@@ -14,6 +14,7 @@ interface AuthContextType {
   isLoading: boolean;
   token: string | null;
   featureFlags: FeatureFlags | null;
+  signupConfig: SignupConfig | null;
   login: (payload: LoginPayload) => Promise<void>;
   signup: (payload: SignupPayload) => Promise<void>;
   socialLogin: (provider: AuthProviderType) => Promise<void>;
@@ -32,6 +33,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [modularUser, setModularUser] = useState<ModularUser | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [featureFlags, setFeatureFlags] = useState<FeatureFlags | null>(null);
+  const [signupConfig, setSignupConfig] = useState<SignupConfig | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   
   // Modal State
@@ -50,9 +52,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setToken(storedToken);
         }
         
-        // 2. Load Global Flags (In a real app, these might come from a separate ConfigContext)
-        const flags = await adminConfigService.getFeatureFlags();
+        // 2. Load Global Config
+        const [flags, sConf] = await Promise.all([
+            adminConfigService.getFeatureFlags(),
+            adminConfigService.getSignupConfig()
+        ]);
         setFeatureFlags(flags);
+        setSignupConfig(sConf);
 
       } catch (e) {
         console.error("Initialization failed", e);
@@ -138,6 +144,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       isLoading,
       token,
       featureFlags,
+      signupConfig,
       login,
       signup,
       socialLogin,

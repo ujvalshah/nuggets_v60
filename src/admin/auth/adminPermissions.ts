@@ -1,6 +1,6 @@
 
 import { AdminRole, AdminPermission } from '../types/admin';
-import { User } from '../../types/user'; // Frontend User Type
+import { User } from '@/types/user'; // Frontend User Type
 
 // Define capability sets
 const ROLE_PERMISSIONS: Record<AdminRole, AdminPermission[]> = {

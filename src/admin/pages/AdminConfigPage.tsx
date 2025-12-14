@@ -1,9 +1,9 @@
 
 import React, { useState, useEffect } from 'react';
 import { Megaphone, Save, Info, AlertTriangle, XCircle, CheckCircle2, Clock, Shield, Check, ToggleLeft, ToggleRight, Settings, Users, Mail, ClipboardType, Eye, EyeOff } from 'lucide-react';
-import { useToast } from '../../hooks/useToast';
-import { RichTextEditor } from '../../components/RichTextEditor';
-import { RichTextRenderer } from '../../components/RichTextRenderer';
+import { useToast } from '@/hooks/useToast';
+import { RichTextEditor } from '@/components/RichTextEditor';
+import { RichTextRenderer } from '@/components/RichTextRenderer';
 import { useAdminHeader } from '../layout/AdminLayout';
 import { adminConfigService, AVAILABLE_SERVICES } from '../services/adminConfigService';
 import { RolePermissions, ServiceId, AdminRole, FeatureFlags, SignupConfig } from '../types/admin';

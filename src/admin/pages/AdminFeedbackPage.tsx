@@ -3,11 +3,11 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AdminTable, Column } from '../components/AdminTable';
 import { AdminFeedback } from '../types/admin';
-import { adminFeedbackService } from '../services/adminFeedbackService';
+import { adminFeedbackService } from '@/admin/services/adminFeedbackService';
 import { MessageSquare, Check, Archive, Trash2, User } from 'lucide-react';
-import { useToast } from '../../hooks/useToast';
-import { formatDate } from '../../utils/formatters';
-import { Avatar } from '../../components/shared/Avatar';
+import { useToast } from '@/hooks/useToast';
+import { formatDate } from '@/utils/formatters';
+import { Avatar } from '@/components/shared/Avatar';
 import { useAdminHeader } from '../layout/AdminLayout';
 
 export const AdminFeedbackPage: React.FC = () => {
