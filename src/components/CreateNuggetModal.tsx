@@ -14,6 +14,7 @@ import { Image } from './Image';
 import { useAuth } from '@/hooks/useAuth';
 import { aiService } from '@/services/aiService';
 import { useToast } from '@/hooks/useToast';
+import { compressImage, isImageFile, formatFileSize } from '@/utils/imageOptimizer';
 
 interface CreateNuggetModalProps {
   isOpen: boolean;
@@ -26,7 +27,8 @@ interface FileAttachment {
   type: 'image' | 'document';
 }
 
-const MAX_FILE_SIZE = 1024 * 1024; // 1MB
+const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB (before compression)
+const MAX_FILE_SIZE_AFTER_COMPRESSION = 500 * 1024; // 500KB (after compression)
 
 export const CreateNuggetModal: React.FC<CreateNuggetModalProps> = ({ isOpen, onClose }) => {
   // Auth
@@ -153,32 +155,63 @@ export const CreateNuggetModal: React.FC<CreateNuggetModalProps> = ({ isOpen, on
     setCollectionInput('');
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
       const files = e.target.files;
       if (!files) return;
 
+      setIsSubmitting(true); // Show loading state during compression
       const newAttachments: FileAttachment[] = [];
       
-      for (let i = 0; i < files.length; i++) {
-          const file = files[i];
-          if (file.type.match(/(application\/x-msdownload|application\/x-sh|text\/javascript)/)) {
-              setError("Script/Executable files are not allowed.");
-              continue;
+      try {
+          for (let i = 0; i < files.length; i++) {
+              const file = files[i];
+              if (file.type.match(/(application\/x-msdownload|application\/x-sh|text\/javascript)/)) {
+                  setError("Script/Executable files are not allowed.");
+                  continue;
+              }
+              if (file.size > MAX_FILE_SIZE) {
+                  setError(`File "${file.name}" exceeds ${formatFileSize(MAX_FILE_SIZE)} limit.`);
+                  continue;
+              }
+              
+              const isImage = isImageFile(file);
+              let processedFile = file;
+              
+              // Compress images before adding to attachments
+              if (isImage) {
+                  try {
+                      processedFile = await compressImage(file);
+                      const sizeReduction = ((file.size - processedFile.size) / file.size * 100).toFixed(0);
+                      console.log(`Compressed ${file.name}: ${formatFileSize(file.size)} → ${formatFileSize(processedFile.size)} (${sizeReduction}% reduction)`);
+                      
+                      // Double-check size after compression
+                      if (processedFile.size > MAX_FILE_SIZE_AFTER_COMPRESSION) {
+                          setError(`Image "${file.name}" is still too large after compression. Please use a smaller image.`);
+                          continue;
+                      }
+                  } catch (compressionError) {
+                      console.error('Image compression failed:', compressionError);
+                      setError(`Failed to compress "${file.name}". Using original file.`);
+                      // Fall back to original file if compression fails
+                  }
+              }
+              
+              newAttachments.push({
+                  file: processedFile,
+                  previewUrl: URL.createObjectURL(processedFile),
+                  type: isImage ? 'image' : 'document'
+              });
           }
-          if (file.size > MAX_FILE_SIZE) {
-              setError(`File "${file.name}" exceeds 1MB limit.`);
-              continue;
-          }
-          const isImage = file.type.startsWith('image/');
-          newAttachments.push({
-              file,
-              previewUrl: URL.createObjectURL(file),
-              type: isImage ? 'image' : 'document'
-          });
+          
+          setAttachments(prev => [...prev, ...newAttachments]);
+          setError(null);
+      } catch (error) {
+          console.error('File upload error:', error);
+          setError('Failed to process files. Please try again.');
+      } finally {
+          setIsSubmitting(false);
+          if (fileInputRef.current) fileInputRef.current.value = '';
       }
-      setAttachments(prev => [...prev, ...newAttachments]);
-      setError(null);
-      if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const removeAttachment = (index: number) => {
@@ -228,7 +261,7 @@ export const CreateNuggetModal: React.FC<CreateNuggetModalProps> = ({ isOpen, on
             });
         }
         
-        toast.success("Nugget summarized by AI ✨");
+        toast.success("Nugget summarized by AI ?");
     } catch (e) {
         console.error(e);
         toast.error("Failed to generate summary. Try again.");

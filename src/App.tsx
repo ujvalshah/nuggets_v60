@@ -31,7 +31,7 @@ const AppContent: React.FC = () => {
   const [isDark, setIsDark] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [viewMode, setViewMode] = useState<'grid' | 'feed'>('grid');
+  const [viewMode, setViewMode] = useState<'grid' | 'feed' | 'masonry' | 'utility'>('grid');
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
   const [sortOrder, setSortOrder] = useState<SortOrder>('latest');

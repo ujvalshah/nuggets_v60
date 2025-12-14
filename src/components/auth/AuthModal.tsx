@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Mail, Lock, Phone, ArrowRight, Loader2, Linkedin, Chrome, ChevronLeft, Shield, User as UserIcon, MapPin, AtSign, Calendar } from 'lucide-react';
+import { X, Mail, Lock, Phone, ArrowRight, Loader2, Linkedin, Chrome, ChevronLeft, MapPin, AtSign, Calendar } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { Input } from '../UI/Input';
 import { ENABLED_SOCIAL_PROVIDERS } from '@/types/auth';
@@ -17,12 +17,49 @@ const mockPincodeLookup = async (pincode: string) => {
     return { city: 'Unknown City', country: 'Unknown Country' };
 };
 
+// Simple validation helpers (minimal client-side checks)
+const validateEmail = (email: string): string | null => {
+    if (!email) return null; // Let HTML5 required handle empty
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email) ? null : 'Please enter a valid email address';
+};
+
+const validateUsername = (username: string): string | null => {
+    if (!username) return null; // Let HTML5 required handle empty
+    if (username.length < 3) return 'Username must be at least 3 characters';
+    return null;
+};
+
+const validatePassword = (password: string): string | null => {
+    if (!password) return null; // Let HTML5 required handle empty
+    if (password.length < 8) return 'Password must be at least 8 characters';
+    return null;
+};
+
+// Password requirements checker (for visual guidance)
+const checkPasswordRequirements = (password: string) => {
+    return {
+        minLength: password.length >= 8,
+        hasUpperCase: /[A-Z]/.test(password),
+        hasLowerCase: /[a-z]/.test(password),
+        hasNumber: /[0-9]/.test(password),
+        hasSpecial: /[^A-Za-z0-9]/.test(password)
+    };
+};
+
 export const AuthModal: React.FC = () => {
   const { isAuthModalOpen, closeAuthModal, authModalView, login, signup, socialLogin, featureFlags, signupConfig } = useAuth();
   
   const [view, setView] = useState<'login' | 'signup' | 'forgot' | 'verify_pending'>(authModalView);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  
+  // Field-level validation errors
+  const [fieldErrors, setFieldErrors] = useState<{
+    email?: string;
+    username?: string;
+    password?: string;
+  }>({});
   
   // Login Form
   const [email, setEmail] = useState('');
@@ -44,6 +81,7 @@ export const AuthModal: React.FC = () => {
   useEffect(() => {
     setView(authModalView);
     setError(null);
+    setFieldErrors({});
     setEmail('');
     setPassword('');
     // Reset Signup
@@ -89,11 +127,72 @@ export const AuthModal: React.FC = () => {
       // Sanitize: Remove @ and spaces, allow alphanum + underscore
       const val = e.target.value.replace(/[@\s]/g, '').replace(/[^a-zA-Z0-9_]/g, '');
       setUsername(val);
+      // Clear username error when user types
+      if (fieldErrors.username) {
+          setFieldErrors(prev => ({ ...prev, username: undefined }));
+      }
+  };
+
+  const handleEmailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const val = e.target.value;
+      setEmail(val);
+      // Clear email error when user types
+      if (fieldErrors.email) {
+          setFieldErrors(prev => ({ ...prev, email: undefined }));
+      }
+  };
+
+  const handlePasswordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const val = e.target.value;
+      setPassword(val);
+      // Clear password error when user types
+      if (fieldErrors.password) {
+          setFieldErrors(prev => ({ ...prev, password: undefined }));
+      }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setFieldErrors({});
+    
+    // Client-side validation (minimal checks for UX guidance)
+    let hasErrors = false;
+    const newFieldErrors: typeof fieldErrors = {};
+    
+    if (view === 'login') {
+        const emailError = validateEmail(email);
+        if (emailError) {
+            newFieldErrors.email = emailError;
+            hasErrors = true;
+        }
+        // Password required check is handled by HTML5
+    } else if (view === 'signup') {
+        const emailError = validateEmail(email);
+        if (emailError) {
+            newFieldErrors.email = emailError;
+            hasErrors = true;
+        }
+        
+        const usernameError = validateUsername(username);
+        if (usernameError) {
+            newFieldErrors.username = usernameError;
+            hasErrors = true;
+        }
+        
+        const passwordError = validatePassword(password);
+        if (passwordError) {
+            newFieldErrors.password = passwordError;
+            hasErrors = true;
+        }
+    }
+    
+    if (hasErrors) {
+        setFieldErrors(newFieldErrors);
+        setIsLoading(false);
+        return;
+    }
+    
     setIsLoading(true);
 
     try {
@@ -129,19 +228,6 @@ export const AuthModal: React.FC = () => {
     } finally {
         setIsLoading(false);
     }
-  };
-
-  const handleDemoLogin = async (role: 'admin' | 'user') => {
-      setIsLoading(true);
-      setError(null);
-      try {
-          const email = role === 'admin' ? 'akash@example.com' : 'hemant@example.com';
-          await login({ email, password: 'password' }); 
-      } catch (err: any) {
-          setError("Demo login failed.");
-      } finally {
-          setIsLoading(false);
-      }
   };
 
   if (!isAuthModalOpen) return null;
@@ -240,24 +326,82 @@ export const AuthModal: React.FC = () => {
                                                 <AtSign size={14} />
                                             </div>
                                             <input 
-                                                className={`block w-full py-2.5 pl-8 pr-4 ${inputClass} rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500`}
+                                                className={`block w-full py-2.5 pl-8 pr-4 ${inputClass} ${fieldErrors.username ? 'border-red-300 dark:border-red-700' : ''} rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500`}
                                                 placeholder="username" 
                                                 value={username} 
                                                 onChange={handleUsernameChange}
                                                 required 
                                             />
                                         </div>
+                                        {fieldErrors.username && (
+                                            <p className="mt-1 text-xs text-red-600 dark:text-red-400 ml-1">{fieldErrors.username}</p>
+                                        )}
                                     </div>
                                 </div>
 
                                 <div>
                                     <label className={labelClass}>Email</label>
-                                    <Input type="email" placeholder="you@example.com" value={email} onChange={e => setEmail(e.target.value)} required className={inputClass} />
+                                    <Input 
+                                        type="email" 
+                                        placeholder="you@example.com" 
+                                        value={email} 
+                                        onChange={handleEmailChange} 
+                                        required 
+                                        className={`${inputClass} ${fieldErrors.email ? 'border-red-300 dark:border-red-700' : ''}`} 
+                                    />
+                                    {fieldErrors.email && (
+                                        <p className="mt-1 text-xs text-red-600 dark:text-red-400 ml-1">{fieldErrors.email}</p>
+                                    )}
                                 </div>
 
                                 <div>
                                     <label className={labelClass}>Password</label>
-                                    <Input type="password" placeholder="••••••••" value={password} onChange={e => setPassword(e.target.value)} required className={inputClass} />
+                                    <Input 
+                                        type="password" 
+                                        placeholder="••••••••" 
+                                        value={password} 
+                                        onChange={handlePasswordChange} 
+                                        required 
+                                        className={`${inputClass} ${fieldErrors.password ? 'border-red-300 dark:border-red-700' : ''}`} 
+                                    />
+                                    {fieldErrors.password && (
+                                        <p className="mt-1 text-xs text-red-600 dark:text-red-400 ml-1">{fieldErrors.password}</p>
+                                    )}
+                                    {/* Password Requirements Checklist (visual guidance only) */}
+                                    {password && (
+                                        <div className="mt-2 p-2 bg-slate-50 dark:bg-slate-900/50 rounded-lg border border-slate-200 dark:border-slate-700">
+                                            <p className="text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1.5">Password requirements:</p>
+                                            <div className="space-y-1">
+                                                {(() => {
+                                                    const requirements = checkPasswordRequirements(password);
+                                                    return (
+                                                        <>
+                                                            <div className={`flex items-center gap-2 text-xs ${requirements.minLength ? 'text-green-600 dark:text-green-400' : 'text-slate-500 dark:text-slate-400'}`}>
+                                                                <span>{requirements.minLength ? '✓' : '○'}</span>
+                                                                <span>At least 8 characters</span>
+                                                            </div>
+                                                            <div className={`flex items-center gap-2 text-xs ${requirements.hasUpperCase ? 'text-green-600 dark:text-green-400' : 'text-slate-500 dark:text-slate-400'}`}>
+                                                                <span>{requirements.hasUpperCase ? '✓' : '○'}</span>
+                                                                <span>One uppercase letter (A-Z)</span>
+                                                            </div>
+                                                            <div className={`flex items-center gap-2 text-xs ${requirements.hasLowerCase ? 'text-green-600 dark:text-green-400' : 'text-slate-500 dark:text-slate-400'}`}>
+                                                                <span>{requirements.hasLowerCase ? '✓' : '○'}</span>
+                                                                <span>One lowercase letter (a-z)</span>
+                                                            </div>
+                                                            <div className={`flex items-center gap-2 text-xs ${requirements.hasNumber ? 'text-green-600 dark:text-green-400' : 'text-slate-500 dark:text-slate-400'}`}>
+                                                                <span>{requirements.hasNumber ? '✓' : '○'}</span>
+                                                                <span>One number (0-9)</span>
+                                                            </div>
+                                                            <div className={`flex items-center gap-2 text-xs ${requirements.hasSpecial ? 'text-green-600 dark:text-green-400' : 'text-slate-500 dark:text-slate-400'}`}>
+                                                                <span>{requirements.hasSpecial ? '✓' : '○'}</span>
+                                                                <span>One special character (!@#$%^&*)</span>
+                                                            </div>
+                                                        </>
+                                                    );
+                                                })()}
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
 
                                 {/* LOCATION GROUP - Configurable */}
@@ -348,13 +492,32 @@ export const AuthModal: React.FC = () => {
                             <>
                                 <div>
                                     <label className={labelClass}>Email Address</label>
-                                    <Input type="email" placeholder="you@example.com" leftIcon={<Mail size={16} />} value={email} onChange={e => setEmail(e.target.value)} required className={inputClass} />
+                                    <Input 
+                                        type="email" 
+                                        placeholder="you@example.com" 
+                                        leftIcon={<Mail size={16} />} 
+                                        value={email} 
+                                        onChange={handleEmailChange} 
+                                        required 
+                                        className={`${inputClass} ${fieldErrors.email ? 'border-red-300 dark:border-red-700' : ''}`} 
+                                    />
+                                    {fieldErrors.email && (
+                                        <p className="mt-1 text-xs text-red-600 dark:text-red-400 ml-1">{fieldErrors.email}</p>
+                                    )}
                                 </div>
                                 <div>
                                     <div className="flex justify-between items-center mb-1.5 ml-1">
                                         <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Password</label>
                                     </div>
-                                    <Input type="password" placeholder="••••••••" leftIcon={<Lock size={16} />} value={password} onChange={e => setPassword(e.target.value)} required className={inputClass} />
+                                    <Input 
+                                        type="password" 
+                                        placeholder="••••••••" 
+                                        leftIcon={<Lock size={16} />} 
+                                        value={password} 
+                                        onChange={handlePasswordChange} 
+                                        required 
+                                        className={inputClass} 
+                                    />
                                 </div>
                                 <div className="flex items-center justify-between">
                                     <label className="flex items-center gap-2 cursor-pointer group">
@@ -373,7 +536,15 @@ export const AuthModal: React.FC = () => {
                         {view === 'forgot' && (
                             <div>
                                 <label className={labelClass}>Email Address</label>
-                                <Input type="email" placeholder="you@example.com" leftIcon={<Mail size={16} />} value={email} onChange={e => setEmail(e.target.value)} required className={inputClass} />
+                                <Input 
+                                    type="email" 
+                                    placeholder="you@example.com" 
+                                    leftIcon={<Mail size={16} />} 
+                                    value={email} 
+                                    onChange={handleEmailChange} 
+                                    required 
+                                    className={inputClass} 
+                                />
                             </div>
                         )}
 
@@ -405,23 +576,6 @@ export const AuthModal: React.FC = () => {
                             </button>
                         )}
                     </form>
-
-                    {/* DEMO ACCOUNTS */}
-                    {view === 'login' && (
-                        <div className="mt-8 pt-6 border-t border-slate-200 dark:border-slate-800">
-                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider text-center mb-3">Quick Demo Login</p>
-                            <div className="grid grid-cols-2 gap-3">
-                                <button onClick={() => handleDemoLogin('admin')} className="flex flex-col items-center justify-center p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-white/5 hover:bg-white dark:hover:bg-slate-800 hover:border-primary-300 transition-all group">
-                                    <Shield size={16} className="text-slate-400 group-hover:text-primary-500 mb-1.5" />
-                                    <span className="text-xs font-bold text-slate-600 dark:text-slate-300">Admin</span>
-                                </button>
-                                <button onClick={() => handleDemoLogin('user')} className="flex flex-col items-center justify-center p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-white/5 hover:bg-white dark:hover:bg-slate-800 hover:border-primary-300 transition-all group">
-                                    <UserIcon size={16} className="text-slate-400 group-hover:text-primary-500 mb-1.5" />
-                                    <span className="text-xs font-bold text-slate-600 dark:text-slate-300">User</span>
-                                </button>
-                            </div>
-                        </div>
-                    )}
                 </div>
             </>
         )}

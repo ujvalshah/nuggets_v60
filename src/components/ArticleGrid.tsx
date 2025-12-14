@@ -1,13 +1,14 @@
 import React from 'react';
 import { Article } from '@/types';
 import { NewsCard } from './NewsCard';
+import { MasonryGrid } from './MasonryGrid';
 import { EmptyState } from './UI/EmptyState';
 import { SearchX } from 'lucide-react';
 import { useRowExpansion } from '@/hooks/useRowExpansion';
 
 interface ArticleGridProps {
   articles: Article[];
-  viewMode: 'grid' | 'feed';
+  viewMode: 'grid' | 'feed' | 'masonry' | 'utility';
   isLoading: boolean;
   onArticleClick: (article: Article) => void;
   isBookmarked: (id: string) => boolean;
@@ -42,6 +43,19 @@ export const ArticleGrid: React.FC<ArticleGridProps> = ({
   const { expandedId, toggleExpansion, registerCard } = useRowExpansion();
 
   if (isLoading) {
+    if (viewMode === 'masonry') {
+      return (
+        <div className="flex gap-6 w-full">
+          {[1, 2, 3, 4].map((colIdx) => (
+            <div key={colIdx} className="flex-1 flex flex-col gap-6">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="bg-slate-100 dark:bg-slate-800 rounded-2xl h-80 animate-pulse" />
+              ))}
+            </div>
+          ))}
+        </div>
+      );
+    }
     return (
       <div
         className={
@@ -67,6 +81,23 @@ export const ArticleGrid: React.FC<ArticleGridProps> = ({
     );
   }
 
+  // Render masonry layout
+  if (viewMode === 'masonry') {
+    return (
+      <MasonryGrid
+        articles={articles}
+        isLoading={isLoading}
+        onArticleClick={onArticleClick}
+        isBookmarked={isBookmarked}
+        onToggleBookmark={onToggleBookmark}
+        onCategoryClick={onCategoryClick}
+        currentUserId={currentUserId}
+        onTagClick={onTagClick}
+      />
+    );
+  }
+
+  // Render feed or grid layout
   return (
     <div
       className={
@@ -80,17 +111,12 @@ export const ArticleGrid: React.FC<ArticleGridProps> = ({
           key={article.id}
           ref={(el) => registerCard(article.id, el)}
           article={article}
-          viewMode={viewMode}
+          viewMode={viewMode === 'utility' ? 'grid' : viewMode}
           isBookmarked={isBookmarked(article.id)}
           onToggleBookmark={onToggleBookmark}
           onCategoryClick={onCategoryClick}
           onClick={onArticleClick}
-          expanded={expandedId === article.id}
-          onToggleExpand={() => toggleExpansion(article.id)}
           currentUserId={currentUserId}
-          selectionMode={selectionMode}
-          isSelected={selectedIds.includes(article.id)}
-          onSelect={onSelect}
           onTagClick={onTagClick}
         />
       ))}

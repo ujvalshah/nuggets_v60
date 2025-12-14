@@ -13,8 +13,8 @@ import { Link } from 'react-router-dom';
 
 interface HomePageProps {
   searchQuery: string;
-  viewMode: 'grid' | 'feed';
-  setViewMode: (mode: 'grid' | 'feed') => void;
+  viewMode: 'grid' | 'feed' | 'masonry' | 'utility';
+  setViewMode: (mode: 'grid' | 'feed' | 'masonry' | 'utility') => void;
   selectedCategories: string[];
   setSelectedCategories: (c: string[]) => void;
   selectedTag: string | null;
@@ -220,11 +220,11 @@ export const HomePage: React.FC<HomePageProps> = ({
 
             </div>
         ) : (
-            // Grid View: Standard Full Width Container
+            // Grid/Masonry/Utility View: Standard Full Width Container
             <div className="max-w-[1800px] mx-auto px-4 sm:px-6 lg:px-8 py-6">
                 <ArticleGrid 
                     articles={articles}
-                    viewMode="grid"
+                    viewMode={viewMode === 'utility' ? 'grid' : viewMode}
                     isLoading={isLoading}
                     onArticleClick={setSelectedArticle}
                     isBookmarked={isBookmarked}

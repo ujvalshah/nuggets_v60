@@ -1,13 +1,8 @@
 import { storageService } from './storageService';
 import { Article, FilterState } from '@/types';
 
-const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-
 export const articleService = {
   getArticles: async (filters: FilterState): Promise<Article[]> => {
-    // Simulate network delay
-    await delay(300);
-
     // Fetch from dynamic storage
     let filtered = await storageService.getAllArticles();
 
@@ -52,7 +47,6 @@ export const articleService = {
   },
 
   getArticleById: async (id: string): Promise<Article | undefined> => {
-    await delay(200);
     return storageService.getArticleById(id);
   }
 };

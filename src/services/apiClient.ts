@@ -4,6 +4,16 @@ const BASE_URL = '/api';
 
 const AUTH_STORAGE_KEY = 'nuggets_auth_data_v2';
 
+// Helper to extract error message from response
+async function extractErrorMessage(response: Response): Promise<string> {
+  try {
+    const errorData = await response.json();
+    return errorData.message || `Request failed with status ${response.status}`;
+  } catch {
+    return `Request failed with status ${response.status}`;
+  }
+}
+
 class ApiClient {
   private getAuthHeader(): Record<string, string> {
     try {
@@ -36,15 +46,34 @@ class ApiClient {
       const response = await fetch(`${BASE_URL}${endpoint}`, config);
 
       if (!response.ok) {
+        const errorMessage = await extractErrorMessage(response);
+        
         if (response.status === 404) {
-          throw new Error('Resource not found');
+          throw new Error('The requested resource was not found.');
         }
         if (response.status === 401) {
-          // Optional: Trigger global logout here if needed
-          console.warn("Unauthorized request");
+          // Redirect to login on unauthorized
+          if (typeof window !== 'undefined') {
+            // Clear auth data
+            try {
+              localStorage.removeItem(AUTH_STORAGE_KEY);
+            } catch (e) {
+              // Ignore storage errors
+            }
+            // Redirect to login
+            window.location.href = '/login';
+          }
+          throw new Error('Your session has expired. Please sign in again.');
         }
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || `API Error: ${response.status}`);
+        if (response.status === 429) {
+          throw new Error('Too many attempts. Please wait a moment and try again.');
+        }
+        if (response.status === 500) {
+          throw new Error('Something went wrong on our end. Please try again in a moment.');
+        }
+        
+        // For other errors, use the message from the backend (will be mapped by authService)
+        throw new Error(errorMessage);
       }
 
       if (response.status === 204) {
@@ -55,12 +84,16 @@ class ApiClient {
     } catch (error: any) {
       // Handle network errors (connection refused, timeout, etc.)
       if (error instanceof TypeError && error.message.includes('fetch')) {
-        throw new Error(
-          `Server connection failed. Please ensure the backend server is running on port 5000. ` +
-          `Run 'npm run dev:server' in a separate terminal.`
-        );
+        // In development, show helpful message; in production, show generic message
+        const isDevelopment = import.meta.env.DEV;
+        if (isDevelopment) {
+          throw new Error(
+            "We couldn't connect to the server. Please ensure the backend server is running on port 5000."
+          );
+        }
+        throw new Error("We couldn't connect to the server. Please check your internet connection and try again.");
       }
-      // Re-throw other errors as-is
+      // Re-throw other errors as-is (they'll be mapped by authService)
       throw error;
     }
   }

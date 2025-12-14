@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Menu, LayoutGrid, Rows, Filter, ArrowUpDown, Maximize, Sun, Moon, Plus, User as UserIcon, LogOut, Settings, Shield, LogIn, Layers, X, Globe, FileText, Lock, BookOpen, MessageSquare, Send, CheckCircle2 } from 'lucide-react';
+import { Menu, LayoutGrid, Rows, Columns, List, Filter, ArrowUpDown, Maximize, Sun, Moon, Plus, User as UserIcon, LogOut, Settings, Shield, LogIn, Layers, X, Globe, FileText, Lock, BookOpen, MessageSquare, Send, CheckCircle2 } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import { SortOrder } from '@/types';
 import { storageService } from '@/services/storageService';
@@ -206,8 +206,8 @@ interface HeaderProps {
   setSearchQuery: (q: string) => void;
   sidebarOpen: boolean;
   setSidebarOpen: (o: boolean) => void;
-  viewMode: 'grid' | 'feed';
-  setViewMode: (mode: 'grid' | 'feed') => void;
+  viewMode: 'grid' | 'feed' | 'masonry' | 'utility';
+  setViewMode: (mode: 'grid' | 'feed' | 'masonry' | 'utility') => void;
   selectedCategories: string[];
   setSelectedCategories: (c: string[]) => void;
   selectedTag: string | null;
@@ -344,6 +344,12 @@ export const Header: React.FC<HeaderProps> = ({
                 </button>
                 <button onClick={() => setViewMode('feed')} className={`p-2 rounded-lg transition-all ${viewMode === 'feed' ? 'bg-white dark:bg-slate-700 shadow-sm text-primary-600' : 'text-slate-400 hover:text-slate-600'}`} title="Feed View">
                     <Rows size={18} />
+                </button>
+                <button onClick={() => setViewMode('masonry')} className={`p-2 rounded-lg transition-all ${viewMode === 'masonry' ? 'bg-white dark:bg-slate-700 shadow-sm text-primary-600' : 'text-slate-400 hover:text-slate-600'}`} title="Masonry View">
+                    <Columns size={18} />
+                </button>
+                <button onClick={() => setViewMode('utility')} className={`p-2 rounded-lg transition-all ${viewMode === 'utility' ? 'bg-white dark:bg-slate-700 shadow-sm text-primary-600' : 'text-slate-400 hover:text-slate-600'}`} title="Utility View">
+                    <List size={18} />
                 </button>
                 <div className="w-px h-4 bg-slate-300 dark:bg-slate-600 mx-1" />
                 <button onClick={toggleFullScreen} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-white dark:hover:bg-slate-700 rounded-lg transition-all" title="Toggle Fullscreen">
