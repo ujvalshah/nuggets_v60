@@ -7,9 +7,15 @@ export const useBookmarks = () => {
   const { currentUserId } = useAuth();
 
   useEffect(() => {
-    const saved = localStorage.getItem('newsbytes_bookmarks');
-    if (saved) {
-      setBookmarks(JSON.parse(saved));
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        const saved = localStorage.getItem('newsbytes_bookmarks');
+        if (saved) {
+          setBookmarks(JSON.parse(saved));
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to load bookmarks from storage:', e);
     }
   }, []);
 
@@ -22,7 +28,13 @@ export const useBookmarks = () => {
         ? [...prev, articleId]
         : prev.filter(id => id !== articleId);
       
-      localStorage.setItem('newsbytes_bookmarks', JSON.stringify(newBookmarks));
+      try {
+        if (typeof window !== 'undefined' && window.localStorage) {
+          localStorage.setItem('newsbytes_bookmarks', JSON.stringify(newBookmarks));
+        }
+      } catch (e) {
+        console.warn('Failed to save bookmarks to storage:', e);
+      }
       return newBookmarks;
     });
 

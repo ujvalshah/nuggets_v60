@@ -79,28 +79,45 @@ const INITIAL_COLLECTIONS: Collection[] = [
 ];
 
 export class LocalAdapter implements IAdapter {
+  private storageInitialized = false;
+
   constructor() {
-    this.initStorage();
+    // Don't initialize storage in constructor - do it lazily when needed
   }
 
   private initStorage() {
-    if (!localStorage.getItem(STORAGE_KEY)) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(INITIAL_DATA));
-    }
-    if (!localStorage.getItem(USERS_KEY)) {
-      localStorage.setItem(USERS_KEY, JSON.stringify(INITIAL_USERS));
-    }
-    if (!localStorage.getItem(CATEGORIES_KEY)) {
-      localStorage.setItem(CATEGORIES_KEY, JSON.stringify(INITIAL_CATEGORIES));
-    }
-    if (!localStorage.getItem(COLLECTIONS_KEY)) {
-      localStorage.setItem(COLLECTIONS_KEY, JSON.stringify(INITIAL_COLLECTIONS));
+    if (this.storageInitialized) return;
+    
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        if (!localStorage.getItem(STORAGE_KEY)) {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(INITIAL_DATA));
+        }
+        if (!localStorage.getItem(USERS_KEY)) {
+          localStorage.setItem(USERS_KEY, JSON.stringify(INITIAL_USERS));
+        }
+        if (!localStorage.getItem(CATEGORIES_KEY)) {
+          localStorage.setItem(CATEGORIES_KEY, JSON.stringify(INITIAL_CATEGORIES));
+        }
+        if (!localStorage.getItem(COLLECTIONS_KEY)) {
+          localStorage.setItem(COLLECTIONS_KEY, JSON.stringify(INITIAL_COLLECTIONS));
+        }
+        this.storageInitialized = true;
+      }
+    } catch (e) {
+      console.warn('Storage initialization failed:', e);
     }
   }
 
   async getAllArticles(): Promise<Article[]> {
-    const data = localStorage.getItem(STORAGE_KEY);
-    return data ? JSON.parse(data) : [];
+    this.initStorage();
+    try {
+      const data = localStorage.getItem(STORAGE_KEY);
+      return data ? JSON.parse(data) : [];
+    } catch (e) {
+      console.warn('Failed to get articles from storage:', e);
+      return [];
+    }
   }
 
   async getArticleById(id: string): Promise<Article | undefined> {
@@ -114,6 +131,7 @@ export class LocalAdapter implements IAdapter {
   }
 
   async createArticle(article: Omit<Article, 'id' | 'publishedAt'>): Promise<Article> {
+    this.initStorage();
     const articles = await this.getAllArticles();
     const newArticle: Article = {
       ...article,
@@ -127,31 +145,54 @@ export class LocalAdapter implements IAdapter {
       displayAuthor: article.displayAuthor
     };
     const updated = [newArticle, ...articles];
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+    } catch (e) {
+      console.warn('Failed to save article to storage:', e);
+      throw e;
+    }
     return newArticle;
   }
 
   async updateArticle(id: string, updates: Partial<Article>): Promise<Article | null> {
+    this.initStorage();
     const articles = await this.getAllArticles();
     const index = articles.findIndex(a => a.id === id);
     if (index === -1) return null;
     const updatedArticle = { ...articles[index], ...updates };
     articles[index] = updatedArticle;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(articles));
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(articles));
+    } catch (e) {
+      console.warn('Failed to update article in storage:', e);
+      throw e;
+    }
     return updatedArticle;
   }
 
   async deleteArticle(id: string): Promise<boolean> {
+    this.initStorage();
     const articles = await this.getAllArticles();
     const filtered = articles.filter(a => a.id !== id);
     if (articles.length === filtered.length) return false;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(filtered));
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(filtered));
+    } catch (e) {
+      console.warn('Failed to delete article from storage:', e);
+      throw e;
+    }
     return true;
   }
 
   async getUsers(): Promise<User[]> {
-    const data = localStorage.getItem(USERS_KEY);
-    return data ? JSON.parse(data) : [];
+    this.initStorage();
+    try {
+      const data = localStorage.getItem(USERS_KEY);
+      return data ? JSON.parse(data) : [];
+    } catch (e) {
+      console.warn('Failed to get users from storage:', e);
+      return [];
+    }
   }
 
   async getUserById(id: string): Promise<User | undefined> {
@@ -171,19 +212,31 @@ export class LocalAdapter implements IAdapter {
   }
 
   async updateUser(id: string, updates: Partial<User>): Promise<User | null> {
+    this.initStorage();
     const users = await this.getUsers();
     const index = users.findIndex(u => u.id === id);
     if (index === -1) return null;
     const updatedUser = { ...users[index], ...updates };
     users[index] = updatedUser;
-    localStorage.setItem(USERS_KEY, JSON.stringify(users));
+    try {
+      localStorage.setItem(USERS_KEY, JSON.stringify(users));
+    } catch (e) {
+      console.warn('Failed to update user in storage:', e);
+      throw e;
+    }
     return updatedUser;
   }
 
   async deleteUser(id: string): Promise<void> {
+    this.initStorage();
     const users = await this.getUsers();
     const updated = users.filter(u => u.id !== id);
-    localStorage.setItem(USERS_KEY, JSON.stringify(updated));
+    try {
+      localStorage.setItem(USERS_KEY, JSON.stringify(updated));
+    } catch (e) {
+      console.warn('Failed to delete user from storage:', e);
+      throw e;
+    }
   }
 
   async updateUserPreferences(userId: string, interestedCategories: string[]): Promise<void> {
@@ -209,8 +262,14 @@ export class LocalAdapter implements IAdapter {
   }
 
   async getCategories(): Promise<string[]> {
-    const data = localStorage.getItem(CATEGORIES_KEY);
-    return data ? JSON.parse(data) : [];
+    this.initStorage();
+    try {
+      const data = localStorage.getItem(CATEGORIES_KEY);
+      return data ? JSON.parse(data) : [];
+    } catch (e) {
+      console.warn('Failed to get categories from storage:', e);
+      return [];
+    }
   }
 
   async addCategory(category: string): Promise<void> {
@@ -222,20 +281,32 @@ export class LocalAdapter implements IAdapter {
   }
 
   async deleteCategory(category: string): Promise<void> {
+    this.initStorage();
     const categories = await this.getCategories();
     const updated = categories.filter(c => c !== category);
-    localStorage.setItem(CATEGORIES_KEY, JSON.stringify(updated));
+    try {
+      localStorage.setItem(CATEGORIES_KEY, JSON.stringify(updated));
+    } catch (e) {
+      console.warn('Failed to delete category from storage:', e);
+      throw e;
+    }
   }
 
   async getCollections(): Promise<Collection[]> {
-    const data = localStorage.getItem(COLLECTIONS_KEY);
-    const parsed: Collection[] = data ? JSON.parse(data) : [];
-    return parsed.map(c => ({ 
-        ...c, 
-        entries: c.entries || [],
-        type: c.type || 'public',
-        updatedAt: c.updatedAt || c.createdAt
-    }));
+    this.initStorage();
+    try {
+      const data = localStorage.getItem(COLLECTIONS_KEY);
+      const parsed: Collection[] = data ? JSON.parse(data) : [];
+      return parsed.map(c => ({ 
+          ...c, 
+          entries: c.entries || [],
+          type: c.type || 'public',
+          updatedAt: c.updatedAt || c.createdAt
+      }));
+    } catch (e) {
+      console.warn('Failed to get collections from storage:', e);
+      return [];
+    }
   }
 
   async getCollectionById(id: string): Promise<Collection | undefined> {
@@ -263,22 +334,35 @@ export class LocalAdapter implements IAdapter {
   }
 
   async deleteCollection(id: string): Promise<void> {
+    this.initStorage();
     const collections = await this.getCollections();
     const updated = collections.filter(c => c.id !== id);
-    localStorage.setItem(COLLECTIONS_KEY, JSON.stringify(updated));
+    try {
+      localStorage.setItem(COLLECTIONS_KEY, JSON.stringify(updated));
+    } catch (e) {
+      console.warn('Failed to delete collection from storage:', e);
+      throw e;
+    }
   }
 
   async updateCollection(id: string, updates: Partial<Collection>): Promise<Collection | null> {
+    this.initStorage();
     const collections = await this.getCollections();
     const index = collections.findIndex(c => c.id === id);
     if (index === -1) return null;
     const updated = { ...collections[index], ...updates, updatedAt: new Date().toISOString() };
     collections[index] = updated;
-    localStorage.setItem(COLLECTIONS_KEY, JSON.stringify(collections));
+    try {
+      localStorage.setItem(COLLECTIONS_KEY, JSON.stringify(collections));
+    } catch (e) {
+      console.warn('Failed to update collection in storage:', e);
+      throw e;
+    }
     return updated;
   }
 
   async addArticleToCollection(collectionId: string, articleId: string, userId: string): Promise<void> {
+    this.initStorage();
     const collections = await this.getCollections();
     const index = collections.findIndex(c => c.id === collectionId);
     if (index === -1) return;
@@ -292,19 +376,31 @@ export class LocalAdapter implements IAdapter {
     };
     collections[index].entries.push(newEntry);
     collections[index].updatedAt = new Date().toISOString();
-    localStorage.setItem(COLLECTIONS_KEY, JSON.stringify(collections));
+    try {
+      localStorage.setItem(COLLECTIONS_KEY, JSON.stringify(collections));
+    } catch (e) {
+      console.warn('Failed to add article to collection in storage:', e);
+      throw e;
+    }
   }
 
   async removeArticleFromCollection(collectionId: string, articleId: string, userId: string): Promise<void> {
+    this.initStorage();
     const collections = await this.getCollections();
     const index = collections.findIndex(c => c.id === collectionId);
     if (index === -1) return;
     collections[index].entries = collections[index].entries.filter(e => e.articleId !== articleId);
     collections[index].updatedAt = new Date().toISOString();
-    localStorage.setItem(COLLECTIONS_KEY, JSON.stringify(collections));
+    try {
+      localStorage.setItem(COLLECTIONS_KEY, JSON.stringify(collections));
+    } catch (e) {
+      console.warn('Failed to remove article from collection in storage:', e);
+      throw e;
+    }
   }
 
   async flagEntryAsIrrelevant(collectionId: string, articleId: string, userId: string): Promise<void> {
+    this.initStorage();
     const collections = await this.getCollections();
     const cIndex = collections.findIndex(c => c.id === collectionId);
     if (cIndex === -1) return;
@@ -318,7 +414,12 @@ export class LocalAdapter implements IAdapter {
       entry.flaggedBy = entry.flaggedBy.filter(id => id !== userId);
     }
     collections[cIndex].entries[entryIndex] = entry;
-    localStorage.setItem(COLLECTIONS_KEY, JSON.stringify(collections));
+    try {
+      localStorage.setItem(COLLECTIONS_KEY, JSON.stringify(collections));
+    } catch (e) {
+      console.warn('Failed to flag entry in storage:', e);
+      throw e;
+    }
   }
 }
 

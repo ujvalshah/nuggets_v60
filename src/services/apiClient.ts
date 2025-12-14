@@ -7,15 +7,17 @@ const AUTH_STORAGE_KEY = 'nuggets_auth_data_v2';
 class ApiClient {
   private getAuthHeader(): Record<string, string> {
     try {
-      const stored = localStorage.getItem(AUTH_STORAGE_KEY);
-      if (stored) {
-        const { token } = JSON.parse(stored);
-        if (token) {
-          return { 'Authorization': `Bearer ${token}` };
+      if (typeof window !== 'undefined' && window.localStorage) {
+        const stored = localStorage.getItem(AUTH_STORAGE_KEY);
+        if (stored) {
+          const { token } = JSON.parse(stored);
+          if (token) {
+            return { 'Authorization': `Bearer ${token}` };
+          }
         }
       }
     } catch (e) {
-      // Ignore parsing errors
+      // Ignore parsing errors or storage access errors
     }
     return {};
   }

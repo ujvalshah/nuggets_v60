@@ -45,11 +45,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const init = async () => {
       try {
         // 1. Load Auth
-        const stored = localStorage.getItem(AUTH_STORAGE_KEY);
-        if (stored) {
-          const { user: storedUser, token: storedToken } = JSON.parse(stored);
-          setModularUser(storedUser);
-          setToken(storedToken);
+        if (typeof window !== 'undefined' && window.localStorage) {
+          try {
+            const stored = localStorage.getItem(AUTH_STORAGE_KEY);
+            if (stored) {
+              const { user: storedUser, token: storedToken } = JSON.parse(stored);
+              setModularUser(storedUser);
+              setToken(storedToken);
+            }
+          } catch (e) {
+            console.warn("Failed to load auth from storage", e);
+            if (typeof window !== 'undefined' && window.localStorage) {
+              localStorage.removeItem(AUTH_STORAGE_KEY);
+            }
+          }
         }
         
         // 2. Load Global Config
@@ -62,7 +71,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       } catch (e) {
         console.error("Initialization failed", e);
-        localStorage.removeItem(AUTH_STORAGE_KEY);
       } finally {
         setIsLoading(false);
       }
@@ -71,7 +79,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const persistAuth = (u: ModularUser, t: string) => {
-    localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({ user: u, token: t }));
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({ user: u, token: t }));
+      }
+    } catch (e) {
+      console.warn('Failed to persist auth to storage:', e);
+    }
     setModularUser(u);
     setToken(t);
   };
@@ -122,7 +136,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (e) {
         console.error("Logout API failed", e);
     }
-    localStorage.removeItem(AUTH_STORAGE_KEY);
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        localStorage.removeItem(AUTH_STORAGE_KEY);
+      }
+    } catch (e) {
+      console.warn('Failed to remove auth from storage:', e);
+    }
     setModularUser(null);
     setToken(null);
   };
