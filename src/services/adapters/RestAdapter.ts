@@ -2,26 +2,50 @@ import { IAdapter } from './IAdapter';
 import { Article, User, Collection } from '@/types';
 import { apiClient } from '@/services/apiClient';
 
+/**
+ * Normalize MongoDB document to Article format (_id -> id)
+ */
+const normalizeArticle = (doc: any): Article => {
+  if (!doc) return doc;
+  // If already has id and no _id, return as-is
+  if (doc.id && !doc._id) return doc as Article;
+  // If has _id, copy it to id
+  if (doc._id) {
+    const { _id, ...rest } = doc;
+    return { ...rest, id: _id } as Article;
+  }
+  return doc as Article;
+};
+
+const normalizeArticles = (docs: any[]): Article[] => {
+  return docs.map(normalizeArticle);
+};
+
 export class RestAdapter implements IAdapter {
   // --- Articles ---
-  getAllArticles(): Promise<Article[]> {
-    return apiClient.get('/articles');
+  async getAllArticles(): Promise<Article[]> {
+    const articles = await apiClient.get<any[]>('/articles');
+    return normalizeArticles(articles);
   }
 
-  getArticleById(id: string): Promise<Article | undefined> {
-    return apiClient.get<Article>(`/articles/${id}`).catch(() => undefined);
+  async getArticleById(id: string): Promise<Article | undefined> {
+    const article = await apiClient.get<any>(`/articles/${id}`).catch(() => undefined);
+    return article ? normalizeArticle(article) : undefined;
   }
 
-  getArticlesByAuthor(authorId: string): Promise<Article[]> {
-    return apiClient.get(`/articles?authorId=${authorId}`);
+  async getArticlesByAuthor(authorId: string): Promise<Article[]> {
+    const articles = await apiClient.get<any[]>(`/articles?authorId=${authorId}`);
+    return normalizeArticles(articles);
   }
 
-  createArticle(article: Omit<Article, 'id' | 'publishedAt'>): Promise<Article> {
-    return apiClient.post('/articles', article);
+  async createArticle(article: Omit<Article, 'id' | 'publishedAt'>): Promise<Article> {
+    const created = await apiClient.post<any>('/articles', article);
+    return normalizeArticle(created);
   }
 
-  updateArticle(id: string, updates: Partial<Article>): Promise<Article | null> {
-    return apiClient.put(`/articles/${id}`, updates);
+  async updateArticle(id: string, updates: Partial<Article>): Promise<Article | null> {
+    const updated = await apiClient.put<any>(`/articles/${id}`, updates).catch(() => null);
+    return updated ? normalizeArticle(updated) : null;
   }
 
   deleteArticle(id: string): Promise<boolean> {
@@ -55,7 +79,11 @@ export class RestAdapter implements IAdapter {
   }
 
   async getPersonalizedFeed(userId: string): Promise<{ articles: Article[], newCount: number }> {
-    return apiClient.get(`/users/${userId}/feed`);
+    const feed = await apiClient.get<{ articles: any[], newCount: number }>(`/users/${userId}/feed`);
+    return {
+      articles: normalizeArticles(feed.articles || []),
+      newCount: feed.newCount || 0
+    };
   }
 
   // --- Categories ---

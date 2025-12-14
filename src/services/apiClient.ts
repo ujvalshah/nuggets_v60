@@ -22,7 +22,7 @@ class ApiClient {
     return {};
   }
 
-  private async request<T>(endpoint: string, options?: RequestInit): Promise<T> {
+  private async request<T>(endpoint: string, options?: RequestInit, retries = 0): Promise<T> {
     const config = {
       ...options,
       headers: {
@@ -32,8 +32,14 @@ class ApiClient {
       },
     };
 
+    const maxRetries = 2;
+    const retryDelay = 1000; // 1 second
+
     try {
-      const response = await fetch(`${BASE_URL}${endpoint}`, config);
+      const response = await fetch(`${BASE_URL}${endpoint}`, {
+        ...config,
+        signal: AbortSignal.timeout(10000), // 10 second timeout
+      });
 
       if (!response.ok) {
         if (response.status === 404) {
@@ -41,7 +47,7 @@ class ApiClient {
         }
         if (response.status === 401) {
           // Optional: Trigger global logout here if needed
-          console.warn("Unauthorized request");
+          console.warn("[ApiClient] Unauthorized request");
         }
         const errorData = await response.json().catch(() => ({}));
         throw new Error(errorData.message || `API Error: ${response.status}`);
@@ -54,12 +60,27 @@ class ApiClient {
       return response.json();
     } catch (error: any) {
       // Handle network errors (connection refused, timeout, etc.)
-      if (error instanceof TypeError && error.message.includes('fetch')) {
+      const isNetworkError = 
+        error instanceof TypeError || 
+        error.name === 'AbortError' ||
+        error.message?.includes('fetch') ||
+        error.message?.includes('Failed to fetch') ||
+        error.message?.includes('ECONNREFUSED');
+
+      if (isNetworkError && retries < maxRetries) {
+        console.warn(`[ApiClient] Network error (attempt ${retries + 1}/${maxRetries + 1}), retrying...`, error.message);
+        await new Promise(resolve => setTimeout(resolve, retryDelay * (retries + 1)));
+        return this.request<T>(endpoint, options, retries + 1);
+      }
+
+      if (isNetworkError) {
         throw new Error(
-          `Server connection failed. Please ensure the backend server is running on port 5000. ` +
+          `Server connection failed after ${maxRetries + 1} attempts. ` +
+          `Please ensure the backend server is running on port 5000. ` +
           `Run 'npm run dev:server' in a separate terminal.`
         );
       }
+      
       // Re-throw other errors as-is
       throw error;
     }

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Article } from '@/types';
 import { X, Clock, ExternalLink, Sparkles, Loader2, Bookmark, FolderPlus, Heart, Eye } from 'lucide-react';
-import { formatDate } from '@/utils/formatters';
+import { formatDate, getArticleId } from '@/utils/formatters';
 import { Avatar } from './shared/Avatar';
 import { useBookmarks } from '@/hooks/useBookmarks';
 import { useToast } from '@/hooks/useToast';
@@ -28,10 +28,22 @@ export const ArticleDetail: React.FC<ArticleDetailProps> = ({ article, onClose, 
   const { withAuth } = useRequireAuth();
   const toast = useToast();
 
+  // Safely get article ID
+  const articleId = getArticleId(article);
+  
+  // Guard against missing article or ID
+  if (!article || !articleId) {
+    return (
+      <div className="bg-white dark:bg-slate-950 min-h-full flex items-center justify-center">
+        <div className="text-slate-500">Article not found</div>
+      </div>
+    );
+  }
+
   const handleGenerateSummary = async () => {
     setIsAiLoading(true);
     try {
-        const summary = await aiService.generateTakeaways(article.content || article.excerpt);
+        const summary = await aiService.generateTakeaways(article.content || article.excerpt || '');
         setAiSummary(summary);
     } catch (e) {
         toast.error("Failed to generate summary");
@@ -41,8 +53,8 @@ export const ArticleDetail: React.FC<ArticleDetailProps> = ({ article, onClose, 
   };
 
   const handleBookmark = () => {
-      toggleBookmark(article.id);
-      if (!isBookmarked(article.id)) {
+      toggleBookmark(articleId);
+      if (!isBookmarked(articleId)) {
           toast.success("Saved to bookmarks");
       } else {
           toast.info("Removed from bookmarks");
@@ -60,12 +72,12 @@ export const ArticleDetail: React.FC<ArticleDetailProps> = ({ article, onClose, 
        {isModal && (
            <div className="sticky top-0 z-10 flex items-center justify-between px-4 py-3 bg-white/80 dark:bg-slate-950/80 backdrop-blur-md border-b border-slate-100 dark:border-slate-800">
                <div className="flex items-center gap-3">
-                   <Avatar name={article.author.name} size="sm" />
-                   <div className="text-sm font-bold text-slate-900 dark:text-white">{article.author.name}</div>
+                   <Avatar name={article.author?.name || 'Unknown'} size="sm" />
+                   <div className="text-sm font-bold text-slate-900 dark:text-white">{article.author?.name || 'Unknown'}</div>
                </div>
                <div className="flex items-center gap-2">
                    <ShareMenu 
-                       data={{ type: 'nugget', id: article.id, title: article.title, shareUrl: window.location.href }} 
+                       data={{ type: 'nugget', id: articleId, title: article.title || 'Untitled', shareUrl: typeof window !== 'undefined' ? window.location.href : '' }} 
                        className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full"
                    />
                    <button onClick={onClose} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors">
@@ -86,22 +98,24 @@ export const ArticleDetail: React.FC<ArticleDetailProps> = ({ article, onClose, 
            <div className="max-w-3xl mx-auto px-6 py-8 space-y-8">
                {/* Title & Meta */}
                <div>
-                   <div className="flex flex-wrap gap-2 mb-4">
-                       {article.categories.map(cat => (
-                           <span key={cat} className="px-2 py-1 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 text-xs font-bold rounded-lg uppercase tracking-wide">
-                               {cat}
-                           </span>
-                       ))}
-                   </div>
+                   {(article.categories && article.categories.length > 0) && (
+                       <div className="flex flex-wrap gap-2 mb-4">
+                           {article.categories.map(cat => (
+                               <span key={cat} className="px-2 py-1 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 text-xs font-bold rounded-lg uppercase tracking-wide">
+                                   {cat}
+                               </span>
+                           ))}
+                       </div>
+                   )}
                    <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900 dark:text-white leading-tight mb-4">
-                       {article.title}
+                       {article.title || 'Untitled'}
                    </h1>
                    <div className="flex items-center gap-4 text-xs font-medium text-slate-500 dark:text-slate-400">
                        <div className="flex items-center gap-1.5">
                            <Clock size={14} />
-                           <span>{article.readTime} min read</span>
+                           <span>{article.readTime || 1} min read</span>
                        </div>
-                       <div>{formatDate(article.publishedAt)}</div>
+                       <div>{formatDate(article.publishedAt || '')}</div>
                    </div>
                </div>
 
@@ -157,9 +171,9 @@ export const ArticleDetail: React.FC<ArticleDetailProps> = ({ article, onClose, 
                {/* Engagement Footer */}
                <div className="flex items-center justify-between pt-6 border-t border-slate-100 dark:border-slate-800">
                    <div className="flex gap-4">
-                       <button onClick={withAuth(handleBookmark, 'guestBookmarks')} className={`flex items-center gap-1.5 text-sm font-bold transition-colors ${isBookmarked(article.id) ? 'text-primary-600' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}>
-                           <Bookmark size={18} fill={isBookmarked(article.id) ? "currentColor" : "none"} />
-                           {isBookmarked(article.id) ? 'Saved' : 'Save'}
+                       <button onClick={withAuth(handleBookmark, 'guestBookmarks')} className={`flex items-center gap-1.5 text-sm font-bold transition-colors ${isBookmarked(articleId) ? 'text-primary-600' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}>
+                           <Bookmark size={18} fill={isBookmarked(articleId) ? "currentColor" : "none"} />
+                           {isBookmarked(articleId) ? 'Saved' : 'Save'}
                        </button>
                        <button onClick={withAuth(() => handleAddToCollection('public'))} className="flex items-center gap-1.5 text-sm font-bold text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition-colors">
                            <FolderPlus size={18} />
@@ -175,12 +189,12 @@ export const ArticleDetail: React.FC<ArticleDetailProps> = ({ article, onClose, 
            </div>
        </div>
 
-       <AddToCollectionModal 
-           isOpen={isCollectionModalOpen} 
-           onClose={() => setIsCollectionModalOpen(false)} 
-           articleIds={[article.id]} 
-           mode={collectionMode} 
-       />
+      <AddToCollectionModal 
+          isOpen={isCollectionModalOpen} 
+          onClose={() => setIsCollectionModalOpen(false)} 
+          articleIds={[articleId]} 
+          mode={collectionMode} 
+      />
     </div>
   );
 };

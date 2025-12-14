@@ -2,7 +2,7 @@
 import React, { useState, forwardRef, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Article } from '@/types';
-import { formatDate } from '@/utils/formatters';
+import { formatDate, getArticleId } from '@/utils/formatters';
 import { Bookmark, FolderPlus, MoreVertical, Flag, Trash2, Edit2, FileText, StickyNote, Lightbulb } from 'lucide-react';
 import { ShareMenu } from './shared/ShareMenu';
 import { CollectionPopover } from './CollectionPopover';
@@ -77,7 +77,18 @@ export const NewsCard = forwardRef<HTMLDivElement, NewsCardProps>(({
 
   if (!article) return null;
 
-  const isOwner = currentUserId === article.author.id;
+  // Safely get article ID (handles both id and _id from MongoDB)
+  const articleId = getArticleId(article);
+  
+  // Guard against missing required fields
+  if (!articleId) {
+    console.warn('Article missing ID:', article);
+    return null;
+  }
+
+  // Safely access author with fallback
+  const authorId = article.author?.id ?? '';
+  const isOwner = currentUserId === authorId;
 
   // -- Content Classification --
   const hasMedia = !!article.media || (article.images && article.images.length > 0) || !!article.video;
@@ -87,7 +98,7 @@ export const NewsCard = forwardRef<HTMLDivElement, NewsCardProps>(({
 
   // -- Contributor Logic --
   // Show only if addedBy exists AND the user who added it is NOT the original author
-  const showContributor = article.addedBy && article.addedBy.userId !== article.author.id;
+  const showContributor = article.addedBy && article.addedBy.userId !== authorId;
 
   // -- Event Handlers --
   useEffect(() => {
@@ -101,7 +112,7 @@ export const NewsCard = forwardRef<HTMLDivElement, NewsCardProps>(({
 
   const handleBookmarkClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    onToggleBookmark(article.id);
+    onToggleBookmark(articleId);
     
     if (!isBookmarked) {
         // "Toast-Action" Flow:
@@ -126,7 +137,7 @@ export const NewsCard = forwardRef<HTMLDivElement, NewsCardProps>(({
         // Undo Flow
         toast.info("Removed from Bookmarks", {
             actionLabel: "Undo",
-            onAction: () => onToggleBookmark(article.id), // Toggling again re-adds it
+            onAction: () => onToggleBookmark(articleId), // Toggling again re-adds it
             duration: 3000
         });
         setShowCollection(false);
@@ -152,7 +163,7 @@ export const NewsCard = forwardRef<HTMLDivElement, NewsCardProps>(({
       e.stopPropagation();
       setShowMenu(false);
       if(window.confirm("Delete this nugget permanently?")) {
-          await storageService.deleteArticle(article.id);
+          await storageService.deleteArticle(articleId);
           await queryClient.invalidateQueries({ queryKey: ['articles'] });
           toast.success("Nugget deleted");
       }
@@ -222,23 +233,23 @@ export const NewsCard = forwardRef<HTMLDivElement, NewsCardProps>(({
         </div>
 
         <div className="mt-auto pt-1.5 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between shrink-0">
-            <div className="flex items-center gap-1.5 text-[10px] font-medium text-slate-400 dark:text-slate-500" onClick={(e) => {e.stopPropagation(); navigate(`/profile/${article.author.id}`)}}>
-                <span className="text-slate-700 dark:text-slate-300 hover:underline cursor-pointer">{article.author.name}</span>
+            <div className="flex items-center gap-1.5 text-[10px] font-medium text-slate-400 dark:text-slate-500" onClick={(e) => {e.stopPropagation(); if (authorId) navigate(`/profile/${authorId}`)}}>
+                <span className="text-slate-700 dark:text-slate-300 hover:underline cursor-pointer">{article.author?.name || 'Unknown'}</span>
                 <span>·</span>
-                <span>{formatDate(article.publishedAt, false)}</span>
+                <span>{formatDate(article.publishedAt || '', false)}</span>
             </div>
 
             <div className="flex items-center gap-1">
                 <ShareMenu 
                     data={{
                         type: 'nugget',
-                        id: article.id,
-                        title: article.title,
-                        shareUrl: `${window.location.origin}/#/article/${article.id}`
+                        id: articleId,
+                        title: article.title || 'Untitled',
+                        shareUrl: `${typeof window !== 'undefined' ? window.location.origin : ''}/#/article/${articleId}`
                     }}
                     meta={{
-                        author: article.author.name,
-                        text: article.excerpt
+                        author: article.author?.name || 'Unknown',
+                        text: article.excerpt || ''
                     }}
                 />
                 
@@ -298,18 +309,18 @@ export const NewsCard = forwardRef<HTMLDivElement, NewsCardProps>(({
         </div>
 
         {/* Soft Footer Extension for Contributors */}
-        {showContributor && (
+        {showContributor && article.addedBy && (
             <div className="-mx-4 -mb-4 -mt-3 px-4 py-1.5 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-100 dark:border-slate-800 rounded-b-2xl flex items-center">
-                <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium truncate flex-1 min-w-0" title={`Added by ${article.addedBy!.name}`}>
-                    Added by <span className="text-slate-600 dark:text-slate-300">{article.addedBy!.name}</span>
+                <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium truncate flex-1 min-w-0" title={`Added by ${article.addedBy.name}`}>
+                    Added by <span className="text-slate-600 dark:text-slate-300">{article.addedBy.name}</span>
                 </span>
             </div>
         )}
       </div>
 
       {/* -- Modals -- */}
-      <CollectionPopover isOpen={showCollection} onClose={() => setShowCollection(false)} articleId={article.id} mode={collectionMode} anchorRect={collectionAnchor} />
-      <ReportModal isOpen={showReport} onClose={() => setShowReport(false)} onSubmit={async () => { await new Promise(r => setTimeout(r, 1000)); toast.success("Reported"); }} articleId={article.id} />
+      <CollectionPopover isOpen={showCollection} onClose={() => setShowCollection(false)} articleId={articleId} mode={collectionMode} anchorRect={collectionAnchor} />
+      <ReportModal isOpen={showReport} onClose={() => setShowReport(false)} onSubmit={async () => { await new Promise(r => setTimeout(r, 1000)); toast.success("Reported"); }} articleId={articleId} />
       {showFullModal && <ArticleModal isOpen={showFullModal} onClose={() => setShowFullModal(false)} article={article} />}
       <ImageLightbox isOpen={showLightbox} onClose={() => setShowLightbox(false)} images={article.images || []} />
     </>

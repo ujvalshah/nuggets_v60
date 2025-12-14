@@ -15,6 +15,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { AuthModal } from '@/components/auth/AuthModal';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { LegalPageRenderer } from '@/pages/LegalPageRenderer';
+import { ErrorBoundary } from '@/components/UI/ErrorBoundary';
 
 // Lazy Load Pages
 const HomePage = lazy(() => import('@/pages/HomePage').then(module => ({ default: module.HomePage })));
@@ -41,7 +42,13 @@ const AppContent: React.FC = () => {
   const { currentUserId } = useAuth();
 
   useEffect(() => {
-    if (window.matchMedia('(prefers-color-scheme: dark)').matches) setIsDark(true);
+    if (typeof window !== 'undefined' && window.matchMedia) {
+      try {
+        if (window.matchMedia('(prefers-color-scheme: dark)').matches) setIsDark(true);
+      } catch (e) {
+        console.warn('[App] Failed to check color scheme preference:', e);
+      }
+    }
   }, []);
 
   useEffect(() => {
@@ -136,11 +143,17 @@ const AppContent: React.FC = () => {
 
 const App: React.FC = () => {
   return (
-    <ToastProvider>
-      <AuthProvider>
-        <AppContent />
-      </AuthProvider>
-    </ToastProvider>
+    <ErrorBoundary
+      onError={(error, errorInfo) => {
+        console.error('[App] Critical error caught by ErrorBoundary:', error, errorInfo);
+      }}
+    >
+      <ToastProvider>
+        <AuthProvider>
+          <AppContent />
+        </AuthProvider>
+      </ToastProvider>
+    </ErrorBoundary>
   );
 };
 

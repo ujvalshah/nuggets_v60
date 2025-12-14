@@ -10,6 +10,7 @@ import { ArticleModal } from '@/components/ArticleModal';
 import { getCollectionTheme } from '@/constants/theme';
 import { ShareMenu } from '@/components/shared/ShareMenu';
 import { useAuth } from '@/hooks/useAuth';
+import { getArticleId } from '@/utils/formatters';
 
 export const CollectionDetailPage: React.FC = () => {
   const { collectionId } = useParams<{ collectionId: string }>();
@@ -39,7 +40,11 @@ export const CollectionDetailPage: React.FC = () => {
       ]);
 
       const collectionNuggets = col.entries.map(entry => {
-          const article = allArticles.find(a => a.id === entry.articleId);
+          // Find article by matching id or _id
+          const article = allArticles.find(a => {
+            const articleId = getArticleId(a);
+            return articleId === entry.articleId;
+          });
           if (!article) return null;
           
           // Inject addedBy data for display
@@ -47,7 +52,7 @@ export const CollectionDetailPage: React.FC = () => {
           const contributor: Contributor | undefined = adder ? {
               userId: adder.id,
               name: adder.name,
-              username: adder.email.split('@')[0], 
+              username: adder.email?.split('@')[0] || '', 
               addedAt: entry.addedAt
           } : undefined;
 
@@ -102,10 +107,10 @@ export const CollectionDetailPage: React.FC = () => {
                             type: 'collection',
                             id: collection.id,
                             title: collection.name,
-                            shareUrl: `${window.location.origin}/#/collections/${collection.id}`
+                            shareUrl: `${typeof window !== 'undefined' ? window.location.origin : ''}/#/collections/${collection.id}`
                         }}
                         meta={{
-                            text: collection.description
+                            text: collection.description || ''
                         }}
                         className="hover:!bg-slate-800 hover:text-white w-10 h-10"
                         iconSize={20}

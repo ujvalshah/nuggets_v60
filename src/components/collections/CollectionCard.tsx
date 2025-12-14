@@ -130,10 +130,10 @@ export const CollectionCard: React.FC<CollectionCardProps> = ({
                                 type: 'collection',
                                 id: collection.id,
                                 title: collection.name,
-                                shareUrl: `${window.location.origin}/#/collections/${collection.id}`
+                                shareUrl: `${typeof window !== 'undefined' ? window.location.origin : ''}/#/collections/${collection.id}`
                             }}
                             meta={{
-                                text: collection.description
+                                text: collection.description || ''
                             }}
                             className="hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
                             iconSize={16}

@@ -74,4 +74,12 @@ export const normalizeCategoryLabel = (input: string): string => {
   return `#${cleaned}`;
 };
 
+/**
+ * Get article ID safely, handling both 'id' and '_id' fields
+ * MongoDB returns _id, but frontend expects id
+ */
+export const getArticleId = (article: { id?: string; _id?: string }): string => {
+  return article?.id ?? article?._id ?? '';
+};
+
 

@@ -10,7 +10,7 @@ import { formatDate } from '@/utils/formatters';
 export const LegalPageRenderer: React.FC = () => {
   // Use a catch-all route param if possible, or specific slug
   const params = useParams();
-  const path = window.location.hash.split('/')[1]; // Fallback if routing structure varies
+  const path = typeof window !== 'undefined' ? window.location.hash.split('/')[1] : ''; // Fallback if routing structure varies
   const slug = params.slug || path;
   
   const navigate = useNavigate();

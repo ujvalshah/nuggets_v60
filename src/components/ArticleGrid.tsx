@@ -2,8 +2,10 @@ import React from 'react';
 import { Article } from '@/types';
 import { NewsCard } from './NewsCard';
 import { EmptyState } from './UI/EmptyState';
+import { ErrorBoundary } from './UI/ErrorBoundary';
 import { SearchX } from 'lucide-react';
 import { useRowExpansion } from '@/hooks/useRowExpansion';
+import { getArticleId } from '@/utils/formatters';
 
 interface ArticleGridProps {
   articles: Article[];
@@ -68,33 +70,44 @@ export const ArticleGrid: React.FC<ArticleGridProps> = ({
   }
 
   return (
-    <div
-      className={
-        viewMode === 'feed'
-          ? "max-w-2xl mx-auto flex flex-col gap-8"
-          : "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 auto-rows-auto items-stretch mx-auto w-full"
-      }
-    >
-      {articles.map((article) => (
-        <NewsCard
-          key={article.id}
-          ref={(el) => registerCard(article.id, el)}
-          article={article}
-          viewMode={viewMode}
-          isBookmarked={isBookmarked(article.id)}
-          onToggleBookmark={onToggleBookmark}
-          onCategoryClick={onCategoryClick}
-          onClick={onArticleClick}
-          expanded={expandedId === article.id}
-          onToggleExpand={() => toggleExpansion(article.id)}
-          currentUserId={currentUserId}
-          selectionMode={selectionMode}
-          isSelected={selectedIds.includes(article.id)}
-          onSelect={onSelect}
-          onTagClick={onTagClick}
-        />
-      ))}
-    </div>
+    <ErrorBoundary>
+      <div
+        className={
+          viewMode === 'feed'
+            ? "max-w-2xl mx-auto flex flex-col gap-8"
+            : "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 auto-rows-auto items-stretch mx-auto w-full"
+        }
+      >
+        {articles.map((article) => {
+          const articleId = getArticleId(article);
+          // Skip articles without valid IDs
+          if (!articleId) {
+            console.warn('Article missing ID, skipping:', article);
+            return null;
+          }
+          return (
+            <ErrorBoundary key={articleId} fallback={null}>
+              <NewsCard
+                ref={(el) => registerCard(articleId, el)}
+                article={article}
+                viewMode={viewMode}
+                isBookmarked={isBookmarked(articleId)}
+                onToggleBookmark={onToggleBookmark}
+                onCategoryClick={onCategoryClick}
+                onClick={onArticleClick}
+                expanded={expandedId === articleId}
+                onToggleExpand={() => toggleExpansion(articleId)}
+                currentUserId={currentUserId}
+                selectionMode={selectionMode}
+                isSelected={selectedIds.includes(articleId)}
+                onSelect={onSelect}
+                onTagClick={onTagClick}
+              />
+            </ErrorBoundary>
+          );
+        })}
+      </div>
+    </ErrorBoundary>
   );
 };
 

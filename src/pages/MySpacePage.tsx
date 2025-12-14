@@ -13,6 +13,7 @@ import { useBookmarks } from '@/hooks/useBookmarks';
 import { useToast } from '@/hooks/useToast';
 import { ConfirmActionModal } from '@/components/settings/ConfirmActionModal';
 import { Tooltip } from '@/components/UI/Tooltip';
+import { getArticleId } from '@/utils/formatters';
 
 interface MySpacePageProps {
   currentUserId: string;
@@ -386,22 +387,29 @@ export const MySpacePage: React.FC<MySpacePageProps> = ({ currentUserId }) => {
                       />
                   </div>
               ) : (
-                  currentList.map(item => (
-                    <NewsCard 
-                      key={item.id} 
-                      article={item as Article}
-                      viewMode="grid"
-                      isBookmarked={isBookmarked(item.id)}
-                      onToggleBookmark={toggleBookmark}
-                      onTagClick={() => {}}
-                      onCategoryClick={() => {}}
-                      onClick={() => setSelectedArticle(item as Article)}
-                      currentUserId={currentUserId}
-                      selectionMode={selectionMode}
-                      isSelected={selectedIds.includes(item.id)}
-                      onSelect={handleSelect}
-                    />
-                  ))
+                  currentList.map(item => {
+                    const articleId = getArticleId(item as Article);
+                    if (!articleId) {
+                      console.warn('Item missing ID, skipping:', item);
+                      return null;
+                    }
+                    return (
+                      <NewsCard 
+                        key={articleId} 
+                        article={item as Article}
+                        viewMode="grid"
+                        isBookmarked={isBookmarked(articleId)}
+                        onToggleBookmark={toggleBookmark}
+                        onTagClick={() => {}}
+                        onCategoryClick={() => {}}
+                        onClick={() => setSelectedArticle(item as Article)}
+                        currentUserId={currentUserId}
+                        selectionMode={selectionMode}
+                        isSelected={selectedIds.includes(articleId)}
+                        onSelect={handleSelect}
+                      />
+                    );
+                  }).filter(Boolean)
               )}
 
               {currentList.length === 0 && (
