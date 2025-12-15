@@ -29,14 +29,14 @@ export const ProfileCard: React.FC<ProfileCardProps> = ({ user, isOwner, nuggetC
   // Form State
   const [formData, setFormData] = useState({
     name: user.name,
-    avatarUrl: user.avatarUrl,
-    title: 'Senior Product Designer', // Mock field
-    company: 'TechFlow Inc.', // Mock field
-    bio: 'Building minimalist interfaces for busy people. Obsessed with typography and whitespace.', // Mock field
-    location: 'San Francisco, CA', // Mock field
-    website: 'https://akash.design', // Mock field
-    twitter: 'akash_ux', // Mock field
-    linkedin: 'akash-solanki', // Mock field
+    avatarUrl: user.avatarUrl || '',
+    title: (user as any).title || (user as any).profile?.title || 'Senior Product Designer',
+    company: (user as any).company || (user as any).profile?.company || 'TechFlow Inc.',
+    bio: user.bio || '',
+    location: user.location || '',
+    website: user.website || '',
+    twitter: (user as any).twitter || (user as any).profile?.twitter || 'akash_ux',
+    linkedin: (user as any).linkedin || (user as any).profile?.linkedin || 'akash-solanki',
   });
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -62,16 +62,26 @@ export const ProfileCard: React.FC<ProfileCardProps> = ({ user, isOwner, nuggetC
   const handleSave = async () => {
     setIsSaving(true);
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 800));
+      // Update all profile fields - using flat fields for backward compatibility
+      const updatedUser = await storageService.updateUser(user.id, { 
+        name: formData.name,
+        avatarUrl: formData.avatarUrl,
+        bio: formData.bio,
+        location: formData.location,
+        website: formData.website,
+        title: formData.title,
+        company: formData.company,
+        twitter: formData.twitter,
+        linkedin: formData.linkedin,
+      });
       
-      const updatedUser = { ...user, name: formData.name, avatarUrl: formData.avatarUrl };
-      await storageService.updateUser(user.id, { name: formData.name, avatarUrl: formData.avatarUrl });
-      
-      onUpdate(updatedUser);
-      setIsEditing(false);
-      toast.success("Profile updated");
+      if (updatedUser) {
+        onUpdate(updatedUser);
+        setIsEditing(false);
+        toast.success("Profile updated");
+      }
     } catch (e) {
+      console.error("Failed to save profile:", e);
       toast.error("Failed to save profile");
     } finally {
       setIsSaving(false);
@@ -79,17 +89,17 @@ export const ProfileCard: React.FC<ProfileCardProps> = ({ user, isOwner, nuggetC
   };
 
   const handleCancel = () => {
-    // Reset form
+    // Reset form to current user data
     setFormData({
         name: user.name,
-        avatarUrl: user.avatarUrl,
-        title: 'Senior Product Designer',
-        company: 'TechFlow Inc.',
-        bio: 'Building minimalist interfaces for busy people. Obsessed with typography and whitespace.',
-        location: 'San Francisco, CA',
-        website: 'https://akash.design',
-        twitter: 'akash_ux',
-        linkedin: 'akash-solanki',
+        avatarUrl: user.avatarUrl || '',
+        title: (user as any).title || (user as any).profile?.title || 'Senior Product Designer',
+        company: (user as any).company || (user as any).profile?.company || 'TechFlow Inc.',
+        bio: user.bio || '',
+        location: user.location || '',
+        website: user.website || '',
+        twitter: (user as any).twitter || (user as any).profile?.twitter || 'akash_ux',
+        linkedin: (user as any).linkedin || (user as any).profile?.linkedin || 'akash-solanki',
     });
     setIsEditing(false);
   };

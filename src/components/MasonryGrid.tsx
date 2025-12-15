@@ -54,7 +54,7 @@ export const MasonryGrid: React.FC<MasonryGridProps> = ({
       { minWidth: 1024, columnCount: 3 },   // 1024-1536: 3 columns
       { minWidth: 1536, columnCount: 4 },   // >= 1536: 4 columns
     ],
-    defaultColumns: 3, // SSR-safe default (matches expected desktop render)
+    defaultColumns: 1, // SSR-safe default (mobile-first, reduces CLS)
     debounceMs: 100,
   });
 

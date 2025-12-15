@@ -15,6 +15,8 @@ import { useAuth } from '@/hooks/useAuth';
 import { aiService } from '@/services/aiService';
 import { useToast } from '@/hooks/useToast';
 import { compressImage, isImageFile, formatFileSize } from '@/utils/imageOptimizer';
+import { unfurlUrl } from '@/services/unfurlService';
+import type { NuggetMedia } from '@/types';
 
 interface CreateNuggetModalProps {
   isOpen: boolean;
@@ -40,6 +42,8 @@ export const CreateNuggetModal: React.FC<CreateNuggetModalProps> = ({ isOpen, on
   // Content State
   const [content, setContent] = useState('');
   const [detectedLink, setDetectedLink] = useState<string | null>(null);
+  const [linkMetadata, setLinkMetadata] = useState<NuggetMedia | null>(null);
+  const [isLoadingMetadata, setIsLoadingMetadata] = useState(false);
   
   // Attachments
   const [attachments, setAttachments] = useState<FileAttachment[]>([]);
@@ -87,7 +91,9 @@ export const CreateNuggetModal: React.FC<CreateNuggetModalProps> = ({ isOpen, on
         storageService.getCategories(),
         storageService.getCollections()
       ]);
-      setAvailableCategories(cats || []);
+      // Filter out any non-string or empty category values
+      const validCategories = (cats || []).filter((cat): cat is string => typeof cat === 'string' && cat.trim() !== '');
+      setAvailableCategories(validCategories);
       setAllCollections(cols || []);
       setAvailableAliases([]); // Content aliases feature not yet implemented
       setSelectedAlias("Custom...");
@@ -116,6 +122,7 @@ export const CreateNuggetModal: React.FC<CreateNuggetModalProps> = ({ isOpen, on
     onClose();
   };
 
+  // Fetch metadata when link is detected
   useEffect(() => {
     const urlRegex = /(https?:\/\/[^\s]+)/g;
     const matches = content.match(urlRegex);
@@ -123,10 +130,28 @@ export const CreateNuggetModal: React.FC<CreateNuggetModalProps> = ({ isOpen, on
        const firstLink = matches[0];
        if (firstLink !== detectedLink) {
            setDetectedLink(firstLink);
+           // Fetch rich metadata
+           setIsLoadingMetadata(true);
+           unfurlUrl(firstLink)
+             .then((metadata) => {
+               if (metadata) {
+                 setLinkMetadata(metadata);
+               } else {
+                 setLinkMetadata(null);
+               }
+             })
+             .catch((error) => {
+               console.error('Failed to fetch link metadata:', error);
+               setLinkMetadata(null);
+             })
+             .finally(() => {
+               setIsLoadingMetadata(false);
+             });
        }
     } else {
         if (detectedLink && !content.includes(detectedLink)) {
             setDetectedLink(null);
+            setLinkMetadata(null);
         }
     }
   }, [content, detectedLink]);
@@ -249,14 +274,16 @@ export const CreateNuggetModal: React.FC<CreateNuggetModalProps> = ({ isOpen, on
         
         // Add unique categories safely
         const returnedTags = Array.isArray(summary.tags) ? summary.tags : [];
-        const newCats = returnedTags.filter(tag => !categories.includes(tag));
+        // Filter to only include valid string tags
+        const validTags = returnedTags.filter((tag): tag is string => typeof tag === 'string' && tag.trim() !== '');
+        const newCats = validTags.filter(tag => !categories.includes(tag));
         
         if (newCats.length > 0) {
             setCategories(prev => [...prev, ...newCats]);
             // Optimistically add to available if missing
             newCats.forEach(cat => {
                 if (!availableCategories.includes(cat)) {
-                    setAvailableCategories(prev => [...prev, cat]);
+                    setAvailableCategories(prev => [...prev, cat].filter((c): c is string => typeof c === 'string' && c.trim() !== '').sort());
                 }
             });
         }
@@ -272,7 +299,15 @@ export const CreateNuggetModal: React.FC<CreateNuggetModalProps> = ({ isOpen, on
 
   const handleSubmit = async () => {
     if (!content.trim() && attachments.length === 0) return;
+    
+    // Validate user is authenticated
+    if (!currentUserId) {
+        setError("You must be logged in to create a nugget.");
+        return;
+    }
+    
     setIsSubmitting(true);
+    setError(null);
     try {
         const derivedTitle = content.split('\n')[0].replace(/\*\*/g, '').substring(0, 80).trim() || 'Untitled Nugget';
         const wordCount = content.trim().split(/\s+/).length;
@@ -309,14 +344,14 @@ export const CreateNuggetModal: React.FC<CreateNuggetModalProps> = ({ isOpen, on
             images: uploadedImages,
             documents: uploadedDocs,
             visibility, // Pass visibility state
-            media: detectedLink ? {
+            media: linkMetadata || (detectedLink ? {
                 type: detectProviderFromUrl(detectedLink),
                 url: detectedLink,
                 previewMetadata: {
                     url: detectedLink,
                     title: 'New Link', 
                 }
-            } : null,
+            } : null),
             source_type: detectedLink ? 'link' : 'text'
         });
 
@@ -331,9 +366,22 @@ export const CreateNuggetModal: React.FC<CreateNuggetModalProps> = ({ isOpen, on
 
         await queryClient.invalidateQueries({ queryKey: ['articles'] });
         handleClose();
-    } catch (e) {
+    } catch (e: any) {
         console.error("Failed to create nugget", e);
-        setError("Failed to post nugget. Please try again.");
+        
+        // Try to extract more specific error message
+        let errorMessage = "Failed to post nugget. Please try again.";
+        if (e?.message) {
+            errorMessage = e.message;
+        } else if (e?.errors && Array.isArray(e.errors)) {
+            // Handle validation errors from server
+            const errorDetails = e.errors.map((err: any) => 
+                `${err.path?.join('.') || 'field'}: ${err.message}`
+            ).join(', ');
+            errorMessage = `Validation error: ${errorDetails}`;
+        }
+        
+        setError(errorMessage);
     } finally {
         setIsSubmitting(false);
     }
@@ -465,12 +513,12 @@ export const CreateNuggetModal: React.FC<CreateNuggetModalProps> = ({ isOpen, on
                                     onClick={(e) => e.stopPropagation()}
                                 />
                                 <div className="max-h-32 overflow-y-auto custom-scrollbar flex flex-col gap-1">
-                                    {(availableCategories || []).filter(c => !categories.includes(c) && c.toLowerCase().includes(categoryInput.toLowerCase())).map(cat => (
+                                    {(availableCategories || []).filter(c => typeof c === 'string' && c.trim() !== '' && !categories.includes(c) && c.toLowerCase().includes(categoryInput.toLowerCase())).map(cat => (
                                         <button key={cat} onClick={(e) => { e.stopPropagation(); addCategory(cat); }} className="text-left text-[11px] px-2 py-1.5 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-lg text-slate-700 dark:text-slate-200 transition-colors font-medium">
                                             #{cat}
                                         </button>
                                     ))}
-                                    {categoryInput && !availableCategories.some(c => c.toLowerCase() === normalizeCategoryLabel(categoryInput).toLowerCase().replace('#', '')) && (
+                                    {categoryInput && !availableCategories.some(c => typeof c === 'string' && c.trim() !== '' && c.toLowerCase() === normalizeCategoryLabel(categoryInput).toLowerCase().replace('#', '')) && (
                                         <button onClick={(e) => { e.stopPropagation(); addCategory(categoryInput); }} className="text-left text-[11px] px-2 py-1.5 hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded-lg text-primary-600 font-bold transition-colors">
                                             Create "{normalizeCategoryLabel(categoryInput)}"
                                         </button>
@@ -589,13 +637,24 @@ export const CreateNuggetModal: React.FC<CreateNuggetModalProps> = ({ isOpen, on
                 {detectedLink && (
                     <div className="relative group rounded-lg overflow-hidden border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50 shadow-sm">
                         <button 
-                            onClick={() => setDetectedLink(null)} 
+                            onClick={() => { setDetectedLink(null); setLinkMetadata(null); }} 
                             className="absolute top-2 right-2 bg-slate-900/80 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity z-10 hover:bg-slate-900"
                         >
                             <X size={12} />
                         </button>
                         <div className="max-h-[160px] overflow-hidden">
-                            <GenericLinkPreview url={detectedLink} metadata={{ url: detectedLink, title: 'Loading preview...', description: detectedLink }} type={detectProviderFromUrl(detectedLink)} />
+                            {isLoadingMetadata ? (
+                                <div className="p-4 flex items-center justify-center">
+                                    <Loader2 size={16} className="animate-spin text-slate-400" />
+                                    <span className="ml-2 text-xs text-slate-500">Loading preview...</span>
+                                </div>
+                            ) : (
+                                <GenericLinkPreview 
+                                    url={detectedLink} 
+                                    metadata={linkMetadata?.previewMetadata || { url: detectedLink, title: detectedLink }} 
+                                    type={linkMetadata?.type || detectProviderFromUrl(detectedLink)} 
+                                />
+                            )}
                         </div>
                     </div>
                 )}

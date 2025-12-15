@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { MessageSquare, X, Send, Loader2, Check } from 'lucide-react';
+import { adminFeedbackService } from '@/admin/services/adminFeedbackService';
+import { useAuth } from '@/hooks/useAuth';
+import { useToast } from '@/hooks/useToast';
 
 interface FeedbackModalProps {
   isOpen: boolean;
@@ -11,6 +14,9 @@ const FeedbackModal: React.FC<FeedbackModalProps> = ({ isOpen, onClose }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSent, setIsSent] = useState(false);
   const [feedback, setFeedback] = useState('');
+  const [email, setEmail] = useState('');
+  const { currentUser } = useAuth();
+  const toast = useToast();
 
   useEffect(() => {
     if (isOpen) document.body.style.overflow = 'hidden';
@@ -23,20 +29,38 @@ const FeedbackModal: React.FC<FeedbackModalProps> = ({ isOpen, onClose }) => {
     if (!feedback.trim()) return;
     
     setIsSubmitting(true);
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    setIsSubmitting(false);
-    setIsSent(true);
-    
-    // Close after success message
-    setTimeout(() => {
-        onClose();
-        // Reset form after close animation
-        setTimeout(() => {
-            setIsSent(false);
-            setFeedback('');
-        }, 300);
-    }, 2000);
+    try {
+      await adminFeedbackService.submitFeedback(
+        feedback.trim(),
+        'general',
+        currentUser ? {
+          id: currentUser.id,
+          name: currentUser.name,
+          email: currentUser.email,
+          avatarUrl: currentUser.avatarUrl
+        } : undefined,
+        !currentUser ? email : undefined
+      );
+      
+      setIsSent(true);
+      toast.success('Feedback submitted successfully!');
+      
+      // Close after success message
+      setTimeout(() => {
+          onClose();
+          // Reset form after close animation
+          setTimeout(() => {
+              setIsSent(false);
+              setFeedback('');
+              setEmail('');
+          }, 300);
+      }, 2000);
+    } catch (error) {
+      console.error('Failed to submit feedback:', error);
+      toast.error('Failed to submit feedback. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   if (!isOpen) return null;
@@ -89,11 +113,15 @@ const FeedbackModal: React.FC<FeedbackModalProps> = ({ isOpen, onClose }) => {
                         onChange={(e) => setFeedback(e.target.value)}
                     />
                     
-                    <input 
-                        type="email"
-                        className="w-full bg-slate-50 dark:bg-black/20 border border-slate-200 dark:border-slate-700 rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/50 focus:border-primary-500 transition-all dark:text-white"
-                        placeholder="Email (optional)"
-                    />
+                    {!currentUser && (
+                        <input 
+                            type="email"
+                            value={email}
+                            onChange={(e) => setEmail(e.target.value)}
+                            className="w-full bg-slate-50 dark:bg-black/20 border border-slate-200 dark:border-slate-700 rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/50 focus:border-primary-500 transition-all dark:text-white"
+                            placeholder="Email (optional)"
+                        />
+                    )}
                 </div>
 
                 <div className="flex gap-3 pt-2">

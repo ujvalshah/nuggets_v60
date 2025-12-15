@@ -30,24 +30,36 @@ export const CollectionDetailPage: React.FC = () => {
   const loadData = async (id: string) => {
     setIsLoading(true);
     try {
+      // Fetch collection first
       const col = await storageService.getCollectionById(id);
-      if (!col) { navigate('/collections'); return; }
+      if (!col) { 
+        navigate('/collections'); 
+        return; 
+      }
       
-      const [allArticles, allUsers] = await Promise.all([
-          storageService.getAllArticles(),
-          storageService.getUsers()
-      ]);
+      // Extract unique user IDs needed for contributor resolution
+      const uniqueUserIds = [...new Set(col.entries.map(entry => entry.addedByUserId))];
+      
+      // Fetch only required users in parallel
+      const userPromises = uniqueUserIds.map(userId => 
+        storageService.getUserById(userId).catch(() => undefined)
+      );
+      const users = await Promise.all(userPromises);
+      const userMap = new Map(users.filter((u): u is NonNullable<typeof u> => u !== undefined).map(u => [u.id, u]));
 
-      const collectionNuggets = col.entries.map(entry => {
-          const article = allArticles.find(a => a.id === entry.articleId);
+      // Fetch specific articles in parallel using Promise.all
+      const articlePromises = col.entries.map(async (entry) => {
+        try {
+          const article = await storageService.getArticleById(entry.articleId);
           if (!article) return null;
           
           // Inject addedBy data for display
-          const adder = allUsers.find(u => u.id === entry.addedByUserId);
+          const adder = userMap.get(entry.addedByUserId);
           const contributor: Contributor | undefined = adder ? {
               userId: adder.id,
               name: adder.name,
-              username: adder.email.split('@')[0], 
+              username: adder.username || (adder.email ? adder.email.split('@')[0] : undefined), 
+              avatarUrl: adder.avatarUrl,
               addedAt: entry.addedAt
           } : undefined;
 
@@ -55,11 +67,27 @@ export const CollectionDetailPage: React.FC = () => {
               ...article,
               addedBy: contributor
           };
-      }).filter(Boolean) as Article[];
+        } catch (error) {
+          // Handle case where article was deleted but entry still exists
+          console.warn(`Failed to fetch article ${entry.articleId}:`, error);
+          return null;
+        }
+      });
+
+      // Wait for all article fetches to complete and filter out nulls
+      const articleResults = await Promise.all(articlePromises);
+      const collectionNuggets = articleResults.filter((article): article is Article => article !== null);
 
       setCollection(col);
       setNuggets(collectionNuggets);
-    } catch (e) { console.error(e); } finally { setIsLoading(false); }
+    } catch (e) { 
+      console.error('Failed to load collection data:', e);
+      toast.error('Failed to load collection', {
+        description: 'Please try again later.'
+      });
+    } finally { 
+      setIsLoading(false); 
+    }
   };
 
   const handleAddNugget = () => {

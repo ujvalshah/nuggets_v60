@@ -1,5 +1,6 @@
 import React, { Component, ReactNode } from 'react';
 import { AlertCircle } from 'lucide-react';
+import { recordError } from '@/observability/telemetry';
 
 interface Props {
   children: ReactNode;
@@ -13,8 +14,6 @@ interface State {
 }
 
 export class ErrorBoundary extends Component<Props, State> {
-  declare props: Props;
-
   constructor(props: Props) {
     super(props);
     this.state = { hasError: false, error: null };
@@ -26,6 +25,7 @@ export class ErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
     console.error('ErrorBoundary caught an error:', error, errorInfo);
+    recordError({ error, info: errorInfo, source: 'ErrorBoundary' });
     if (this.props.onError) {
       this.props.onError(error, errorInfo);
     }

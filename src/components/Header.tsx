@@ -9,14 +9,22 @@ import { SearchInput } from './header/SearchInput';
 import { NavTab } from './header/NavTab';
 import { useAuth } from '@/hooks/useAuth';
 import { useRequireAuth } from '@/hooks/useRequireAuth';
+import { useToast } from '@/hooks/useToast';
+import { adminFeedbackService } from '@/admin/services/adminFeedbackService';
 import { createPortal } from 'react-dom';
 
 // --- Internal Feedback Form Component ---
-const DrawerFeedbackForm: React.FC<{ isAuthenticated: boolean }> = ({ isAuthenticated }) => {
+interface DrawerFeedbackFormProps {
+  isAuthenticated: boolean;
+  currentUser?: { id: string; name: string; email?: string; avatarUrl?: string } | null;
+}
+
+const DrawerFeedbackForm: React.FC<DrawerFeedbackFormProps> = ({ isAuthenticated, currentUser }) => {
   const [feedback, setFeedback] = useState('');
   const [email, setEmail] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [sent, setSent] = useState(false);
+  const toast = useToast();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -24,16 +32,33 @@ const DrawerFeedbackForm: React.FC<{ isAuthenticated: boolean }> = ({ isAuthenti
     if (!feedback.trim()) return;
     
     setIsSending(true);
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    setIsSending(false);
-    setSent(true);
-    
-    setTimeout(() => {
-        setSent(false);
-        setFeedback('');
-        setEmail('');
-    }, 3000);
+    try {
+      await adminFeedbackService.submitFeedback(
+        feedback.trim(),
+        'general',
+        currentUser ? {
+          id: currentUser.id,
+          name: currentUser.name,
+          email: currentUser.email,
+          avatarUrl: currentUser.avatarUrl
+        } : undefined,
+        !currentUser ? email : undefined
+      );
+      
+      setSent(true);
+      toast.success('Feedback sent!');
+      
+      setTimeout(() => {
+          setSent(false);
+          setFeedback('');
+          setEmail('');
+      }, 3000);
+    } catch (error) {
+      console.error('Failed to submit feedback:', error);
+      toast.error('Failed to send feedback. Please try again.');
+    } finally {
+      setIsSending(false);
+    }
   };
 
   if (sent) {
@@ -155,7 +180,7 @@ const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
            <div className="my-4 h-px bg-slate-100 dark:border-slate-800 mx-4" />
            
            {/* Feedback Widget - Enhanced Styling */}
-           <DrawerFeedbackForm isAuthenticated={isAuthenticated} />
+           <DrawerFeedbackForm isAuthenticated={isAuthenticated} currentUser={currentUser} />
 
            <div className="my-4 h-px bg-slate-100 dark:border-slate-800 mx-4" />
            

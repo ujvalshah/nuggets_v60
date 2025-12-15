@@ -6,10 +6,12 @@ import { FeedVariant } from './card/variants/FeedVariant';
 import { MasonryVariant } from './card/variants/MasonryVariant';
 import { UtilityVariant } from './card/variants/UtilityVariant';
 import { CollectionPopover } from './CollectionPopover';
-import { ReportModal } from './ReportModal';
+import { ReportModal, ReportPayload } from './ReportModal';
 import { ArticleModal } from './ArticleModal';
 import { ImageLightbox } from './ImageLightbox';
 import { useToast } from '@/hooks/useToast';
+import { adminModerationService } from '@/admin/services/adminModerationService';
+import { useAuth } from '@/hooks/useAuth';
 
 interface NewsCardProps {
   article: Article;
@@ -39,6 +41,7 @@ export const NewsCard = forwardRef<HTMLDivElement, NewsCardProps>(
     ref
   ) => {
     const toast = useToast();
+    const { currentUser } = useAuth();
 
     // Call the logic hook
     const hookResult = useNewsCard({
@@ -141,9 +144,28 @@ export const NewsCard = forwardRef<HTMLDivElement, NewsCardProps>(
         <ReportModal
           isOpen={modals.showReport}
           onClose={() => modals.setShowReport(false)}
-          onSubmit={async (payload) => {
-            await new Promise((r) => setTimeout(r, 1000));
-            toast.success('Reported');
+          onSubmit={async (payload: ReportPayload) => {
+            try {
+              await adminModerationService.submitReport(
+                payload.articleId,
+                'nugget',
+                payload.reason,
+                payload.comment,
+                currentUser ? {
+                  id: currentUser.id,
+                  name: currentUser.name
+                } : undefined,
+                originalArticle.author ? {
+                  id: originalArticle.author.id,
+                  name: originalArticle.author.name
+                } : undefined
+              );
+              toast.success('Report submitted successfully');
+            } catch (error) {
+              console.error('Failed to submit report:', error);
+              toast.error('Failed to submit report. Please try again.');
+              throw error; // Re-throw so ReportModal can handle it
+            }
           }}
           articleId={originalArticle.id}
         />

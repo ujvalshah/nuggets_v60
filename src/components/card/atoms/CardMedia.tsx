@@ -26,12 +26,22 @@ export const CardMedia: React.FC<CardMediaProps> = ({
 
   if (!hasMedia) return null;
 
+  // Use aspect ratio from metadata if available, otherwise default to 4/3
+  const aspectRatio = media?.aspect_ratio 
+    ? parseFloat(media.aspect_ratio) 
+    : 4/3;
+  
+  const aspectRatioStyle = aspectRatio 
+    ? { aspectRatio: `${aspectRatio}` }
+    : { aspectRatio: '4/3' };
+
   return (
     <div
       className={twMerge(
-        'w-full aspect-[4/3] rounded-xl overflow-hidden bg-slate-100 dark:bg-slate-800 relative shrink-0 cursor-pointer group/media',
+        'w-full rounded-xl overflow-hidden bg-slate-100 dark:bg-slate-800 relative shrink-0 cursor-pointer group/media',
         className
       )}
+      style={aspectRatioStyle}
       onClick={onMediaClick}
     >
       {media ? (
@@ -60,3 +70,4 @@ export const CardMedia: React.FC<CardMediaProps> = ({
     </div>
   );
 };
+

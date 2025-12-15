@@ -1,4 +1,4 @@
-import { useState, useLayoutEffect, useMemo, useCallback } from 'react';
+import { useState, useLayoutEffect, useMemo, useCallback, useRef } from 'react';
 
 /**
  * Breakpoint configuration for responsive column calculation
@@ -65,31 +65,56 @@ export function useMasonry<T>(
 ): MasonryResult<T> {
   const { breakpoints, defaultColumns, debounceMs = 100 } = config;
 
+  // #1: Normalize and validate breakpoints (sort, filter invalid entries)
+  const normalizedBreakpoints = useMemo(() => {
+    // Filter invalid entries (minWidth < 0, columnCount < 1)
+    const valid = breakpoints.filter(
+      (bp) => bp.minWidth >= 0 && bp.columnCount >= 1
+    );
+
+    // Warn in development if breakpoints were invalid
+    if (process.env.NODE_ENV === 'development' && valid.length !== breakpoints.length) {
+      console.warn(
+        '[useMasonry] Invalid breakpoints filtered out. Ensure minWidth >= 0 and columnCount >= 1.'
+      );
+    }
+
+    // Sort by minWidth ascending (required for correct matching logic)
+    return [...valid].sort((a, b) => a.minWidth - b.minWidth);
+  }, [breakpoints]);
+
+  // #3: Ensure defaultColumns is at least 1 (safety guard)
+  const safeDefaultColumns = Math.max(1, defaultColumns);
+
   // SSR-safe initial state (matches server render)
-  const [columnCount, setColumnCount] = useState<number>(defaultColumns);
+  const [columnCount, setColumnCount] = useState<number>(safeDefaultColumns);
   const [isClient, setIsClient] = useState<boolean>(false);
+
+  // #5: Store timeout ID in ref to prevent memory leaks
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Calculate column count from viewport width
   const calculateColumnCount = useCallback((): number => {
     // Guard against SSR
     if (typeof window === 'undefined') {
-      return defaultColumns;
+      return safeDefaultColumns;
     }
 
     const width = window.innerWidth;
     
     // Find the highest breakpoint that matches
-    // Breakpoints should be sorted by minWidth ascending
-    let matchedColumns = defaultColumns;
-    for (let i = breakpoints.length - 1; i >= 0; i--) {
-      if (width >= breakpoints[i].minWidth) {
-        matchedColumns = breakpoints[i].columnCount;
+    // Breakpoints are now guaranteed to be sorted by minWidth ascending
+    let matchedColumns = safeDefaultColumns;
+    for (let i = normalizedBreakpoints.length - 1; i >= 0; i--) {
+      if (width >= normalizedBreakpoints[i].minWidth) {
+        matchedColumns = normalizedBreakpoints[i].columnCount;
         break;
       }
     }
 
-    return matchedColumns;
-  }, [breakpoints, defaultColumns]);
+    // #3: Ensure columnCount is at least 1 (safety guard)
+    return Math.max(1, matchedColumns);
+  }, [normalizedBreakpoints, safeDefaultColumns]);
 
   // Client-side column calculation (runs after mount)
   useLayoutEffect(() => {
@@ -101,22 +126,25 @@ export function useMasonry<T>(
     setColumnCount(initialColumns);
 
     // Debounced resize handler
-    let timeoutId: NodeJS.Timeout | null = null;
+    // #5: Use ref for timeout ID to prevent stale closures and ensure cleanup
     const handleResize = () => {
-      if (timeoutId) {
-        clearTimeout(timeoutId);
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
       }
-      timeoutId = setTimeout(() => {
+      timeoutRef.current = setTimeout(() => {
         const newColumnCount = calculateColumnCount();
         setColumnCount(newColumnCount);
+        timeoutRef.current = null;
       }, debounceMs);
     };
 
     window.addEventListener('resize', handleResize);
     
     return () => {
-      if (timeoutId) {
-        clearTimeout(timeoutId);
+      // #5: Always clear timeout on cleanup to prevent memory leaks
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
       }
       window.removeEventListener('resize', handleResize);
     };
@@ -124,21 +152,32 @@ export function useMasonry<T>(
 
   // Distribute items deterministically using round-robin
   const columns = useMemo(() => {
-    // Use defaultColumns during SSR, actual columnCount after client mount
-    const activeColumnCount = isClient ? columnCount : defaultColumns;
+    // #3: Early return for empty items (safety + clarity)
+    if (items.length === 0) {
+      return [] as T[][];
+    }
+
+    // Use safeDefaultColumns during SSR, actual columnCount after client mount
+    const activeColumnCount = isClient ? columnCount : safeDefaultColumns;
     
-    const cols: T[][] = Array.from({ length: activeColumnCount }, () => []);
+    // #3: Ensure columnCount is at least 1 (prevent Array.from({ length: 0 }))
+    const safeColumnCount = Math.max(1, activeColumnCount);
+    
+    const cols: T[][] = Array.from({ length: safeColumnCount }, () => []);
     
     items.forEach((item, index) => {
-      const columnIndex = index % activeColumnCount;
+      const columnIndex = index % safeColumnCount;
       cols[columnIndex].push(item);
     });
     
     return cols;
-  }, [items, columnCount, defaultColumns, isClient]);
+  }, [items, columnCount, safeDefaultColumns, isClient]);
+
+  // #3: Ensure returned columnCount is at least 1
+  const safeColumnCount = Math.max(1, isClient ? columnCount : safeDefaultColumns);
 
   return {
     columns,
-    columnCount: isClient ? columnCount : defaultColumns,
+    columnCount: safeColumnCount,
   };
 }
