@@ -51,9 +51,10 @@ export class RestAdapter implements IAdapter {
       visibility: article.visibility || 'public',
       publishedAt: article.publishedAt,
       // Include additional fields that might be in the Article type
-      ...(article.images && { images: article.images }),
-      ...(article.documents && { documents: article.documents }),
-      ...(article.media && { media: article.media }),
+      ...(article.images && article.images.length > 0 && { images: article.images }),
+      ...(article.documents && article.documents.length > 0 && { documents: article.documents }),
+      // Always include media if it exists (even if null, to explicitly clear it)
+      ...(article.media !== undefined && { media: article.media }),
       ...(article.source_type && { source_type: article.source_type }),
       ...(article.displayAuthor && { displayAuthor: article.displayAuthor }),
     };
@@ -71,7 +72,8 @@ export class RestAdapter implements IAdapter {
 
   // --- Users ---
   getUsers(): Promise<User[]> {
-    return apiClient.get('/users');
+    return apiClient.get<{ data: User[] } | User[]>('/users')
+      .then(response => Array.isArray(response) ? response : (response.data || []));
   }
 
   getUserById(id: string): Promise<User | undefined> {
@@ -103,12 +105,22 @@ export class RestAdapter implements IAdapter {
   async getCategories(): Promise<string[]> {
     // Backend returns Tag[] by default, but we need string[] for compatibility
     // Use ?format=simple to get array of tag names
-    const tags = await apiClient.get<any[]>('/categories?format=simple');
-    // If backend returns Tag objects, extract names
-    if (tags && tags.length > 0 && typeof tags[0] === 'object') {
-      return tags.map(tag => tag.name || tag);
+    // Add cancelKey to prevent duplicate simultaneous requests
+    try {
+      const tags = await apiClient.get<any[]>('/categories?format=simple', undefined, 'restAdapter.getCategories');
+      // If backend returns Tag objects, extract names
+      if (tags && tags.length > 0 && typeof tags[0] === 'object') {
+        return tags.map(tag => tag.name || tag);
+      }
+      return tags || [];
+    } catch (error: any) {
+      // Handle cancelled requests gracefully - return empty array instead of throwing
+      if (error?.message === 'Request cancelled') {
+        return [];
+      }
+      // Re-throw other errors
+      throw error;
     }
-    return tags;
   }
 
   async addCategory(category: string): Promise<void> {
@@ -121,7 +133,10 @@ export class RestAdapter implements IAdapter {
 
   // --- Collections ---
   getCollections(): Promise<Collection[]> {
-    return apiClient.get('/collections');
+    // Add cancelKey to prevent duplicate simultaneous requests
+    // Collections endpoint returns array directly (not paginated)
+    return apiClient.get<Collection[]>('/collections', undefined, 'restAdapter.getCollections')
+      .then(response => Array.isArray(response) ? response : []);
   }
 
   getCollectionById(id: string): Promise<Collection | undefined> {

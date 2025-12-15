@@ -68,12 +68,18 @@ function transformNuggetToMedia(nugget: Nugget, url: string): NuggetMedia {
  */
 export async function unfurlUrl(
   url: string,
-  options: { skipCache?: boolean } = {}
+  options: { skipCache?: boolean; cancelKey?: string } = {}
 ): Promise<NuggetMedia | null> {
   try {
+    // Use URL as cancelKey if not provided, ensuring each URL gets unique cancellation
+    // This prevents batch requests from cancelling each other
+    const cancelKey = options.cancelKey || `unfurl:${url}`;
+    
     const response = await apiClient.post<Nugget>(
       '/unfurl',
-      { url }
+      { url },
+      undefined, // headers
+      cancelKey
     );
 
     if (!response) {
