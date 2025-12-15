@@ -82,18 +82,30 @@ export const CollectionsPage: React.FC = () => {
 
   const loadCollections = async () => {
     setIsLoading(true);
-    const [all, allUsers] = await Promise.all([
-        storageService.getCollections(),
-        storageService.getUsers()
-    ]);
+    try {
+      const [all, allUsersResponse] = await Promise.all([
+          storageService.getCollections(),
+          storageService.getUsers()
+      ]);
 
-    const hydrated = all.map(col => ({
-        ...col,
-        creator: allUsers.find(u => u.id === col.creatorId)
-    }));
+      // Ensure allUsers is an array
+      const allUsers = Array.isArray(allUsersResponse) ? allUsersResponse : [];
 
-    setCollections(hydrated.filter(c => c.type === 'public'));
-    setIsLoading(false);
+      const hydrated = all.map(col => ({
+          ...col,
+          creator: allUsers.find(u => u.id === col.creatorId)
+      }));
+
+      setCollections(hydrated.filter(c => c.type === 'public'));
+    } catch (error: any) {
+      // Handle cancelled requests gracefully
+      if (error?.message !== 'Request cancelled') {
+        console.error('Error loading collections:', error);
+      }
+      setCollections([]);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const processedCollections = useMemo(() => {

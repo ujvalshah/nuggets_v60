@@ -28,29 +28,49 @@ interface DocumentPreviewProps {
   showDownloadButton?: boolean;
 }
 
-// Icon colors by document type (following industry standards)
-const DOCUMENT_COLORS: Record<DocumentType, string> = {
-  pdf: '#DC2626',      // Red (Adobe PDF)
-  doc: '#2563EB',      // Blue (Microsoft Word)
-  docx: '#2563EB',     // Blue (Microsoft Word)
-  xls: '#16A34A',      // Green (Microsoft Excel)
-  xlsx: '#16A34A',     // Green (Microsoft Excel)
-  ppt: '#EA580C',      // Orange (Microsoft PowerPoint)
-  pptx: '#EA580C',     // Orange (Microsoft PowerPoint)
-  txt: '#6B7280',      // Gray (Plain text)
-  zip: '#9333EA',      // Purple (Archive)
+// Icon background colors by document type (light backgrounds with colored icons)
+const getIconBackgroundClass = (type: DocumentType): string => {
+  const backgrounds: Record<DocumentType, string> = {
+    pdf: 'bg-red-100 dark:bg-red-900/30',      // Red theme for PDF
+    doc: 'bg-blue-100 dark:bg-blue-900/30',    // Blue theme for Word
+    docx: 'bg-blue-100 dark:bg-blue-900/30',
+    xls: 'bg-green-100 dark:bg-green-900/30', // Green theme for Excel
+    xlsx: 'bg-green-100 dark:bg-green-900/30',
+    ppt: 'bg-orange-100 dark:bg-orange-900/30', // Orange theme for PowerPoint
+    pptx: 'bg-orange-100 dark:bg-orange-900/30',
+    txt: 'bg-slate-100 dark:bg-slate-800',     // Gray theme for text
+    zip: 'bg-purple-100 dark:bg-purple-900/30', // Purple theme for archives
+  };
+  return backgrounds[type] || 'bg-slate-100 dark:bg-slate-800';
+};
+
+const getIconColorClass = (type: DocumentType): string => {
+  const colors: Record<DocumentType, string> = {
+    pdf: 'text-red-600 dark:text-red-400',
+    doc: 'text-blue-600 dark:text-blue-400',
+    docx: 'text-blue-600 dark:text-blue-400',
+    xls: 'text-green-600 dark:text-green-400',
+    xlsx: 'text-green-600 dark:text-green-400',
+    ppt: 'text-orange-600 dark:text-orange-400',
+    pptx: 'text-orange-600 dark:text-orange-400',
+    txt: 'text-slate-600 dark:text-slate-400',
+    zip: 'text-purple-600 dark:text-purple-400',
+  };
+  return colors[type] || 'text-slate-600 dark:text-slate-400';
 };
 
 // Icon components by document type
-const getDocumentIcon = (type: DocumentType, size: number = 48) => {
-  const color = DOCUMENT_COLORS[type];
+const getDocumentIcon = (type: DocumentType, size: number = 48, useColoredIcon: boolean = false) => {
+  // For compact horizontal layout, use colored icons on light backgrounds
+  // For larger icons (thumbnails), use colored icons
+  const iconColorClass = useColoredIcon ? getIconColorClass(type) : '';
   
   // Use FileText for most types, File for archives
   if (type === 'zip') {
-    return <File size={size} style={{ color }} />;
+    return <File size={size} className={iconColorClass} />;
   }
   
-  return <FileText size={size} style={{ color }} />;
+  return <FileText size={size} className={iconColorClass} />;
 };
 
 // Format file size
@@ -138,13 +158,15 @@ export const DocumentPreview: React.FC<DocumentPreviewProps> = ({
   return (
     <div
       className={twMerge(
-        'w-full h-full rounded-xl overflow-hidden',
-        'bg-slate-50 dark:bg-slate-800/50',
+        'w-full rounded-xl overflow-hidden',
+        // For documents without thumbnails, use fixed height instead of h-full to prevent stretching
+        thumbnailUrl ? 'h-full' : 'h-16', // 64px fixed height for compact layout
+        'bg-slate-50 dark:bg-slate-900/50',
         'border border-slate-200 dark:border-slate-700',
         'relative group cursor-pointer',
         'transition-all duration-200',
-        'hover:shadow-lg hover:border-slate-300 dark:hover:border-slate-600',
-        'hover:scale-[1.02]',
+        'hover:bg-slate-100 dark:hover:bg-slate-800',
+        'hover:border-slate-300 dark:hover:border-slate-600',
         className
       )}
       onClick={handleClick}
@@ -158,51 +180,88 @@ export const DocumentPreview: React.FC<DocumentPreviewProps> = ({
         }
       }}
     >
-      {/* Optional thumbnail background (for PDFs) */}
-      {thumbnailUrl && (
-        <div className="absolute inset-0 opacity-10">
-          <img
-            src={thumbnailUrl}
-            alt=""
-            className="w-full h-full object-cover"
-            aria-hidden="true"
-          />
+      {/* Priority 1: Thumbnail when available (show prominently) */}
+      {thumbnailUrl ? (
+        <>
+          {/* Thumbnail as primary visual */}
+          <div className="absolute inset-0">
+            <img
+              src={thumbnailUrl}
+              alt={displayFilename}
+              className="w-full h-full object-cover"
+              aria-hidden="false"
+            />
+          </div>
+          
+          {/* Overlay gradient for readability */}
+          <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent" />
+          
+          {/* File type badge overlay (top-right) */}
+          <div className="absolute top-3 right-3 px-2 py-1 rounded-lg bg-white/95 dark:bg-slate-900/95 backdrop-blur-sm flex items-center gap-1.5 shadow-sm">
+            {getDocumentIcon(fileType, 16)}
+            <span className="text-xs font-semibold text-slate-900 dark:text-slate-100">{typeLabel}</span>
+          </div>
+          
+          {/* Filename and metadata overlay (bottom) */}
+          <div className="absolute bottom-0 left-0 right-0 p-4 text-white">
+            <p className="text-sm font-semibold line-clamp-2 break-words mb-1">
+              {displayFilename}
+            </p>
+            {displaySize && (
+              <p className="text-xs text-white/80">
+                {displaySize}
+              </p>
+            )}
+          </div>
+          
+          {/* Hover indicator */}
+          <div className="absolute bottom-3 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
+            <div className="flex items-center gap-1 text-xs text-white font-medium bg-black/60 px-2 py-1 rounded-lg backdrop-blur-sm">
+              <ExternalLink size={12} />
+              <span>Open</span>
+            </div>
+          </div>
+        </>
+      ) : (
+        /* Priority 2: Compact horizontal icon-based fallback */
+        <div className="relative h-full flex items-center gap-3 p-3">
+          {/* Document Icon - Small, on left */}
+          <div className="flex-shrink-0">
+            <div className={twMerge(
+              'w-10 h-10 rounded-lg flex items-center justify-center',
+              getIconBackgroundClass(fileType)
+            )}>
+              {getDocumentIcon(fileType, 20, true)}
+            </div>
+          </div>
+
+          {/* Filename and metadata - Center, flex-1 */}
+          <div className="flex-1 min-w-0">
+            <p className="text-[14px] font-bold text-slate-900 dark:text-slate-200 truncate group-hover:text-primary-500 dark:group-hover:text-primary-400 transition-colors">
+              {displayFilename}
+            </p>
+            <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              {displaySize && (
+                <>
+                  <span>{displaySize}</span>
+                  <span>·</span>
+                </>
+              )}
+              <span className="font-medium uppercase">{typeLabel}</span>
+            </div>
+          </div>
+
+          {/* Download icon - Right (always visible in compact layout) */}
+          <button
+            onClick={handleDownload}
+            className="flex-shrink-0 p-2 rounded hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+            aria-label={`Download ${filename}`}
+            title="Download"
+          >
+            <Download size={18} className="text-slate-400 group-hover:text-primary-500 dark:group-hover:text-primary-400 transition-colors" />
+          </button>
         </div>
       )}
-
-      {/* Content */}
-      <div className="relative h-full flex flex-col items-center justify-center p-6 gap-3">
-        {/* Document Icon */}
-        <div className="flex items-center justify-center">
-          {getDocumentIcon(fileType, 56)}
-        </div>
-
-        {/* Filename */}
-        <div className="text-center">
-          <p className="text-sm font-semibold text-slate-900 dark:text-slate-100 line-clamp-2 break-words">
-            {displayFilename}
-          </p>
-        </div>
-
-        {/* Metadata */}
-        <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-          {displaySize && (
-            <>
-              <span>{displaySize}</span>
-              <span>·</span>
-            </>
-          )}
-          <span className="font-medium">{typeLabel}</span>
-        </div>
-
-        {/* Hover indicator */}
-        <div className="absolute bottom-3 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
-          <div className="flex items-center gap-1 text-xs text-slate-600 dark:text-slate-400 font-medium">
-            <ExternalLink size={12} />
-            <span>Open</span>
-          </div>
-        </div>
-      </div>
 
       {/* Optional download button */}
       {showDownloadButton && (

@@ -54,7 +54,7 @@ export const useArticles = ({
     },
     // Keep previous data to avoid flickering
     placeholderData: (previousData) => previousData,
-    staleTime: 1000 * 60 * 2, // 2 minutes
+    staleTime: 1000 * 30, // 30 seconds - reduced to allow faster updates after batch creation
   });
 
   // Return explicit, non-ambiguous shape

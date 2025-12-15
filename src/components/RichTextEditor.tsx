@@ -12,6 +12,7 @@ interface RichTextEditorProps {
   placeholder?: string;
   className?: string;
   error?: string;
+  onImagePaste?: (file: File) => void; // Callback when image is pasted
 }
 
 interface ToolbarButtonProps {
@@ -85,7 +86,8 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
   onChange,
   placeholder,
   className = '',
-  error
+  error,
+  onImagePaste
 }) => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -139,6 +141,22 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
   };
 
   const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    // Check for image files first
+    const items = e.clipboardData.items;
+    if (items) {
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        if (item.type.indexOf('image') !== -1) {
+          e.preventDefault();
+          const file = item.getAsFile();
+          if (file && onImagePaste) {
+            onImagePaste(file);
+          }
+          return;
+        }
+      }
+    }
+
     // Check if clipboard has HTML content
     const html = e.clipboardData.getData('text/html');
     

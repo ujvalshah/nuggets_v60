@@ -15,6 +15,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { AuthModal } from '@/components/auth/AuthModal';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { LegalPageRenderer } from '@/pages/LegalPageRenderer';
+import { ErrorBoundary } from '@/components/UI/ErrorBoundary';
 
 // Lazy Load Pages
 const HomePage = lazy(() => import('@/pages/HomePage').then(module => ({ default: module.HomePage })));
@@ -136,11 +137,13 @@ const AppContent: React.FC = () => {
 
 const App: React.FC = () => {
   return (
-    <ToastProvider>
-      <AuthProvider>
-        <AppContent />
-      </AuthProvider>
-    </ToastProvider>
+    <ErrorBoundary>
+      <ToastProvider>
+        <AuthProvider>
+          <AppContent />
+        </AuthProvider>
+      </ToastProvider>
+    </ErrorBoundary>
   );
 };
 

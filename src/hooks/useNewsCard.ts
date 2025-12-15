@@ -7,7 +7,8 @@ import { useRequireAuth } from './useRequireAuth';
 import { useBookmarks } from './useBookmarks';
 import { storageService } from '@/services/storageService';
 import { queryClient } from '@/queryClient';
-import { formatDate } from '@/utils/formatters';
+import { sanitizeArticle, hasValidAuthor, logError } from '@/utils/errorHandler';
+// formatDate removed - using relative time formatting in CardMeta instead
 
 // ────────────────────────────────────────
 // STRICT TYPE CONTRACT (MANDATORY)
@@ -21,6 +22,7 @@ export interface NewsCardData {
   formattedDate: string;
   authorName: string;
   authorId: string;
+  authorAvatarUrl?: string; // Phase 3: Avatar support
   categories: string[];
   tags: string[];
   hasMedia: boolean;
@@ -44,18 +46,18 @@ export interface NewsCardFlags {
 }
 
 export interface NewsCardHandlers {
-  onLike: () => void;
-  onSave: () => void;
-  onShare: () => void;
-  onClick: () => void;
-  onMediaClick: (e: React.MouseEvent) => void;
+  onLike: (() => void) | undefined;
+  onSave: (() => void) | undefined;
+  onShare: (() => void) | undefined;
+  onClick: (() => void) | undefined;
+  onMediaClick: (e: React.MouseEvent, imageIndex?: number) => void;
   onCategoryClick: (category: string) => void;
   onTagClick?: (tag: string) => void;
   onDelete?: () => void;
   onEdit?: () => void;
   onReport?: () => void;
   onAddToCollection?: () => void;
-  onAuthorClick: (authorId: string) => void;
+  onAuthorClick: ((authorId: string) => void) | undefined;
   onToggleMenu: (e: React.MouseEvent) => void;
   onToggleTagPopover: (e: React.MouseEvent) => void;
   onReadMore: () => void;
@@ -74,6 +76,7 @@ interface UseNewsCardProps {
   onCategoryClick?: (category: string) => void;
   onTagClick?: (tag: string) => void;
   onClick?: (article: Article) => void;
+  isPreview?: boolean;
 }
 
 export const useNewsCard = ({
@@ -83,10 +86,11 @@ export const useNewsCard = ({
   onCategoryClick,
   onTagClick,
   onClick,
+  isPreview = false,
 }: UseNewsCardProps) => {
   const navigate = useNavigate();
   const toast = useToast();
-  const { isAdmin } = useAuth();
+  const { isAdmin = false } = useAuth(); // Phase 3: Default to false to ensure boolean type
   const { withAuth } = useRequireAuth();
   const { isBookmarked, toggleBookmark } = useBookmarks();
 
@@ -99,6 +103,7 @@ export const useNewsCard = ({
   const [showTagPopover, setShowTagPopover] = useState(false);
   const [showFullModal, setShowFullModal] = useState(false);
   const [showLightbox, setShowLightbox] = useState(false);
+  const [lightboxInitialIndex, setLightboxInitialIndex] = useState(0);
   const [collectionMode, setCollectionMode] = useState<'public' | 'private'>('public');
   const [collectionAnchor, setCollectionAnchor] = useState<DOMRect | null>(null);
 
@@ -127,25 +132,80 @@ export const useNewsCard = ({
   // ────────────────────────────────────────
   // COMPUTED VALUES / DERIVED DATA
   // ────────────────────────────────────────
+  // Sanitize article data to ensure all required fields exist
+  const sanitizedArticle = sanitizeArticle(article);
+  if (!sanitizedArticle) {
+    logError('useNewsCard', new Error('Invalid article data'), { article });
+    throw new Error('Invalid article: article is null or undefined');
+  }
+  
+  // Ensure author exists
+  if (!hasValidAuthor(sanitizedArticle)) {
+    logError('useNewsCard', new Error('Article missing author data'), { article: sanitizedArticle });
+    // Create fallback author
+    sanitizedArticle.author = {
+      id: sanitizedArticle.author?.id || '',
+      name: sanitizedArticle.author?.name || 'Unknown',
+      avatar_url: sanitizedArticle.author?.avatar_url,
+    };
+  }
+  
+  // Use sanitized article for all operations
+  article = sanitizedArticle;
+
   const isOwner = currentUserId === article.author.id;
   const hasMedia = !!article.media || (article.images && article.images.length > 0) || !!article.video;
   const isLink = article.source_type === 'link';
   const isNoteOrIdea = article.source_type === 'note' || article.source_type === 'idea';
   const isTextNugget = !hasMedia && !isLink;
-  const showContributor = article.addedBy && article.addedBy.userId !== article.author.id;
-  const shouldShowTitle = article.title && !isNoteOrIdea;
+  const showContributor = !!(article.addedBy && article.addedBy.userId !== article.author.id); // Phase 3: Ensure boolean type
+
+  // ────────────────────────────────────────
+  // TITLE RESOLUTION (Priority: User title > Metadata title > None)
+  // ────────────────────────────────────────
+  /**
+   * Resolves card title using priority order:
+   * 1. User-provided title (article.title) - always wins if present and non-empty
+   * 2. Metadata title (OG/video/document title from previewMetadata)
+   * 3. Empty string (no title)
+   * 
+   * This enables automatic title display for rich-link media (YouTube, articles, Google Drive)
+   * when metadata is available, without overwriting user-entered titles.
+   * 
+   * Note: Empty strings are treated as "no user title" to allow metadata fallback.
+   */
+  const resolveCardTitle = (): string => {
+    // Priority 1: User-provided title (always wins if present and non-empty)
+    const userTitle = article.title?.trim();
+    if (userTitle) {
+      return userTitle;
+    }
+    
+    // Priority 2: Metadata title (from OG tags, video metadata, document metadata)
+    const metadataTitle = article.media?.previewMetadata?.title?.trim();
+    if (metadataTitle) {
+      return metadataTitle;
+    }
+    
+    // Priority 3: No title
+    return '';
+  };
+
+  const resolvedTitle = resolveCardTitle();
+  const shouldShowTitle = !!resolvedTitle && !isNoteOrIdea;
 
   // ────────────────────────────────────────
   // DATA (formatted/derived)
   // ────────────────────────────────────────
   const data: NewsCardData = {
     id: article.id,
-    title: article.title || '',
+    title: resolvedTitle,
     excerpt: article.excerpt || article.content || '',
     content: article.content || '',
-    formattedDate: formatDate(article.publishedAt, false),
+    formattedDate: article.publishedAt, // Phase 3: Pass raw ISO string for relative time formatting
     authorName: article.author.name,
     authorId: article.author.id,
+    authorAvatarUrl: article.author.avatar_url, // Phase 3: Include avatar URL
     categories: article.categories || [],
     tags: article.tags || [],
     hasMedia,
@@ -218,20 +278,31 @@ export const useNewsCard = ({
   };
 
   const handleClick = () => {
+    // Clicking on title/body opens article detail drawer
+    setShowFullModal(true);
     if (onClick) {
       onClick(article);
     }
   };
 
-  const handleMediaClick = (e: React.MouseEvent) => {
+  const handleMediaClick = (e: React.MouseEvent, imageIndex?: number) => {
     e?.stopPropagation();
+    
+    // If clicking on media element, go to embedded URL or open lightbox
     const linkUrl = article.media?.previewMetadata?.url || article.media?.url;
     if (article.source_type === 'link' && linkUrl) {
+      // Open URL in new tab
       window.open(linkUrl, '_blank', 'noopener,noreferrer');
     } else {
+      // Open images in lightbox with article detail on the right
       if (article.media?.type === 'image' || (article.images && article.images.length > 0)) {
+        // Store image index for initial display if provided
+        if (imageIndex !== undefined) {
+          setLightboxInitialIndex(imageIndex);
+        }
         setShowLightbox(true);
       } else {
+        // For other media types, open full modal
         setShowFullModal(true);
       }
     }
@@ -288,25 +359,44 @@ export const useNewsCard = ({
     setShowTagPopover(!showTagPopover);
   };
 
-  const handlers: NewsCardHandlers = {
-    onLike: () => {
-      // TODO: Implement like functionality
-    },
-    onSave: withAuth(handleSave, 'guestBookmarks'),
-    onShare: handleShare,
-    onClick: handleClick,
-    onMediaClick: handleMediaClick,
-    onCategoryClick: handleCategoryClick,
-    onTagClick: onTagClick ? handleTagClick : undefined,
-    onDelete: (isOwner || isAdmin) ? handleDelete : undefined,
-    onEdit: (isOwner || isAdmin) ? handleEdit : undefined,
-    onReport: withAuth(handleReport, 'guestReports'),
-    onAddToCollection: withAuth(handleAddToCollection),
-    onAuthorClick: handleAuthorClick,
-    onToggleMenu: handleToggleMenu,
-    onToggleTagPopover: handleToggleTagPopover,
-    onReadMore: () => setShowFullModal(true),
-  };
+  // When in preview mode, disable all mutation handlers to prevent API calls
+  const handlers: NewsCardHandlers = isPreview
+    ? {
+        onLike: undefined,
+        onSave: undefined,
+        onShare: undefined,
+        onClick: undefined,
+        onMediaClick: (e: React.MouseEvent) => handleMediaClick(e), // Allow media click for preview (opens URL)
+        onCategoryClick: handleCategoryClick, // Allow category click (no-op in preview)
+        onTagClick: onTagClick ? handleTagClick : undefined,
+        onDelete: undefined,
+        onEdit: undefined,
+        onReport: undefined,
+        onAddToCollection: undefined,
+        onAuthorClick: undefined,
+        onToggleMenu: handleToggleMenu, // Allow menu toggle (UI only)
+        onToggleTagPopover: handleToggleTagPopover, // Allow tag popover (UI only)
+        onReadMore: () => setShowFullModal(true), // Allow read more (modal only)
+      }
+    : {
+        onLike: () => {
+          // TODO: Implement like functionality
+        },
+        onSave: withAuth(handleSave, 'guestBookmarks'),
+        onShare: handleShare,
+        onClick: handleClick,
+        onMediaClick: handleMediaClick,
+        onCategoryClick: handleCategoryClick,
+        onTagClick: onTagClick ? handleTagClick : undefined,
+        onDelete: (isOwner || isAdmin) ? handleDelete : undefined,
+        onEdit: (isOwner || isAdmin) ? handleEdit : undefined,
+        onReport: withAuth(handleReport, 'guestReports'),
+        onAddToCollection: withAuth(handleAddToCollection),
+        onAuthorClick: handleAuthorClick,
+        onToggleMenu: handleToggleMenu,
+        onToggleTagPopover: handleToggleTagPopover,
+        onReadMore: () => setShowFullModal(true),
+      };
 
   return {
     logic: {
@@ -320,12 +410,14 @@ export const useNewsCard = ({
       showReport,
       showFullModal,
       showLightbox,
+      lightboxInitialIndex,
       showMenu,
       showTagPopover,
       setShowCollection,
       setShowReport,
       setShowFullModal,
       setShowLightbox,
+      setLightboxInitialIndex,
       collectionMode,
       setCollectionMode,
       collectionAnchor,
@@ -344,3 +436,4 @@ export const useNewsCard = ({
 
 // Helper type for hook return (extends strict interface)
 export type UseNewsCardReturn = ReturnType<typeof useNewsCard>;
+

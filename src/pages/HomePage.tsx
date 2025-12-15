@@ -45,21 +45,41 @@ export const HomePage: React.FC<HomePageProps> = ({
   const [featuredCollections, setFeaturedCollections] = useState<Collection[]>([]);
 
   useEffect(() => {
+    let isMounted = true;
+    
     const loadSidebarData = async () => {
-        const cats = await storageService.getCategories();
-        const cols = await storageService.getCollections();
-        
-        setAllCategories(cats);
-        
-        // Sort by nugget count (descending) and take top 10
-        const sortedCols = cols
-            .filter(c => c.type === 'public')
-            .sort((a, b) => b.entries.length - a.entries.length)
-            .slice(0, 10);
+        try {
+            const cats = await storageService.getCategories();
+            const cols = await storageService.getCollections();
             
-        setFeaturedCollections(sortedCols);
+            // Only update state if component is still mounted
+            if (!isMounted) return;
+            
+            setAllCategories(cats);
+            
+            // Sort by nugget count (descending) and take top 10
+            const sortedCols = cols
+                .filter(c => c.type === 'public')
+                .sort((a, b) => b.entries.length - a.entries.length)
+                .slice(0, 10);
+                
+            setFeaturedCollections(sortedCols);
+        } catch (error: any) {
+            // Ignore cancellation errors - they're expected when component unmounts or new requests start
+            if (error.message === 'Request cancelled') {
+                return;
+            }
+            // Log other errors for debugging but don't show to user (sidebar data is non-critical)
+            console.warn('Failed to load sidebar data:', error);
+        }
     };
+    
     loadSidebarData();
+    
+    // Cleanup: mark component as unmounted
+    return () => {
+        isMounted = false;
+    };
   }, []);
 
   const { articles = [], query } = useArticles({
@@ -68,7 +88,7 @@ export const HomePage: React.FC<HomePageProps> = ({
     selectedTag,
     sortOrder,
     userId: currentUserId,
-    limit: 6
+    limit: 25 // Increased from 6 to show more nuggets on homepage
   });
 
   const handleRefreshFeed = async () => {
@@ -224,7 +244,7 @@ export const HomePage: React.FC<HomePageProps> = ({
             <div className="max-w-[1800px] mx-auto px-4 sm:px-6 lg:px-8 py-6">
                 <ArticleGrid 
                     articles={articles}
-                    viewMode={viewMode === 'utility' ? 'grid' : viewMode}
+                    viewMode={viewMode}
                     isLoading={query.isLoading}
                     onArticleClick={setSelectedArticle}
                     isBookmarked={isBookmarked}

@@ -67,7 +67,14 @@ export const MySpacePage: React.FC<MySpacePageProps> = ({ currentUserId }) => {
   const isOwner = currentUserId === targetUserId;
 
   useEffect(() => {
-    loadData();
+    const isMounted = { current: true };
+    
+    loadData(isMounted);
+    
+    // Cleanup on unmount
+    return () => {
+      isMounted.current = false;
+    };
   }, [targetUserId, bookmarks]);
 
   // Clear selection when tab changes
@@ -88,8 +95,9 @@ export const MySpacePage: React.FC<MySpacePageProps> = ({ currentUserId }) => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [isActionMenuOpen]);
 
-  const loadData = async () => {
+  const loadData = async (isMounted: { current: boolean } = { current: true }) => {
     setLoading(true);
+    
     try {
       const [user, userArticles, allCollections, allArticles] = await Promise.all([
         storageService.getUserById(targetUserId),
@@ -98,26 +106,50 @@ export const MySpacePage: React.FC<MySpacePageProps> = ({ currentUserId }) => {
         storageService.getAllArticles()
       ]);
 
+      // Only update state if component is still mounted
+      if (!isMounted.current) return;
+
+      // Defensive checks: ensure arrays are always arrays
+      const safeUserArticles = Array.isArray(userArticles) ? userArticles : [];
+      const safeAllCollections = Array.isArray(allCollections) ? allCollections : [];
+      const safeAllArticles = Array.isArray(allArticles) ? allArticles : [];
+
       setProfileUser(user || null);
-      setArticles(userArticles);
-      setCollections(allCollections.filter(c => c.creatorId === targetUserId));
+      setArticles(safeUserArticles);
+      setCollections(safeAllCollections.filter(c => c.creatorId === targetUserId));
       
-      const userBookmarks = allArticles.filter(a => bookmarks.includes(a.id));
+      const userBookmarks = safeAllArticles.filter(a => bookmarks.includes(a.id));
       setBookmarkedArticles(userBookmarks);
 
-    } catch (e) {
+    } catch (e: any) {
+      // Ignore cancellation errors - they're expected when component unmounts or new requests start
+      if (e?.message === 'Request cancelled') {
+        return;
+      }
       console.error("Failed to load profile data", e);
+      // On error, ensure arrays are set to empty arrays to prevent filter crashes
+      if (isMounted.current) {
+        setArticles([]);
+        setCollections([]);
+        setBookmarkedArticles([]);
+      }
     } finally {
-      setLoading(false);
+      if (isMounted.current) {
+        setLoading(false);
+      }
     }
   };
 
-  const publicNuggets = articles.filter(a => a.visibility === 'public' || !a.visibility);
-  const privateNuggets = articles.filter(a => a.visibility === 'private');
+  // Defensive checks: ensure arrays before calling filter
+  const safeArticles = Array.isArray(articles) ? articles : [];
+  const safeCollections = Array.isArray(collections) ? collections : [];
+  
+  const publicNuggets = safeArticles.filter(a => a.visibility === 'public' || !a.visibility);
+  const privateNuggets = safeArticles.filter(a => a.visibility === 'private');
   
   // SEGREGATION LOGIC
-  const publicCollections = collections.filter(c => c.type === 'public');
-  const privateFolders = collections.filter(c => c.type === 'private');
+  const publicCollections = safeCollections.filter(c => c.type === 'public');
+  const privateFolders = safeCollections.filter(c => c.type === 'private');
 
   // Hierarchy: Top Level Tabs
   const tabs: { id: string; label: string; count?: number }[] = [
