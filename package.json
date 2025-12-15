@@ -10,12 +10,15 @@
     "build": "vite build",
     "preview": "vite preview",
     "promote-admin": "tsx server/src/utils/promoteToAdmin.ts",
-    "list-users": "tsx server/src/utils/listUsers.ts"
+    "list-users": "tsx server/src/utils/listUsers.ts",
+    "audit": "node scripts/audit-code.js",
+    "lint": "eslint src --ext .ts,.tsx",
+    "lint:fix": "eslint src --ext .ts,.tsx --fix"
   },
   "dependencies": {
     "@google/genai": "^1.32.0",
     "@tanstack/react-query": "^5.90.12",
-    "@vitejs/plugin-react": "^5.1.2",
+    "@tanstack/react-virtual": "^3.13.13",
     "bcryptjs": "^3.0.3",
     "compression": "^1.8.1",
     "cors": "^2.8.5",
@@ -47,6 +50,8 @@
     "@types/jsonwebtoken": "^9.0.10",
     "@types/morgan": "^1.9.9",
     "@types/node": "^22.14.0",
+    "@types/react": "^19.2.7",
+    "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.0.0",
     "autoprefixer": "^10.4.20",
     "concurrently": "^8.2.2",
