@@ -1,16 +1,22 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { BatchRow, ImportMode } from '@/types/batch';
 import { batchService } from '@/services/batchService';
-import { BatchPreviewTable } from '@/components/batch/BatchPreviewTable';
+import { BatchPreviewCard } from '@/components/batch/BatchPreviewCard';
 import { FileSpreadsheet, FileText, Link as LinkIcon, Download, ChevronRight, Loader2, CheckCircle2, ArrowLeft } from 'lucide-react';
 import { useToast } from '@/hooks/useToast';
+import { queryClient } from '@/queryClient';
+
+// Helper for small delays
+const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 export const BulkCreateNuggetsPage: React.FC = () => {
-  const { currentUserId } = useAuth();
+  const { currentUserId, currentUser } = useAuth();
   const navigate = useNavigate();
   const toast = useToast();
+  const isMountedRef = useRef(true);
+  const authorName = currentUser?.name || 'User';
 
   // --- State ---
   const [activeTab, setActiveTab] = useState<ImportMode>('links');
@@ -19,64 +25,219 @@ export const BulkCreateNuggetsPage: React.FC = () => {
   
   const [linkInput, setLinkInput] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
+  const [batchProgress, setBatchProgress] = useState<{ current: number; total: number } | null>(null);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   // --- Handlers ---
 
   const handleLinksParse = async () => {
     if (!linkInput.trim()) return;
+    if (!currentUserId) {
+      toast.error("You must be logged in to batch upload");
+      return;
+    }
+    
     setIsProcessing(true);
     try {
       const parsed = await batchService.parseLinks(linkInput);
-      const withMeta = await batchService.fetchMetadataForRows(parsed);
+      if (!isMountedRef.current) return;
+      
+      // Fetch metadata with real unfurl service
+      const { rows: withMeta, errors } = await batchService.fetchMetadataForRows(parsed, currentUserId, authorName);
+      if (!isMountedRef.current) return;
+      
       setRows(withMeta);
       setStep('review');
-    } catch (e) {
-      toast.error("Failed to parse links");
+      
+      // Show aggregated error feedback if any
+      if (errors.length > 0 && isMountedRef.current) {
+        const errorCount = errors.length;
+        const totalCount = withMeta.length;
+        if (errorCount === totalCount) {
+          toast.error(`Failed to fetch metadata for all ${errorCount} URLs. Using fallback data.`);
+        } else {
+          toast.warning(`${errorCount} of ${totalCount} URLs failed to fetch metadata. Using fallback data.`);
+        }
+      }
+    } catch (e: any) {
+      // Ignore cancellation errors
+      if (e?.message === 'Request cancelled') {
+        return;
+      }
+      if (isMountedRef.current) {
+        // Show specific error message if available
+        toast.error(e?.message || "Failed to parse links");
+      }
     } finally {
-      setIsProcessing(false);
+      if (isMountedRef.current) {
+        setIsProcessing(false);
+      }
     }
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: 'csv' | 'excel') => {
     const file = e.target.files?.[0];
     if (!file) return;
+    
+    if (!currentUserId) {
+      toast.error("You must be logged in to batch upload");
+      return;
+    }
 
     setIsProcessing(true);
     try {
       const parsed = type === 'csv' 
         ? await batchService.parseCSV(file) 
         : await batchService.parseExcel(file);
+      
+      if (!isMountedRef.current) return;
         
       // If titles are missing, try to fetch meta
       const needsMeta = parsed.some(r => !r.title);
-      const finalRows = needsMeta ? await batchService.fetchMetadataForRows(parsed) : parsed;
+      if (needsMeta) {
+        const { rows: finalRows, errors } = await batchService.fetchMetadataForRows(parsed, currentUserId, authorName);
+        if (!isMountedRef.current) return;
+        
+        setRows(finalRows);
+        
+        // Show aggregated error feedback if any
+        if (errors.length > 0 && isMountedRef.current) {
+          const errorCount = errors.length;
+          const totalCount = finalRows.length;
+          if (errorCount === totalCount) {
+            toast.error(`Failed to fetch metadata for all ${errorCount} URLs. Using fallback data.`);
+          } else {
+            toast.warning(`${errorCount} of ${totalCount} URLs failed to fetch metadata. Using fallback data.`);
+          }
+        }
+      } else {
+        setRows(parsed);
+      }
       
-      setRows(finalRows);
+      if (!isMountedRef.current) return;
       setStep('review');
-    } catch (e) {
-      console.error(e);
-      toast.error(`Failed to parse ${type.toUpperCase()} file`);
+    } catch (e: any) {
+      // Ignore cancellation errors
+      if (e?.message === 'Request cancelled') {
+        return;
+      }
+      if (isMountedRef.current) {
+        console.error(e);
+        // Show specific error message if available
+        toast.error(e?.message || `Failed to parse ${type.toUpperCase()} file`);
+      }
     } finally {
-      setIsProcessing(false);
-      // Reset input
-      e.target.value = '';
+      if (isMountedRef.current) {
+        setIsProcessing(false);
+        // Reset input
+        e.target.value = '';
+      }
     }
   };
 
   const handleImport = async () => {
+    if (!currentUserId) {
+      toast.error("You must be logged in to import nuggets");
+      return;
+    }
+    
+    const selectedRows = rows.filter(r => r.selected && r.status === 'ready');
+    if (selectedRows.length === 0) {
+      toast.error("No items selected for import");
+      return;
+    }
+    
+    // Log for debugging
+    console.log(`Starting batch creation: ${selectedRows.length} rows selected out of ${rows.length} total`);
+    console.log('Selected rows:', selectedRows.map(r => ({ url: r.url, status: r.status, selected: r.selected })));
+    
     setIsProcessing(true);
+    setBatchProgress({ current: 0, total: selectedRows.length });
+    
     try {
-      const result = await batchService.createBatch(rows, currentUserId);
-      setRows(result);
+      const result = await batchService.createBatch(rows, currentUserId, authorName, (current, total) => {
+        if (isMountedRef.current) {
+          setBatchProgress({ current, total });
+        }
+      });
+      
+      if (!isMountedRef.current) return;
       
       const successCount = result.filter(r => r.status === 'success').length;
-      if (successCount > 0) {
-        toast.success(`Successfully created ${successCount} nuggets!`);
+      const errorCount = result.filter(r => r.status === 'error').length;
+      const skippedCount = result.filter(r => r.selected && r.status !== 'success' && r.status !== 'error').length;
+      
+      // Log results for debugging
+      console.log(`Batch creation complete: ${successCount} success, ${errorCount} errors, ${skippedCount} skipped`);
+      console.log('Successfully created articles:', result.filter(r => r.status === 'success').map(r => ({ url: r.url, title: r.title })));
+      if (skippedCount > 0) {
+        console.warn('Skipped rows:', result.filter(r => r.selected && r.status !== 'success' && r.status !== 'error'));
       }
-    } catch (e) {
-      toast.error("Batch creation failed");
+      
+      // Clear preview data to free memory
+      const cleanedRows = result.map(row => ({
+        ...row,
+        previewArticle: undefined, // Clear preview data after submission
+      }));
+      setRows(cleanedRows);
+      
+      if (isMountedRef.current) {
+        if (successCount > 0) {
+          let message = `Successfully created ${successCount} nugget${successCount > 1 ? 's' : ''}`;
+          if (errorCount > 0) {
+            message += `. ${errorCount} failed.`;
+            toast.warning(message);
+          } else if (skippedCount > 0) {
+            message += `. ${skippedCount} skipped (not ready).`;
+            toast.warning(message);
+          } else {
+            toast.success(message + '!');
+          }
+          // Invalidate and refetch articles query to refresh feed
+          // Add a small delay to ensure backend has processed all creations
+          await delay(500);
+          
+          // Force refetch all article queries (including inactive ones)
+          // This ensures the homepage shows all newly created articles
+          await queryClient.invalidateQueries({ 
+            queryKey: ['articles'],
+            refetchType: 'all' // Refetch all queries, not just active ones
+          });
+          
+          // Explicitly refetch active queries to ensure immediate update
+          await queryClient.refetchQueries({ 
+            queryKey: ['articles'],
+            type: 'active'
+          });
+        } else {
+          const message = errorCount > 0 
+            ? `Failed to create nuggets. ${errorCount} error${errorCount > 1 ? 's' : ''}.`
+            : skippedCount > 0
+            ? `No nuggets created. ${skippedCount} row${skippedCount > 1 ? 's' : ''} not ready for import.`
+            : 'Failed to create nuggets.';
+          toast.error(message);
+        }
+      }
+    } catch (e: any) {
+      // Ignore cancellation errors
+      if (e?.message === 'Request cancelled') {
+        return;
+      }
+      if (isMountedRef.current) {
+        toast.error(e?.message || "Batch creation failed");
+      }
     } finally {
-      setIsProcessing(false);
+      if (isMountedRef.current) {
+        setIsProcessing(false);
+        setBatchProgress(null);
+      }
     }
   };
 
@@ -103,7 +264,23 @@ export const BulkCreateNuggetsPage: React.FC = () => {
       {/* Header */}
       <div className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6">
-          <button onClick={() => navigate('/myspace')} className="flex items-center gap-2 text-sm text-slate-500 hover:text-slate-900 dark:hover:text-white mb-4 transition-colors">
+          <button 
+            onClick={() => {
+              // Prevent navigation if processing
+              if (isProcessing) {
+                toast.error("Please wait for current operation to complete");
+                return;
+              }
+              // Navigate back safely
+              if (currentUserId) {
+                navigate(`/profile/${currentUserId}`);
+              } else {
+                navigate('/');
+              }
+            }} 
+            className="flex items-center gap-2 text-sm text-slate-500 hover:text-slate-900 dark:hover:text-white mb-4 transition-colors"
+            disabled={isProcessing}
+          >
             <ArrowLeft size={16} /> Back to My Space
           </button>
           <div className="flex items-center justify-between">
@@ -118,14 +295,21 @@ export const BulkCreateNuggetsPage: React.FC = () => {
                    <div className="text-sm font-medium text-slate-500">
                       {rows.filter(r => r.selected).length} items selected
                    </div>
-                   <button 
-                      onClick={handleImport}
-                      disabled={isProcessing || rows.filter(r => r.selected && r.status !== 'success').length === 0}
-                      className="px-6 py-2 bg-primary-500 text-slate-900 rounded-xl font-bold text-sm hover:bg-primary-400 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 shadow-sm transition-all"
-                   >
-                      {isProcessing ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle2 size={16} />}
-                      Import Selected
-                   </button>
+                   <div className="flex items-center gap-3">
+                     {batchProgress && (
+                       <div className="text-xs text-slate-500 dark:text-slate-400">
+                         {batchProgress.current} / {batchProgress.total}
+                       </div>
+                     )}
+                     <button 
+                        onClick={handleImport}
+                        disabled={isProcessing || rows.filter(r => r.selected && r.status !== 'success').length === 0}
+                        className="px-6 py-2 bg-primary-500 text-slate-900 rounded-xl font-bold text-sm hover:bg-primary-400 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 shadow-sm transition-all"
+                     >
+                        {isProcessing ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle2 size={16} />}
+                        Import Selected
+                     </button>
+                   </div>
                 </div>
             )}
           </div>
@@ -225,22 +409,56 @@ export const BulkCreateNuggetsPage: React.FC = () => {
         {step === 'review' && (
           <div className="space-y-4">
              <div className="flex items-center justify-between">
-                <h2 className="text-lg font-bold text-slate-900 dark:text-white">Review & Edit ({rows.length} items)</h2>
-                <button onClick={() => { setRows([]); setStep('input'); }} className="text-sm font-bold text-red-500 hover:text-red-600">Discard All</button>
+                <h2 className="text-lg font-bold text-slate-900 dark:text-white">
+                  Review & Edit ({rows.length} items)
+                </h2>
+                <button 
+                  onClick={() => { setRows([]); setStep('input'); }} 
+                  className="text-sm font-bold text-red-500 hover:text-red-600"
+                >
+                  Discard All
+                </button>
              </div>
              
-             <BatchPreviewTable 
-                rows={rows}
-                onUpdateRow={(id, updates) => setRows(prev => prev.map(r => r.id === id ? { ...r, ...updates } : r))}
-                onRemoveRow={(id) => setRows(prev => prev.filter(r => r.id !== id))}
-                onRetryRow={async (id) => {
-                   const row = rows.find(r => r.id === id);
-                   if (!row) return;
-                   // Simple retry logic: just refetch meta
-                   const [updated] = await batchService.fetchMetadataForRows([{ ...row, status: 'pending', errorMessage: undefined }]);
-                   setRows(prev => prev.map(r => r.id === id ? updated : r));
-                }}
-             />
+             {/* Card Grid Preview */}
+             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+               {rows.map((row) => (
+                 <BatchPreviewCard
+                   key={row.id}
+                   row={row}
+                   onRemove={(id) => setRows(prev => prev.filter(r => r.id !== id))}
+                   onRetry={async (id) => {
+                     const row = rows.find(r => r.id === id);
+                     if (!row || !isMountedRef.current || !currentUserId) return;
+                     try {
+                       // Retry metadata fetch
+                       const { rows: updatedRows } = await batchService.fetchMetadataForRows(
+                         [{ ...row, status: 'pending' as const, errorMessage: undefined }],
+                         currentUserId,
+                         authorName
+                       );
+                       if (isMountedRef.current && updatedRows.length > 0) {
+                         setRows(prev => prev.map(r => r.id === id ? updatedRows[0] : r));
+                         toast.success('Metadata refreshed');
+                       }
+                     } catch (e: any) {
+                       // Ignore cancellation errors
+                       if (e?.message !== 'Request cancelled' && isMountedRef.current) {
+                         console.error('Retry failed:', e);
+                         toast.error(e?.message || 'Failed to retry metadata fetch');
+                       }
+                     }
+                   }}
+                   onUpdate={(id, updates) => setRows(prev => prev.map(r => r.id === id ? { ...r, ...updates } : r))}
+                 />
+               ))}
+             </div>
+             
+             {rows.length === 0 && (
+               <div className="text-center py-12 text-slate-500 dark:text-slate-400">
+                 No items to review. Add URLs to get started.
+               </div>
+             )}
           </div>
         )}
 
