@@ -6,10 +6,20 @@ import { Article } from '@/types';
 class AdminNuggetsService {
   async listNuggets(filter?: 'all' | 'flagged' | 'hidden'): Promise<AdminNugget[]> {
     // Fetch articles and reports in parallel for better performance
-    const [articles, reports] = await Promise.all([
-      apiClient.get<Article[]>('/articles'),
-      apiClient.get<RawReport[]>('/moderation/reports')
+    const [articlesResponse, reportsResponse] = await Promise.all([
+      apiClient.get<{ data: Article[] } | Article[]>('/articles'),
+      apiClient.get<{ data: RawReport[] } | RawReport[]>('/moderation/reports')
     ]);
+    
+    // Handle paginated response format { data: [...], total, ... } or direct array
+    const articles = Array.isArray(articlesResponse) ? articlesResponse : (articlesResponse.data || []);
+    const reports = Array.isArray(reportsResponse) ? reportsResponse : (reportsResponse.data || []);
+    
+    // Ensure arrays
+    if (!Array.isArray(articles) || !Array.isArray(reports)) {
+      console.error('Expected arrays but got:', { articles: typeof articles, reports: typeof reports });
+      return [];
+    }
     
     // Filter by visibility (only show public in admin list)
     let filtered = articles.filter(a => a.visibility === 'public');
@@ -42,7 +52,14 @@ class AdminNuggetsService {
     const article = await apiClient.get<Article>(`/articles/${id}`);
     
     // Get reports for this article
-    const reports = await apiClient.get<RawReport[]>('/moderation/reports');
+    const reportsResponse = await apiClient.get<{ data: RawReport[] } | RawReport[]>('/moderation/reports');
+    const reports = Array.isArray(reportsResponse) ? reportsResponse : (reportsResponse.data || []);
+    
+    if (!Array.isArray(reports)) {
+      console.error('Expected reports array but got:', typeof reports);
+      return mapArticleToAdminNugget(article, 0);
+    }
+    
     const reportsCount = reports.filter(r => r.targetId === id && r.targetType === 'nugget').length;
     
     return mapArticleToAdminNugget(article, reportsCount);
@@ -50,10 +67,20 @@ class AdminNuggetsService {
 
   async getStats(): Promise<{ total: number; flagged: number; createdToday: number; public: number; private: number }> {
     // Fetch articles and reports in parallel for better performance
-    const [articles, reports] = await Promise.all([
-      apiClient.get<Article[]>('/articles', undefined, 'adminNuggetsService.getStats.articles'),
-      apiClient.get<RawReport[]>('/moderation/reports', undefined, 'adminNuggetsService.getStats.reports')
+    const [articlesResponse, reportsResponse] = await Promise.all([
+      apiClient.get<{ data: Article[] } | Article[]>('/articles', undefined, 'adminNuggetsService.getStats.articles'),
+      apiClient.get<{ data: RawReport[] } | RawReport[]>('/moderation/reports', undefined, 'adminNuggetsService.getStats.reports')
     ]);
+    
+    // Handle paginated response format { data: [...], total, ... } or direct array
+    const articles = Array.isArray(articlesResponse) ? articlesResponse : (articlesResponse.data || []);
+    const reports = Array.isArray(reportsResponse) ? reportsResponse : (reportsResponse.data || []);
+    
+    // Ensure arrays
+    if (!Array.isArray(articles) || !Array.isArray(reports)) {
+      console.error('Expected arrays but got:', { articles: typeof articles, reports: typeof reports });
+      return { total: 0, flagged: 0, createdToday: 0, public: 0, private: 0 };
+    }
     
     const todayStr = new Date().toDateString();
     const flaggedArticleIds = new Set(

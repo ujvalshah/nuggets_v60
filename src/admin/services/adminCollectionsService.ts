@@ -6,7 +6,15 @@ import { Collection } from '@/types';
 class AdminCollectionsService {
   async listCollections(query?: string): Promise<AdminCollection[]> {
     const endpoint = query ? `/collections?q=${encodeURIComponent(query)}` : '/collections';
-    const collections = await apiClient.get<Collection[]>(endpoint, undefined, 'adminCollectionsService.listCollections');
+    const response = await apiClient.get<Collection[]>(endpoint, undefined, 'adminCollectionsService.listCollections');
+    
+    // Collections endpoint returns array directly (not paginated)
+    const collections = Array.isArray(response) ? response : [];
+    
+    if (!Array.isArray(collections)) {
+      console.error('Expected collections array but got:', typeof collections);
+      return [];
+    }
     
     return collections.map(mapCollectionToAdminCollection);
   }
@@ -18,7 +26,16 @@ class AdminCollectionsService {
   }
 
   async getStats(): Promise<{ totalCommunity: number; totalNuggetsInCommunity: number }> {
-    const collections = await apiClient.get<Collection[]>('/collections', undefined, 'adminCollectionsService.getStats');
+    const response = await apiClient.get<Collection[]>('/collections', undefined, 'adminCollectionsService.getStats');
+    
+    // Collections endpoint returns array directly (not paginated)
+    const collections = Array.isArray(response) ? response : [];
+    
+    if (!Array.isArray(collections)) {
+      console.error('Expected collections array but got:', typeof collections);
+      return { totalCommunity: 0, totalNuggetsInCommunity: 0 };
+    }
+    
     const publicCols = collections.filter(c => c.type === 'public');
     
     return {

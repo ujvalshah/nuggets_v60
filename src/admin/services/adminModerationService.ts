@@ -6,14 +6,23 @@ class AdminModerationService {
   async listReports(filter?: 'open' | 'resolved' | 'dismissed'): Promise<AdminReport[]> {
     // Build query params
     const params = new URLSearchParams();
-    if (filter && filter !== 'all') {
+    if (filter) {
       params.append('status', filter);
     }
     
     const queryString = params.toString();
     const endpoint = `/moderation/reports${queryString ? `?${queryString}` : ''}`;
     
-    const reports = await apiClient.get<RawReport[]>(endpoint, undefined, 'adminModerationService.listReports');
+    const response = await apiClient.get<{ data: RawReport[] } | RawReport[]>(endpoint, undefined, 'adminModerationService.listReports');
+    
+    // Handle paginated response format { data: [...], total, ... } or direct array
+    const reports = Array.isArray(response) ? response : (response.data || []);
+    
+    if (!Array.isArray(reports)) {
+      console.error('Expected reports array but got:', typeof reports);
+      return [];
+    }
+    
     return reports.map(mapReportToAdminReport);
   }
 

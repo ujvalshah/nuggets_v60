@@ -6,7 +6,15 @@ class AdminTagsService {
   async listTags(query?: string): Promise<AdminTag[]> {
     // Get all tags (without format=simple to get full objects)
     const endpoint = query ? `/categories?q=${encodeURIComponent(query)}` : '/categories';
-    const tags = await apiClient.get<RawTag[]>(endpoint, undefined, 'adminTagsService.listTags');
+    const response = await apiClient.get<RawTag[]>(endpoint, undefined, 'adminTagsService.listTags');
+    
+    // Tags endpoint returns array directly
+    const tags = Array.isArray(response) ? response : [];
+    
+    if (!Array.isArray(tags)) {
+      console.error('Expected tags array but got:', typeof tags);
+      return [];
+    }
     
     // Filter out pending
     const filtered = tags.filter(t => t.status !== 'pending');
@@ -16,7 +24,14 @@ class AdminTagsService {
 
   async listRequests(): Promise<AdminTagRequest[]> {
     // Get all tags and filter for pending
-    const tags = await apiClient.get<any[]>('/categories');
+    const response = await apiClient.get<any[]>('/categories');
+    const tags = Array.isArray(response) ? response : [];
+    
+    if (!Array.isArray(tags)) {
+      console.error('Expected tags array but got:', typeof tags);
+      return [];
+    }
+    
     const pending = tags.filter(t => t.status === 'pending');
     
     return pending.map(tag => ({
@@ -32,7 +47,14 @@ class AdminTagsService {
   }
 
   async getStats(): Promise<{ total: number; totalTags: number; pending: number; categories: number }> {
-    const tags = await apiClient.get<RawTag[]>('/categories', undefined, 'adminTagsService.getStats');
+    const response = await apiClient.get<RawTag[]>('/categories', undefined, 'adminTagsService.getStats');
+    const tags = Array.isArray(response) ? response : [];
+    
+    if (!Array.isArray(tags)) {
+      console.error('Expected tags array but got:', typeof tags);
+      return { total: 0, totalTags: 0, pending: 0, categories: 0 };
+    }
+    
     return {
       total: tags.length,
       totalTags: tags.filter(t => t.status !== 'pending').length,
@@ -43,7 +65,13 @@ class AdminTagsService {
 
   async toggleOfficialStatus(id: string): Promise<void> {
     // Get current tag
-    const tags = await apiClient.get<any[]>('/categories');
+    const response = await apiClient.get<any[]>('/categories');
+    const tags = Array.isArray(response) ? response : [];
+    
+    if (!Array.isArray(tags)) {
+      throw new Error('Failed to fetch tags');
+    }
+    
     const tag = tags.find(t => t.id === id);
     if (!tag) throw new Error('Tag not found');
     
@@ -66,7 +94,13 @@ class AdminTagsService {
 
   async deleteTag(id: string): Promise<void> {
     // Get tag name first
-    const tags = await apiClient.get<any[]>('/categories');
+    const response = await apiClient.get<any[]>('/categories');
+    const tags = Array.isArray(response) ? response : [];
+    
+    if (!Array.isArray(tags)) {
+      throw new Error('Failed to fetch tags');
+    }
+    
     const tag = tags.find(t => t.id === id);
     if (!tag) throw new Error('Tag not found');
     
@@ -75,7 +109,13 @@ class AdminTagsService {
 
   async approveRequest(id: string): Promise<void> {
     // Get tag and update status
-    const tags = await apiClient.get<any[]>('/categories');
+    const response = await apiClient.get<any[]>('/categories');
+    const tags = Array.isArray(response) ? response : [];
+    
+    if (!Array.isArray(tags)) {
+      throw new Error('Failed to fetch tags');
+    }
+    
     const tag = tags.find(t => t.id === id);
     if (!tag) throw new Error('Tag not found');
     

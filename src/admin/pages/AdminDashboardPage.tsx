@@ -80,7 +80,19 @@ export const AdminDashboardPage: React.FC = () => {
         }
       } catch (error: any) {
         if (error.message !== 'Request cancelled' && !isCancelled) {
-          setErrorMessage("Could not load dashboard metrics. Please retry.");
+          // Show more specific error messages
+          let errorMsg = "Could not load dashboard metrics. Please retry.";
+          
+          if (error.message?.includes('connect to the server')) {
+            errorMsg = "Backend server is not running. Please start the server on port 5000.";
+          } else if (error.message?.includes('session has expired')) {
+            errorMsg = "Your session has expired. Please sign in again.";
+          } else if (error.message) {
+            errorMsg = `Error: ${error.message}`;
+          }
+          
+          console.error('Dashboard load error:', error);
+          setErrorMessage(errorMsg);
         }
       }
     };

@@ -34,7 +34,6 @@ export const AdminUsersPage: React.FC = () => {
     'user', 'fullName', 'role', 'status', 'nuggets', 'joinedDate', 'joinedTime', 'lastLoginDate', 'actions'
   ]);
   const [showColumnMenu, setShowColumnMenu] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   // Actions State
   const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null);

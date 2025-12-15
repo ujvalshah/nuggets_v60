@@ -20,7 +20,16 @@ class AdminFeedbackService {
     const params = new URLSearchParams();
     params.append('status', filter);
     
-    const feedback = await apiClient.get<RawFeedback[]>(`/feedback?${params.toString()}`, undefined, 'adminFeedbackService.listFeedback');
+    const response = await apiClient.get<{ data: RawFeedback[] } | RawFeedback[]>(`/feedback?${params.toString()}`, undefined, 'adminFeedbackService.listFeedback');
+    
+    // Handle paginated response format { data: [...], total, ... } or direct array
+    const feedback = Array.isArray(response) ? response : (response.data || []);
+    
+    if (!Array.isArray(feedback)) {
+      console.error('Expected feedback array but got:', typeof feedback);
+      return [];
+    }
+    
     return feedback.map(mapFeedbackToAdminFeedback);
   }
 
@@ -30,7 +39,16 @@ class AdminFeedbackService {
 
   async getStats(): Promise<{ total: number }> {
     // Get all feedback to compute total
-    const allFeedback = await apiClient.get<RawFeedback[]>('/feedback', undefined, 'adminFeedbackService.getStats');
+    const response = await apiClient.get<{ data: RawFeedback[] } | RawFeedback[]>('/feedback', undefined, 'adminFeedbackService.getStats');
+    
+    // Handle paginated response format { data: [...], total, ... } or direct array
+    const allFeedback = Array.isArray(response) ? response : (response.data || []);
+    
+    if (!Array.isArray(allFeedback)) {
+      console.error('Expected feedback array but got:', typeof allFeedback);
+      return { total: 0 };
+    }
+    
     return {
       total: allFeedback.length
     };
