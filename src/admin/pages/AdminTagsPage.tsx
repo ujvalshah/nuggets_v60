@@ -10,6 +10,7 @@ import { useToast } from '@/hooks/useToast';
 import { AdminDrawer } from '../components/AdminDrawer';
 import { ConfirmActionModal } from '@/components/settings/ConfirmActionModal';
 import { useAdminHeader } from '../layout/AdminLayout';
+import { useSearchParams } from 'react-router-dom';
 
 // --- Merge Modal Component ---
 const MergeModal: React.FC<{ isOpen: boolean; onClose: () => void; onConfirm: (name: string) => void; count: number }> = ({ isOpen, onClose, onConfirm, count }) => {
@@ -88,6 +89,7 @@ export const AdminTagsPage: React.FC = () => {
   const [tags, setTags] = useState<AdminTag[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [stats, setStats] = useState({ totalTags: 0, pending: 0, categories: 0 });
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   
   // Table State
   const [searchQuery, setSearchQuery] = useState('');
@@ -102,8 +104,10 @@ export const AdminTagsPage: React.FC = () => {
   const [isMergeOpen, setIsMergeOpen] = useState(false);
   const [renameTarget, setRenameTarget] = useState<AdminTag | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<{ tag: AdminTag; timeoutId: number } | null>(null);
 
   const toast = useToast();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const openCreate = () => {
       setTagNameInput('');
@@ -120,6 +124,20 @@ export const AdminTagsPage: React.FC = () => {
     );
   }, []);
 
+  // Initialize filters from URL
+  useEffect(() => {
+    const q = searchParams.get('q');
+    if (q) setSearchQuery(q);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Sync filters to URL
+  useEffect(() => {
+    const params: Record<string, string> = {};
+    if (searchQuery) params.q = searchQuery;
+    setSearchParams(params, { replace: true });
+  }, [searchQuery, setSearchParams]);
+
   const loadData = async () => {
     setIsLoading(true);
     try {
@@ -129,8 +147,11 @@ export const AdminTagsPage: React.FC = () => {
       ]);
       setTags(data);
       setStats(statsData);
-    } catch (e) {
-      toast.error("Failed to load tags");
+      setErrorMessage(null);
+    } catch (e: any) {
+      if (e.message !== 'Request cancelled') {
+        setErrorMessage("Could not load tags. Please retry.");
+      }
     } finally {
       setIsLoading(false);
     }
@@ -193,14 +214,22 @@ export const AdminTagsPage: React.FC = () => {
 
   const handleDelete = async () => {
       if (!deleteId) return;
-      try {
-          await adminTagsService.deleteTag(deleteId);
-          setTags(prev => prev.filter(t => t.id !== deleteId));
-          toast.success("Tag deleted");
-          setDeleteId(null);
-      } catch (e) {
-          toast.error("Delete failed");
-      }
+      const tag = tags.find(t => t.id === deleteId);
+      if (!tag) return;
+      setTags(prev => prev.filter(t => t.id !== deleteId));
+      setDeleteId(null);
+      const timeoutId = window.setTimeout(async () => {
+          try {
+              await adminTagsService.deleteTag(deleteId);
+              setPendingDelete(null);
+              toast.success("Tag deleted");
+          } catch (e) {
+              setTags(prev => [...prev, tag]);
+              setPendingDelete(null);
+              toast.error("Delete failed. Changes reverted.");
+          }
+      }, 5000);
+      setPendingDelete({ tag, timeoutId });
   };
 
   const handleBulkDelete = async () => {
@@ -354,7 +383,37 @@ export const AdminTagsPage: React.FC = () => {
   ) : null;
 
   return (
-    <div>
+    <div className="space-y-4">
+      {pendingDelete && (
+        <div className="flex items-center justify-between rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <span>Deleted “{pendingDelete.tag.name}”. Undo?</span>
+          <div className="flex gap-2 items-center">
+            <button
+              onClick={() => {
+                clearTimeout(pendingDelete.timeoutId);
+                setTags(prev => [pendingDelete.tag, ...prev]);
+                setPendingDelete(null);
+              }}
+              className="px-3 py-1 rounded-md bg-amber-100 text-amber-900 font-semibold hover:bg-amber-200 transition-colors"
+            >
+              Undo
+            </button>
+            <span className="text-[10px] text-slate-500">5s</span>
+          </div>
+        </div>
+      )}
+      {errorMessage && (
+        <div className="flex items-center justify-between rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <span>{errorMessage}</span>
+          <button
+            onClick={loadData}
+            className="px-3 py-1 rounded-md bg-amber-100 text-amber-900 font-semibold hover:bg-amber-200 transition-colors"
+          >
+            Retry
+          </button>
+        </div>
+      )}
+
       <AdminSummaryBar 
         items={[
             { label: 'Total Tags', value: stats.totalTags, icon: <Hash size={18} /> },
@@ -370,6 +429,7 @@ export const AdminTagsPage: React.FC = () => {
         isLoading={isLoading} 
         placeholder="Search tags..."
         actions={BulkActions}
+        virtualized
         
         sortKey={sortKey}
         sortDirection={sortDirection}

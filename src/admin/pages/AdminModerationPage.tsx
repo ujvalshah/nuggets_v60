@@ -10,18 +10,21 @@ import { AdminDrawer } from '../components/AdminDrawer';
 import { ConfirmActionModal } from '@/components/settings/ConfirmActionModal';
 import { formatDate } from '@/utils/formatters';
 import { useAdminHeader } from '../layout/AdminLayout';
+import { useSearchParams } from 'react-router-dom';
 
 export const AdminModerationPage: React.FC = () => {
   const { setPageHeader } = useAdminHeader();
   const [reports, setReports] = useState<AdminReport[]>([]);
   const [stats, setStats] = useState({ open: 0, resolved: 0, dismissed: 0 });
   const [isLoading, setIsLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [selectedReport, setSelectedReport] = useState<AdminReport | null>(null);
   const [filter, setFilter] = useState<'open' | 'resolved' | 'dismissed'>('open');
   const [dateFilter, setDateFilter] = useState('');
   const [resolveTarget, setResolveTarget] = useState<{ id: string; status: 'resolved' | 'dismissed' } | null>(null);
   
   const toast = useToast();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   useEffect(() => {
     setPageHeader(
@@ -41,6 +44,25 @@ export const AdminModerationPage: React.FC = () => {
     );
   }, [filter]);
 
+  // Initialize filters from URL
+  useEffect(() => {
+    const statusParam = searchParams.get('status');
+    const date = searchParams.get('date');
+    if (statusParam === 'open' || statusParam === 'resolved' || statusParam === 'dismissed') {
+      setFilter(statusParam);
+    }
+    if (date) setDateFilter(date);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Sync filters to URL
+  useEffect(() => {
+    const params: Record<string, string> = {};
+    if (filter) params.status = filter;
+    if (dateFilter) params.date = dateFilter;
+    setSearchParams(params, { replace: true });
+  }, [filter, dateFilter, setSearchParams]);
+
   const loadData = async () => {
     setIsLoading(true);
     try {
@@ -57,8 +79,11 @@ export const AdminModerationPage: React.FC = () => {
 
       setReports(filteredReports);
       setStats(statsData);
-    } catch (e) {
-      toast.error("Failed to load reports");
+      setErrorMessage(null);
+    } catch (e: any) {
+      if (e.message !== 'Request cancelled') {
+        setErrorMessage("Could not load reports. Please retry.");
+      }
     } finally {
       setIsLoading(false);
     }
@@ -70,15 +95,19 @@ export const AdminModerationPage: React.FC = () => {
 
   const executeResolution = async () => {
     if (!resolveTarget) return;
+    // Optimistic remove
+    const prevReports = reports;
+    setReports(prev => prev.filter(r => r.id !== resolveTarget.id));
     try {
       await adminModerationService.resolveReport(resolveTarget.id, resolveTarget.status);
-      setReports(prev => prev.filter(r => r.id !== resolveTarget.id));
       toast.success(resolveTarget.status === 'resolved' ? "Report Resolved" : "Report Dismissed");
       setResolveTarget(null);
       setSelectedReport(null);
       if (filter !== 'open') loadData(); 
     } catch (e) {
-      toast.error("Action failed");
+      // rollback on failure
+      setReports(prevReports);
+      toast.error("Action failed. Changes reverted.");
     }
   };
 
@@ -151,13 +180,26 @@ export const AdminModerationPage: React.FC = () => {
   ];
 
   return (
-    <div>
+    <div className="space-y-4">
+      {errorMessage && (
+        <div className="flex items-center justify-between rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <span>{errorMessage}</span>
+          <button
+            onClick={loadData}
+            className="px-3 py-1 rounded-md bg-amber-100 text-amber-900 font-semibold hover:bg-amber-200 transition-colors"
+          >
+            Retry
+          </button>
+        </div>
+      )}
+
       <AdminSummaryBar items={[{label:'Open', value: stats.open}, {label: 'Resolved', value: stats.resolved}]} isLoading={isLoading} />
       
       <AdminTable 
         columns={columns} 
         data={reports} 
         isLoading={isLoading} 
+        virtualized
         placeholder="Search reports..."
         filters={
             <input 

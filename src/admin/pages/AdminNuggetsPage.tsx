@@ -10,12 +10,14 @@ import { useAdminPermissions } from '../hooks/useAdminPermissions';
 import { AdminDrawer } from '../components/AdminDrawer';
 import { ConfirmActionModal } from '@/components/settings/ConfirmActionModal';
 import { useAdminHeader } from '../layout/AdminLayout';
+import { useSearchParams } from 'react-router-dom';
 
 export const AdminNuggetsPage: React.FC = () => {
   const { setPageHeader } = useAdminHeader();
   const [nuggets, setNuggets] = useState<AdminNugget[]>([]);
   const [stats, setStats] = useState({ total: 0, flagged: 0, createdToday: 0, public: 0, private: 0 });
   const [isLoading, setIsLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   
   // Filters
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'hidden' | 'flagged'>('all');
@@ -36,6 +38,7 @@ export const AdminNuggetsPage: React.FC = () => {
   // Actions
   const [selectedNugget, setSelectedNugget] = useState<AdminNugget | null>(null);
   const [itemToDelete, setItemToDelete] = useState<AdminNugget | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<{ nugget: AdminNugget; timeoutId: number } | null>(null);
   const [editMode, setEditMode] = useState(false);
   
   // Edit Form State
@@ -45,10 +48,31 @@ export const AdminNuggetsPage: React.FC = () => {
 
   const toast = useToast();
   const { can } = useAdminPermissions();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   useEffect(() => {
     setPageHeader("Content Management", "Review, moderate, and manage nuggets.");
   }, []);
+
+  // Initialize filters from URL
+  useEffect(() => {
+    const q = searchParams.get('q');
+    const status = searchParams.get('status');
+    const date = searchParams.get('date');
+    if (q) setSearchQuery(q);
+    if (status === 'active' || status === 'hidden' || status === 'flagged') setStatusFilter(status);
+    if (date) setDateFilter(date);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Sync filters to URL
+  useEffect(() => {
+    const params: Record<string, string> = {};
+    if (searchQuery) params.q = searchQuery;
+    if (statusFilter !== 'all') params.status = statusFilter;
+    if (dateFilter) params.date = dateFilter;
+    setSearchParams(params, { replace: true });
+  }, [searchQuery, statusFilter, dateFilter, setSearchParams]);
 
   const loadData = async () => {
     setIsLoading(true);
@@ -59,8 +83,11 @@ export const AdminNuggetsPage: React.FC = () => {
       ]);
       setNuggets(nuggetsData);
       setStats(statsData);
-    } catch (e) {
-      toast.error("Failed to load nuggets");
+      setErrorMessage(null);
+    } catch (e: any) {
+      if (e.message !== 'Request cancelled') {
+        setErrorMessage("Could not load nuggets. Please retry.");
+      }
     } finally {
       setIsLoading(false);
     }
@@ -154,16 +181,25 @@ export const AdminNuggetsPage: React.FC = () => {
 
   const handleDelete = async () => {
     if (!itemToDelete) return;
-    try {
-      await adminNuggetsService.deleteNugget(itemToDelete.id);
-      setNuggets(prev => prev.filter(n => n.id !== itemToDelete.id));
-      const newStats = await adminNuggetsService.getStats();
-      setStats(newStats);
-      toast.success("Nugget deleted");
-      setItemToDelete(null);
-    } catch (e) {
-      toast.error("Delete failed");
-    }
+    const nugget = itemToDelete;
+    // Optimistic remove; commit after 5s unless undone
+    setNuggets(prev => prev.filter(n => n.id !== nugget.id));
+    setItemToDelete(null);
+    const timeoutId = window.setTimeout(async () => {
+      try {
+        await adminNuggetsService.deleteNugget(nugget.id);
+        const newStats = await adminNuggetsService.getStats();
+        setStats(newStats);
+        setPendingDelete(null);
+        toast.success("Nugget deleted");
+      } catch (e) {
+        // rollback on failure
+        setNuggets(prev => [...prev, nugget]);
+        setPendingDelete(null);
+        toast.error("Delete failed. Changes reverted.");
+      }
+    }, 5000);
+    setPendingDelete({ nugget, timeoutId });
   };
 
   const handleBulkAction = (action: string) => {
@@ -333,7 +369,8 @@ export const AdminNuggetsPage: React.FC = () => {
       <div className="relative">
         <button 
             onClick={() => setShowColumnMenu(!showColumnMenu)}
-            className="px-3 py-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-[10px] font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-50 transition-colors flex items-center gap-1.5"
+            aria-label="Toggle column visibility"
+            className="px-3 py-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-[10px] font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-50 transition-colors flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2"
         >
             <Layout size={12} /> Columns
         </button>
@@ -372,7 +409,37 @@ export const AdminNuggetsPage: React.FC = () => {
   ) : null;
 
   return (
-    <div>
+    <div className="space-y-4">
+      {pendingDelete && (
+        <div className="flex items-center justify-between rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <span>Deleted “{pendingDelete.nugget.title}”. Undo?</span>
+          <div className="flex gap-2 items-center">
+            <button
+              onClick={() => {
+                clearTimeout(pendingDelete.timeoutId);
+                setNuggets(prev => [pendingDelete.nugget, ...prev]);
+                setPendingDelete(null);
+              }}
+              className="px-3 py-1 rounded-md bg-amber-100 text-amber-900 font-semibold hover:bg-amber-200 transition-colors"
+            >
+              Undo
+            </button>
+            <span className="text-[10px] text-slate-500">5s</span>
+          </div>
+        </div>
+      )}
+      {errorMessage && (
+        <div className="flex items-center justify-between rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <span>{errorMessage}</span>
+          <button
+            onClick={loadData}
+            className="px-3 py-1 rounded-md bg-amber-100 text-amber-900 font-semibold hover:bg-amber-200 transition-colors"
+          >
+            Retry
+          </button>
+        </div>
+      )}
+
       <AdminSummaryBar 
         items={[
           { label: 'Total Nuggets', value: stats.total, icon: <FileText size={18} /> },
@@ -390,6 +457,7 @@ export const AdminNuggetsPage: React.FC = () => {
         filters={Filters} 
         actions={BulkActions}
         onSearch={setSearchQuery} 
+        virtualized
         pagination={{ page: 1, totalPages: 1, onPageChange: () => {} }}
         
         sortKey={sortKey}

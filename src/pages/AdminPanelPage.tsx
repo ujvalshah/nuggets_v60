@@ -14,26 +14,29 @@ import { AdminFeedbackPage } from '../admin/pages/AdminFeedbackPage';
 import { AdminDownloadsPage } from '../admin/pages/AdminDownloadsPage';
 import { AdminLegalPages } from '../admin/pages/AdminLegalPages';
 import { RequireAdmin } from '../admin/components/RequireAdmin';
+import { ErrorBoundary } from '../components/UI/ErrorBoundary';
 
 export const AdminPanelPage: React.FC = () => {
   return (
     <RequireAdmin>
-      <Routes>
-        <Route element={<AdminLayout />}>
-          <Route index element={<AdminDashboardPage />} />
-          <Route path="dashboard" element={<Navigate to="/admin" replace />} />
-          <Route path="users" element={<AdminUsersPage />} />
-          <Route path="nuggets" element={<AdminNuggetsPage />} />
-          <Route path="collections" element={<AdminCollectionsPage />} />
-          <Route path="tags" element={<AdminTagsPage />} />
-          <Route path="moderation" element={<AdminModerationPage />} />
-          <Route path="activity" element={<AdminActivityLogPage />} />
-          <Route path="config" element={<AdminConfigPage />} />
-          <Route path="feedback" element={<AdminFeedbackPage />} />
-          <Route path="downloads" element={<AdminDownloadsPage />} />
-          <Route path="legal" element={<AdminLegalPages />} />
-        </Route>
-      </Routes>
+      <ErrorBoundary>
+        <Routes>
+          <Route element={<AdminLayout />}>
+            <Route index element={<AdminDashboardPage />} />
+            <Route path="dashboard" element={<Navigate to="/admin" replace />} />
+            <Route path="users" element={<AdminUsersPage />} />
+            <Route path="nuggets" element={<AdminNuggetsPage />} />
+            <Route path="collections" element={<AdminCollectionsPage />} />
+            <Route path="tags" element={<AdminTagsPage />} />
+            <Route path="moderation" element={<AdminModerationPage />} />
+            <Route path="activity" element={<AdminActivityLogPage />} />
+            <Route path="config" element={<AdminConfigPage />} />
+            <Route path="feedback" element={<AdminFeedbackPage />} />
+            <Route path="downloads" element={<AdminDownloadsPage />} />
+            <Route path="legal" element={<AdminLegalPages />} />
+          </Route>
+        </Routes>
+      </ErrorBoundary>
     </RequireAdmin>
   );
 };

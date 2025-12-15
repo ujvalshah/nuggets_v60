@@ -1,6 +1,7 @@
 
-import React from 'react';
+import React, { useMemo, useRef } from 'react';
 import { ChevronLeft, ChevronRight, Loader2, Search, ArrowUp, ArrowDown } from 'lucide-react';
+import { useVirtualizer } from '@tanstack/react-virtual';
 
 export interface Column<T> {
   key: string;
@@ -43,6 +44,13 @@ interface AdminTableProps<T> {
     onSelect: (ids: string[]) => void;
     enabled: boolean;
   };
+
+  // Custom empty state
+  emptyState?: React.ReactNode;
+
+  // Virtualization
+  virtualized?: boolean;
+  virtualHeight?: number; // px
 }
 
 export function AdminTable<T extends { id: string }>({ 
@@ -58,14 +66,26 @@ export function AdminTable<T extends { id: string }>({
   sortDirection,
   onSortChange,
   onRowClick,
-  selection
+  selection,
+  emptyState,
+  virtualized = false,
+  virtualHeight = 480
 }: AdminTableProps<T>) {
+
+  const tableBodyRef = useRef<HTMLTableSectionElement | null>(null);
 
   const handleHeaderClick = (col: Column<T>) => {
     if (!col.sortable || !onSortChange) return;
     const key = col.sortKey || col.key;
     const newDirection = (key === sortKey && sortDirection === 'desc') ? 'asc' : 'desc';
     onSortChange(key, newDirection);
+  };
+
+  const handleHeaderKey = (e: React.KeyboardEvent, col: Column<T>) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      handleHeaderClick(col);
+    }
   };
 
   const handleSelectAll = (checked: boolean) => {
@@ -86,6 +106,41 @@ export function AdminTable<T extends { id: string }>({
     }
   };
 
+  const renderSkeletonRows = () => {
+    const rows = Array.from({ length: 5 });
+    return rows.map((_, idx) => (
+      <tr key={`skeleton-${idx}`} className="border-b border-slate-50 dark:border-slate-800/50">
+        {selection?.enabled && (
+          <td className="px-4 py-3 w-10 sticky left-0 z-20 bg-white dark:bg-slate-900">
+            <div className="h-4 w-4 rounded bg-slate-200 dark:bg-slate-700 animate-pulse" />
+          </td>
+        )}
+        {columns.map((col, cIdx) => (
+          <td 
+            key={`skeleton-${idx}-${cIdx}`}
+            className={`
+              px-4 py-3 align-middle
+              ${col.align === 'center' ? 'text-center' : col.align === 'right' ? 'text-right' : 'text-left'}
+              ${col.hideOnMobile ? 'hidden md:table-cell' : ''}
+              ${getStickyClass(col, false)}
+            `}
+          >
+            <div className="h-4 rounded bg-slate-200 dark:bg-slate-700/70 animate-pulse w-3/4"></div>
+          </td>
+        ))}
+      </tr>
+    ));
+  };
+
+  const rowHeight = 56; // px estimate for virtualization
+
+  const virtual = useVirtualizer({
+    count: data.length,
+    getScrollElement: () => tableBodyRef.current,
+    estimateSize: () => rowHeight,
+    overscan: 5
+  });
+
   // Improved sticky classes with solid backgrounds to cover content when scrolling
   const getStickyClass = (col: Column<T>, isHeader: boolean) => {
     if (!col.sticky) return '';
@@ -96,6 +151,57 @@ export function AdminTable<T extends { id: string }>({
     if (col.sticky === 'left') return `sticky left-0 z-20 ${bgClass} shadow-[1px_0_5px_-2px_rgba(0,0,0,0.1)]`;
     if (col.sticky === 'right') return `sticky right-0 z-20 ${bgClass} shadow-[-1px_0_5px_-2px_rgba(0,0,0,0.1)]`;
     return '';
+  };
+
+  const renderRow = (row: T, index: number) => {
+    const isSelected = selection?.selectedIds.includes(row.id);
+    return (
+      <tr 
+        key={row.id} 
+        onClick={() => onRowClick?.(row)}
+        onKeyDown={(e) => {
+          if (!onRowClick) return;
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            onRowClick(row);
+          }
+        }}
+        tabIndex={onRowClick ? 0 : -1}
+        role="row"
+        className={`
+            group border-b border-slate-50 dark:border-slate-800/50 last:border-0 transition-colors
+            ${onRowClick ? 'cursor-pointer' : ''}
+            ${isSelected ? 'bg-primary-50/50 dark:bg-primary-900/10' : 'hover:bg-slate-50/80 dark:hover:bg-slate-800/40'}
+            focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2
+        `}
+      >
+        {selection?.enabled && (
+          <td className={`px-4 py-3 w-10 sticky left-0 z-20 ${isSelected ? 'bg-primary-50/50 dark:bg-primary-900/10' : 'bg-white dark:bg-slate-900 group-hover:bg-slate-50/80 dark:group-hover:bg-slate-800/40'} shadow-[1px_0_5px_-2px_rgba(0,0,0,0.1)]`} onClick={e => e.stopPropagation()}>
+            <input 
+              type="checkbox" 
+              aria-label={`Select row ${row.id}`}
+              className="rounded border-slate-300 dark:border-slate-600 focus:ring-primary-500 focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 cursor-pointer"
+              checked={isSelected}
+              onChange={(e) => handleSelectRow(row.id, e.target.checked)}
+            />
+          </td>
+        )}
+
+        {columns.map((col, colIdx) => (
+          <td 
+            key={`${row.id}-${col.key || colIdx}`} 
+            className={`
+              px-4 py-3 align-middle text-sm whitespace-nowrap
+              ${col.align === 'center' ? 'text-center' : col.align === 'right' ? 'text-right' : 'text-left'}
+              ${col.hideOnMobile ? 'hidden md:table-cell' : ''}
+              ${getStickyClass(col, false)}
+            `}
+          >
+            {col.render ? col.render(row, index) : (row as any)[col.key]}
+          </td>
+        ))}
+      </tr>
+    );
   };
   
   return (
@@ -109,6 +215,7 @@ export function AdminTable<T extends { id: string }>({
                 <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
                 <input 
                   type="text" 
+                  aria-label="Search table"
                   placeholder={placeholder}
                   onChange={(e) => onSearch(e.target.value)}
                   className="pl-8 pr-3 py-1.5 text-xs font-medium bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 w-full md:w-48 lg:w-64 transition-all"
@@ -142,7 +249,8 @@ export function AdminTable<T extends { id: string }>({
                   <th className="px-4 py-3 w-10 sticky left-0 z-20 bg-slate-50 dark:bg-slate-800">
                     <input 
                       type="checkbox" 
-                      className="rounded border-slate-300 dark:border-slate-600 focus:ring-primary-500 cursor-pointer"
+                      aria-label="Select all rows"
+                      className="rounded border-slate-300 dark:border-slate-600 focus:ring-primary-500 focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 cursor-pointer"
                       checked={data.length > 0 && selection.selectedIds.length === data.length}
                       onChange={(e) => handleSelectAll(e.target.checked)}
                     />
@@ -153,7 +261,17 @@ export function AdminTable<T extends { id: string }>({
                   <th 
                     key={col.key || idx} 
                     onClick={() => handleHeaderClick(col)}
+                    onKeyDown={(e) => handleHeaderKey(e, col)}
                     style={{ minWidth: col.minWidth }}
+                    tabIndex={col.sortable ? 0 : undefined}
+                    role={col.sortable ? 'button' : undefined}
+                    aria-sort={
+                      col.sortable
+                        ? sortKey === (col.sortKey || col.key)
+                          ? sortDirection === 'asc' ? 'ascending' : 'descending'
+                          : 'none'
+                        : undefined
+                    }
                     className={`
                       px-4 py-3 text-[13px] font-bold text-slate-600 dark:text-slate-300 select-none whitespace-nowrap
                       ${col.width || ''} 
@@ -161,6 +279,7 @@ export function AdminTable<T extends { id: string }>({
                       ${col.hideOnMobile ? 'hidden md:table-cell' : ''}
                       ${col.sortable ? 'cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700/50 transition-colors group' : ''}
                       ${getStickyClass(col, true)}
+                      ${col.sortable ? 'focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2' : ''}
                     `}
                   >
                     <div className={`flex items-center gap-1.5 ${col.align === 'right' ? 'justify-end' : col.align === 'center' ? 'justify-center' : 'justify-start'}`}>
@@ -179,59 +298,62 @@ export function AdminTable<T extends { id: string }>({
                 ))}
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {data.length === 0 && !isLoading ? (
-                <tr>
-                  <td colSpan={columns.length + (selection?.enabled ? 1 : 0)} className="px-6 py-12 text-center">
-                    <div className="flex flex-col items-center justify-center text-slate-400">
-                      <p className="text-sm font-medium">No records found</p>
-                      <p className="text-xs">Try adjusting filters</p>
+            {virtualized && !isLoading && data.length > 0 ? (
+              <tbody
+                ref={tableBodyRef}
+                style={{ display: 'block', position: 'relative', height: virtualHeight, overflowY: 'auto' }}
+                className="divide-y divide-slate-100 dark:divide-slate-800"
+              >
+                <tr style={{ height: virtual.getTotalSize(), position: 'relative' }}>
+                  <td style={{ padding: 0, margin: 0, border: 0 }} colSpan={columns.length + (selection?.enabled ? 1 : 0)}>
+                    <div style={{ position: 'absolute', inset: 0 }}>
+                      {virtual.getVirtualItems().map((item) => {
+                        const row = data[item.index];
+                        return (
+                          <div
+                            key={row.id}
+                            style={{
+                              position: 'absolute',
+                              top: item.start,
+                              left: 0,
+                              width: '100%',
+                              height: item.size
+                            }}
+                          >
+                            {renderRow(row, item.index)}
+                          </div>
+                        );
+                      })}
                     </div>
                   </td>
                 </tr>
-              ) : (
-                data.map((row, index) => {
-                  const isSelected = selection?.selectedIds.includes(row.id);
-                  return (
-                    <tr 
-                      key={row.id} 
-                      onClick={() => onRowClick?.(row)}
-                      className={`
-                          group border-b border-slate-50 dark:border-slate-800/50 last:border-0 transition-colors
-                          ${onRowClick ? 'cursor-pointer' : ''}
-                          ${isSelected ? 'bg-primary-50/50 dark:bg-primary-900/10' : 'hover:bg-slate-50/80 dark:hover:bg-slate-800/40'}
-                      `}
-                    >
-                      {/* Selection Cell */}
-                      {selection?.enabled && (
-                        <td className={`px-4 py-3 w-10 sticky left-0 z-20 ${isSelected ? 'bg-primary-50/50 dark:bg-primary-900/10' : 'bg-white dark:bg-slate-900 group-hover:bg-slate-50/80 dark:group-hover:bg-slate-800/40'} shadow-[1px_0_5px_-2px_rgba(0,0,0,0.1)]`} onClick={e => e.stopPropagation()}>
-                          <input 
-                            type="checkbox" 
-                            className="rounded border-slate-300 dark:border-slate-600 focus:ring-primary-500 cursor-pointer"
-                            checked={isSelected}
-                            onChange={(e) => handleSelectRow(row.id, e.target.checked)}
-                          />
-                        </td>
-                      )}
-
-                      {columns.map((col, colIdx) => (
-                        <td 
-                          key={`${row.id}-${col.key || colIdx}`} 
-                          className={`
-                            px-4 py-3 align-middle text-sm whitespace-nowrap
-                            ${col.align === 'center' ? 'text-center' : col.align === 'right' ? 'text-right' : 'text-left'}
-                            ${col.hideOnMobile ? 'hidden md:table-cell' : ''}
-                            ${getStickyClass(col, false)}
-                          `}
-                        >
-                          {col.render ? col.render(row, index) : (row as any)[col.key]}
-                        </td>
-                      ))}
+              </tbody>
+            ) : (
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                {isLoading ? (
+                  renderSkeletonRows()
+                ) : data.length === 0 ? (
+                  emptyState ? (
+                    <tr>
+                      <td colSpan={columns.length + (selection?.enabled ? 1 : 0)} className="px-6 py-12 text-center">
+                        {emptyState}
+                      </td>
                     </tr>
-                  );
-                })
-              )}
-            </tbody>
+                  ) : (
+                    <tr>
+                      <td colSpan={columns.length + (selection?.enabled ? 1 : 0)} className="px-6 py-12 text-center">
+                        <div className="flex flex-col items-center justify-center text-slate-400">
+                          <p className="text-sm font-medium">No records found</p>
+                          <p className="text-xs">Try adjusting filters</p>
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                ) : (
+                  data.map((row, index) => renderRow(row, index))
+                )}
+              </tbody>
+            )}
           </table>
         </div>
 

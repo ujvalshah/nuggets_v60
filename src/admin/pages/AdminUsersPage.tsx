@@ -1,6 +1,6 @@
 
 import React, { useEffect, useState, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { AdminTable, Column } from '../components/AdminTable';
 import { AdminSummaryBar } from '../components/AdminSummaryBar';
 import { AdminUser, AdminRole, AdminUserStatus } from '../types/admin';
@@ -18,6 +18,7 @@ export const AdminUsersPage: React.FC = () => {
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [stats, setStats] = useState({ total: 0, active: 0, newToday: 0, admins: 0, bookmarks: 0 });
   const [isLoading, setIsLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   
   // Filtering & Sorting
   const [searchQuery, setSearchQuery] = useState('');
@@ -33,6 +34,7 @@ export const AdminUsersPage: React.FC = () => {
     'user', 'fullName', 'role', 'status', 'nuggets', 'joinedDate', 'joinedTime', 'lastLoginDate', 'actions'
   ]);
   const [showColumnMenu, setShowColumnMenu] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   // Actions State
   const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null);
@@ -43,11 +45,35 @@ export const AdminUsersPage: React.FC = () => {
 
   const toast = useToast();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { can } = useAdminPermissions();
 
   useEffect(() => {
     setPageHeader("User Management", "Overview of all registered users.");
   }, []);
+
+  // Initialize filters from URL
+  useEffect(() => {
+    const q = searchParams.get('q');
+    const role = searchParams.get('role');
+    const date = searchParams.get('date');
+    const inactive = searchParams.get('inactive');
+    if (q) setSearchQuery(q);
+    if (role === 'admin' || role === 'user') setRoleFilter(role);
+    if (date) setDateFilter(date);
+    if (inactive === '1') setShowInactiveOnly(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Sync filters to URL
+  useEffect(() => {
+    const params: Record<string, string> = {};
+    if (searchQuery) params.q = searchQuery;
+    if (roleFilter !== 'all') params.role = roleFilter;
+    if (dateFilter) params.date = dateFilter;
+    if (showInactiveOnly) params.inactive = '1';
+    setSearchParams(params, { replace: true });
+  }, [searchQuery, roleFilter, dateFilter, showInactiveOnly, setSearchParams]);
 
   const loadData = async () => {
     setIsLoading(true);
@@ -58,8 +84,12 @@ export const AdminUsersPage: React.FC = () => {
       ]);
       setUsers(usersData);
       setStats(statsData);
-    } catch (e) {
-      toast.error("Failed to load users");
+      setErrorMessage(null);
+    } catch (e: any) {
+      // Don't show error for cancelled requests
+      if (e.message !== 'Request cancelled') {
+        setErrorMessage("Could not load users. Please retry.");
+      }
     } finally {
       setIsLoading(false);
     }
@@ -154,13 +184,17 @@ export const AdminUsersPage: React.FC = () => {
 
   const handleRoleChange = async () => {
     if (!roleChangeCandidate) return;
+    // Optimistic update with rollback
+    const prevUsers = users;
+    setUsers(prev => prev.map(u => u.id === roleChangeCandidate.user.id ? { ...u, role: roleChangeCandidate.newRole } : u));
     try {
       await adminUsersService.updateUserRole(roleChangeCandidate.user.id, roleChangeCandidate.newRole);
-      setUsers(prev => prev.map(u => u.id === roleChangeCandidate.user.id ? { ...u, role: roleChangeCandidate.newRole } : u));
       toast.success(`Role updated to ${roleChangeCandidate.newRole}`);
       setRoleChangeCandidate(null);
     } catch (e) {
-      toast.error("Role update failed");
+      // rollback
+      setUsers(prevUsers);
+      toast.error("Role update failed. Changes reverted.");
     }
   };
 
@@ -398,7 +432,19 @@ export const AdminUsersPage: React.FC = () => {
   ) : null;
 
   return (
-    <div>
+    <div className="space-y-4">
+      {errorMessage && (
+        <div className="flex items-center justify-between rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <span>{errorMessage}</span>
+          <button
+            onClick={loadData}
+            className="px-3 py-1 rounded-md bg-amber-100 text-amber-900 font-semibold hover:bg-amber-200 transition-colors"
+          >
+            Retry
+          </button>
+        </div>
+      )}
+
       <AdminSummaryBar 
         items={[
           { label: 'Total Users', value: stats.total, icon: <Users size={18} /> },
@@ -413,9 +459,30 @@ export const AdminUsersPage: React.FC = () => {
         columns={activeColumns} 
         data={processedUsers} 
         isLoading={isLoading} 
+        emptyState={
+          <div className="flex flex-col items-center justify-center text-slate-500 space-y-2">
+            <p className="text-sm font-semibold">No users match the current filters.</p>
+            <p className="text-xs text-slate-400">Try clearing search or role filters.</p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => { setSearchQuery(''); setRoleFilter('all'); setDateFilter(''); setShowInactiveOnly(false); loadData(); }}
+                className="px-3 py-1 text-xs font-bold rounded-md bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
+              >
+                Clear filters
+              </button>
+              <button
+                onClick={loadData}
+                className="px-3 py-1 text-xs font-bold rounded-md bg-primary-50 text-primary-700 hover:bg-primary-100 transition-colors"
+              >
+                Retry
+              </button>
+            </div>
+          </div>
+        }
         filters={Filters}
         actions={BulkActions}
         onSearch={setSearchQuery}
+        virtualized
         pagination={{ page: 1, totalPages: 1, onPageChange: () => {} }}
         
         sortKey={sortKey}
@@ -557,7 +624,7 @@ export const AdminUsersPage: React.FC = () => {
         onClose={() => setStatusChangeCandidate(null)}
         onConfirm={handleStatusChange}
         title={statusChangeCandidate?.newStatus === 'active' ? "Reactivate User?" : "Suspend User?"}
-        description={statusChangeCandidate?.newStatus === 'active' ? `Reactivate access for ${statusChangeCandidate?.user.name}?` : `Are you sure you want to suspend ${statusChangeCandidate?.user.name}? They will lose access immediately.`}
+        description={statusChangeCandidate?.newStatus === 'active' ? `Reactivate access for ${statusChangeCandidate?.user?.name || 'this user'}?` : `Are you sure you want to suspend ${statusChangeCandidate?.user?.name || 'this user'}? They will lose access immediately.`}
         actionLabel={statusChangeCandidate?.newStatus === 'active' ? "Reactivate" : "Suspend"}
         isDestructive={statusChangeCandidate?.newStatus === 'suspended'}
       />
@@ -567,7 +634,7 @@ export const AdminUsersPage: React.FC = () => {
         onClose={() => setRoleChangeCandidate(null)}
         onConfirm={handleRoleChange}
         title="Change Account Type?"
-        description={`Are you sure you want to change ${roleChangeCandidate?.user.name}'s role to ${roleChangeCandidate?.newRole.toUpperCase()}? This will affect their access permissions immediately.`}
+        description={`Are you sure you want to change ${roleChangeCandidate?.user?.name || 'this user'}'s role to ${roleChangeCandidate?.newRole.toUpperCase()}? This will affect their access permissions immediately.`}
         actionLabel="Update Role"
       />
     </div>

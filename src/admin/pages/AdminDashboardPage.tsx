@@ -1,5 +1,5 @@
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Users, FileText, Layers, Flag, MessageSquare, Globe, Lock, Hash, Bookmark } from 'lucide-react';
 import { adminUsersService } from '../services/adminUsersService';
@@ -41,6 +41,7 @@ const MetricCard = ({ label, value, subValue, icon, onClick, colorClass }: any) 
 export const AdminDashboardPage: React.FC = () => {
   const navigate = useNavigate();
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const { setPageHeader } = useAdminHeader();
 
   useEffect(() => {
@@ -51,8 +52,11 @@ export const AdminDashboardPage: React.FC = () => {
     );
   }, []);
 
-  useEffect(() => {
-    const loadAll = async () => {
+  const loadAll = useCallback(() => {
+    let isCancelled = false;
+
+    const run = async () => {
+      try {
         const [users, nuggets, cols, tags, reports, feed] = await Promise.all([
             adminUsersService.getStats(),
             adminNuggetsService.getStats(),
@@ -62,20 +66,93 @@ export const AdminDashboardPage: React.FC = () => {
             adminFeedbackService.getStats()
         ]);
 
-        setMetrics({
-            users: { total: users.total },
-            nuggets: { total: nuggets.total, public: nuggets.public, private: nuggets.private },
-            collections: { community: cols.totalCommunity, nuggetsInCommunity: cols.totalNuggetsInCommunity },
-            tags: { total: tags.totalTags },
-            reports: { open: reports.open },
-            bookmarks: { total: users.bookmarks }, 
-            feedback: { total: feed.total }
-        });
+        if (!isCancelled) {
+          setMetrics({
+              users: { total: users.total },
+              nuggets: { total: nuggets.total, public: nuggets.public, private: nuggets.private },
+              collections: { community: cols.totalCommunity, nuggetsInCommunity: cols.totalNuggetsInCommunity },
+              tags: { total: tags.totalTags },
+              reports: { open: reports.open },
+              bookmarks: { total: users.bookmarks }, 
+              feedback: { total: feed.total }
+          });
+          setErrorMessage(null);
+        }
+      } catch (error: any) {
+        if (error.message !== 'Request cancelled' && !isCancelled) {
+          setErrorMessage("Could not load dashboard metrics. Please retry.");
+        }
+      }
     };
-    loadAll();
+
+    run();
+
+    return () => {
+      isCancelled = true;
+    };
   }, []);
 
-  if (!metrics) return <div className="p-8 text-center text-slate-400">Loading dashboard...</div>;
+  useEffect(() => {
+    const cancel = loadAll();
+    return () => cancel && cancel();
+  }, [loadAll]);
+
+  if (!metrics) return (
+    <div className="space-y-6">
+      {errorMessage && (
+        <div className="flex items-center justify-between rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <span>{errorMessage}</span>
+          <button
+            onClick={() => { setMetrics(null); loadAll(); }}
+            className="px-3 py-1 rounded-md bg-amber-100 text-amber-900 font-semibold hover:bg-amber-200 transition-colors"
+          >
+            Retry
+          </button>
+        </div>
+      )}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+        {Array.from({ length: 10 }).map((_, idx) => (
+          <div key={`metric-skel-${idx}`} className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+            <div className="flex justify-between items-start animate-pulse">
+              <div className="space-y-2">
+                <div className="h-3 w-16 bg-slate-200 dark:bg-slate-800 rounded"></div>
+                <div className="h-5 w-10 bg-slate-200 dark:bg-slate-800 rounded"></div>
+                <div className="h-3 w-20 bg-slate-200 dark:bg-slate-800 rounded"></div>
+              </div>
+              <div className="h-8 w-8 bg-slate-200 dark:bg-slate-800 rounded-lg"></div>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 animate-pulse">
+          <div className="flex items-center justify-between mb-4">
+            <div className="h-4 w-32 bg-slate-200 dark:bg-slate-800 rounded"></div>
+            <div className="h-5 w-20 bg-slate-200 dark:bg-slate-800 rounded-full"></div>
+          </div>
+          <div className="space-y-3">
+            {Array.from({ length: 3 }).map((_, idx) => (
+              <div key={`health-skel-${idx}`} className="flex justify-between">
+                <div className="h-3 w-24 bg-slate-200 dark:bg-slate-800 rounded"></div>
+                <div className="h-3 w-16 bg-slate-200 dark:bg-slate-800 rounded"></div>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 animate-pulse">
+          <div className="h-4 w-28 bg-slate-200 dark:bg-slate-800 rounded mb-4"></div>
+          <div className="grid grid-cols-2 gap-3">
+            {Array.from({ length: 4 }).map((_, idx) => (
+              <div key={`actions-skel-${idx}`} className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800">
+                <div className="h-3 w-16 bg-slate-200 dark:bg-slate-800 rounded mb-1"></div>
+                <div className="h-4 w-24 bg-slate-200 dark:bg-slate-800 rounded"></div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 
   return (
     <div>

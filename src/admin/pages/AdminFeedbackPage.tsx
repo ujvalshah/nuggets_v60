@@ -1,6 +1,6 @@
 
 import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { AdminTable, Column } from '../components/AdminTable';
 import { AdminFeedback } from '../types/admin';
 import { adminFeedbackService } from '@/admin/services/adminFeedbackService';
@@ -16,9 +16,11 @@ export const AdminFeedbackPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [filter, setFilter] = useState<'new' | 'read' | 'archived'>('new');
   const [dateFilter, setDateFilter] = useState('');
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   
   const toast = useToast();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   useEffect(() => {
     setPageHeader(
@@ -52,8 +54,11 @@ export const AdminFeedbackPage: React.FC = () => {
       }
 
       setFeedback(filtered);
-    } catch (e) {
-      toast.error("Failed to load feedback");
+      setErrorMessage(null);
+    } catch (e: any) {
+      if (e.message !== 'Request cancelled') {
+        setErrorMessage("Could not load feedback. Please retry.");
+      }
     } finally {
       setIsLoading(false);
     }
@@ -63,10 +68,36 @@ export const AdminFeedbackPage: React.FC = () => {
     loadData();
   }, [filter, dateFilter]);
 
+  // Initialize filters from URL
+  useEffect(() => {
+    const statusParam = searchParams.get('status');
+    const date = searchParams.get('date');
+    if (statusParam === 'new' || statusParam === 'read' || statusParam === 'archived') {
+      setFilter(statusParam);
+    }
+    if (date) setDateFilter(date);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Sync filters to URL
+  useEffect(() => {
+    const params: Record<string, string> = {};
+    if (filter) params.status = filter;
+    if (dateFilter) params.date = dateFilter;
+    setSearchParams(params, { replace: true });
+  }, [filter, dateFilter, setSearchParams]);
+
   const handleStatus = async (id: string, status: 'read' | 'archived') => {
-      await adminFeedbackService.updateStatus(id, status);
+      const prevFeedback = feedback;
       setFeedback(prev => prev.filter(f => f.id !== id));
-      toast.success("Updated");
+      try {
+        await adminFeedbackService.updateStatus(id, status);
+        toast.success("Updated");
+      } catch (e) {
+        // rollback on failure
+        setFeedback(prevFeedback);
+        toast.error("Update failed. Changes reverted.");
+      }
   };
 
   const columns: Column<AdminFeedback>[] = [
@@ -130,10 +161,24 @@ export const AdminFeedbackPage: React.FC = () => {
       render: (f) => (
           <div className="flex justify-end gap-2">
               {f.status === 'new' && (
-                  <button onClick={() => handleStatus(f.id, 'read')} className="p-1.5 text-green-600 hover:bg-green-50 rounded" title="Mark Read"><Check size={14} /></button>
+                <button 
+                  aria-label="Mark feedback as read"
+                  onClick={() => handleStatus(f.id, 'read')} 
+                  className="p-1.5 text-green-600 hover:bg-green-50 rounded focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2" 
+                  title="Mark Read"
+                >
+                  <Check size={14} />
+                </button>
               )}
               {f.status !== 'archived' && (
-                  <button onClick={() => handleStatus(f.id, 'archived')} className="p-1.5 text-slate-400 hover:bg-slate-100 rounded" title="Archive"><Archive size={14} /></button>
+                <button 
+                  aria-label="Archive feedback"
+                  onClick={() => handleStatus(f.id, 'archived')} 
+                  className="p-1.5 text-slate-400 hover:bg-slate-100 rounded focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2" 
+                  title="Archive"
+                >
+                  <Archive size={14} />
+                </button>
               )}
           </div>
       )
@@ -141,8 +186,19 @@ export const AdminFeedbackPage: React.FC = () => {
   ];
 
   return (
-    <div>
-      <AdminTable columns={columns} data={feedback} isLoading={isLoading} />
+    <div className="space-y-4">
+      {errorMessage && (
+        <div className="flex items-center justify-between rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <span>{errorMessage}</span>
+          <button
+            onClick={loadData}
+            className="px-3 py-1 rounded-md bg-amber-100 text-amber-900 font-semibold hover:bg-amber-200 transition-colors"
+          >
+            Retry
+          </button>
+        </div>
+      )}
+      <AdminTable columns={columns} data={feedback} isLoading={isLoading} virtualized />
     </div>
   );
 };
