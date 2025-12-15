@@ -1,37 +1,72 @@
-
 import { AdminReport } from '../types/admin';
-import { MOCK_REPORTS } from './mockData';
-
-const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+import { apiClient } from '@/services/apiClient';
+import { mapReportToAdminReport, RawReport } from './adminApiMappers';
 
 class AdminModerationService {
-  private reports = [...MOCK_REPORTS];
-
   async listReports(filter?: 'open' | 'resolved' | 'dismissed'): Promise<AdminReport[]> {
-    await delay(500);
-    if (filter) {
-      return this.reports.filter(r => r.status === filter);
+    // Build query params
+    const params = new URLSearchParams();
+    if (filter && filter !== 'all') {
+      params.append('status', filter);
     }
-    return this.reports.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    
+    const queryString = params.toString();
+    const endpoint = `/moderation/reports${queryString ? `?${queryString}` : ''}`;
+    
+    const reports = await apiClient.get<RawReport[]>(endpoint, undefined, 'adminModerationService.listReports');
+    return reports.map(mapReportToAdminReport);
   }
 
   async getReportDetails(id: string): Promise<AdminReport | undefined> {
-    await delay(200);
-    return this.reports.find(r => r.id === id);
+    // Backend doesn't have GET /moderation/reports/:id
+    // Get all reports and find by id
+    const reports = await this.listReports();
+    return reports.find(r => r.id === id);
   }
 
   async getStats(): Promise<{ open: number; resolved: number; dismissed: number }> {
-    await delay(200);
+    const reports = await this.listReports();
     return {
-      open: this.reports.filter(r => r.status === 'open').length,
-      resolved: this.reports.filter(r => r.status === 'resolved').length,
-      dismissed: this.reports.filter(r => r.status === 'dismissed').length,
+      open: reports.filter(r => r.status === 'open').length,
+      resolved: reports.filter(r => r.status === 'resolved').length,
+      dismissed: reports.filter(r => r.status === 'dismissed').length,
     };
   }
 
   async resolveReport(id: string, resolution: 'resolved' | 'dismissed'): Promise<void> {
-    await delay(400);
-    this.reports = this.reports.map(r => r.id === id ? { ...r, status: resolution } : r);
+    await apiClient.patch(`/moderation/reports/${id}/resolve`, { resolution });
+  }
+
+  async submitReport(
+    targetId: string,
+    targetType: 'nugget' | 'user' | 'collection',
+    reason: 'spam' | 'misleading' | 'abusive' | 'copyright' | 'other',
+    description?: string,
+    reporter?: { id: string; name: string },
+    respondent?: { id: string; name: string }
+  ): Promise<void> {
+    // Map frontend reason codes to backend reason codes
+    const reasonMap: Record<string, 'spam' | 'harassment' | 'misinformation' | 'copyright' | 'other'> = {
+      'spam': 'spam',
+      'misleading': 'misinformation',
+      'abusive': 'harassment',
+      'copyright': 'copyright',
+      'other': 'other'
+    };
+
+    const payload: any = {
+      targetId,
+      targetType,
+      reason: reasonMap[reason] || 'other',
+      description: description || undefined,
+      reporter: reporter || { id: 'anonymous', name: 'Anonymous' },
+    };
+
+    if (respondent) {
+      payload.respondent = respondent;
+    }
+
+    await apiClient.post('/moderation/reports', payload);
   }
 }
 

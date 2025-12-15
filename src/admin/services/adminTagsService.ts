@@ -1,113 +1,98 @@
-
 import { AdminTag, AdminTagRequest } from '../types/admin';
-import { MOCK_ADMIN_TAGS } from './mockData';
-
-const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+import { apiClient } from '@/services/apiClient';
+import { mapTagToAdminTag, RawTag } from './adminApiMappers';
 
 class AdminTagsService {
-  private tags = [...MOCK_ADMIN_TAGS];
-
   async listTags(query?: string): Promise<AdminTag[]> {
-    await delay(500);
-    let result = this.tags.filter(t => t.status !== 'pending');
+    // Get all tags (without format=simple to get full objects)
+    const endpoint = query ? `/categories?q=${encodeURIComponent(query)}` : '/categories';
+    const tags = await apiClient.get<RawTag[]>(endpoint, undefined, 'adminTagsService.listTags');
     
-    if (query) {
-      const q = query.toLowerCase();
-      result = result.filter(t => t.name.toLowerCase().includes(q));
-    }
+    // Filter out pending
+    const filtered = tags.filter(t => t.status !== 'pending');
     
-    return result.sort((a, b) => b.usageCount - a.usageCount);
+    return filtered.map(mapTagToAdminTag).sort((a, b) => b.usageCount - a.usageCount);
   }
 
   async listRequests(): Promise<AdminTagRequest[]> {
-    await delay(400);
-    return this.tags
-      .filter(t => t.status === 'pending')
-      .map(t => ({
-        id: t.id,
-        name: t.name,
-        requestedBy: {
-          id: 'u-unknown',
-          name: t.requestedBy || 'Unknown User'
-        },
-        requestedAt: new Date().toISOString(), // Mock date
-        status: 'pending'
-      }));
+    // Get all tags and filter for pending
+    const tags = await apiClient.get<any[]>('/categories');
+    const pending = tags.filter(t => t.status === 'pending');
+    
+    return pending.map(tag => ({
+      id: tag.id,
+      name: tag.name,
+      requestedBy: {
+        id: 'u-unknown', // Backend doesn't track requester
+        name: tag.requestedBy || 'Unknown User'
+      },
+      requestedAt: new Date().toISOString(), // Backend doesn't track request date
+      status: 'pending'
+    }));
   }
 
   async getStats(): Promise<{ total: number; totalTags: number; pending: number; categories: number }> {
-    await delay(200);
+    const tags = await apiClient.get<RawTag[]>('/categories', undefined, 'adminTagsService.getStats');
     return {
-      total: this.tags.length,
-      totalTags: this.tags.filter(t => t.status !== 'pending').length,
-      pending: this.tags.filter(t => t.status === 'pending').length,
-      categories: this.tags.filter(t => t.type === 'category' && t.status !== 'pending').length
+      total: tags.length,
+      totalTags: tags.filter(t => t.status !== 'pending').length,
+      pending: tags.filter(t => t.status === 'pending').length,
+      categories: tags.filter(t => t.type === 'category' && t.status !== 'pending').length
     };
   }
 
   async toggleOfficialStatus(id: string): Promise<void> {
-    await delay(300);
-    this.tags = this.tags.map(t => t.id === id ? { ...t, isOfficial: !t.isOfficial, type: !t.isOfficial ? 'category' : 'tag' } : t);
+    // Get current tag
+    const tags = await apiClient.get<any[]>('/categories');
+    const tag = tags.find(t => t.id === id);
+    if (!tag) throw new Error('Tag not found');
+    
+    // Backend doesn't support updating isOfficial or type
+    // This would need backend support
+    throw new Error('Toggle official status not supported by backend');
   }
 
   async updateTag(id: string, updates: Partial<AdminTag>): Promise<void> {
-    await delay(300);
-    this.tags = this.tags.map(t => t.id === id ? { ...t, ...updates } : t);
+    // Backend doesn't support updating tag fields other than delete
+    // This would need backend support
+    throw new Error('Tag updates not supported by backend');
   }
 
   async renameTag(id: string, newName: string): Promise<void> {
-    await delay(600);
-    // In a real app, this would trigger a massive DB update for all related nuggets
-    this.tags = this.tags.map(t => t.id === id ? { ...t, name: newName } : t);
+    // Backend doesn't support renaming tags
+    // Would need to delete old and create new, but that's complex
+    throw new Error('Tag renaming not supported by backend');
   }
 
   async deleteTag(id: string): Promise<void> {
-    await delay(400);
-    this.tags = this.tags.filter(t => t.id !== id);
+    // Get tag name first
+    const tags = await apiClient.get<any[]>('/categories');
+    const tag = tags.find(t => t.id === id);
+    if (!tag) throw new Error('Tag not found');
+    
+    await apiClient.delete(`/categories/${encodeURIComponent(tag.name)}`);
   }
 
   async approveRequest(id: string): Promise<void> {
-    await delay(500);
-    const tag = this.tags.find(t => t.id === id);
-    if (tag) {
-        tag.status = 'active';
-        tag.isOfficial = true; 
-        tag.type = 'category';
-    }
+    // Get tag and update status
+    const tags = await apiClient.get<any[]>('/categories');
+    const tag = tags.find(t => t.id === id);
+    if (!tag) throw new Error('Tag not found');
+    
+    // Backend doesn't support updating tag status
+    // This would need backend support
+    throw new Error('Tag approval not supported by backend');
   }
 
   async rejectRequest(id: string): Promise<void> {
-    await delay(500);
-    this.tags = this.tags.filter(t => t.id !== id);
+    // Delete the pending tag
+    await this.deleteTag(id);
   }
 
   async mergeTags(sourceIds: string[], targetName: string): Promise<void> {
-    await delay(800);
-    
-    // 1. Calculate total usage of source tags
-    const sources = this.tags.filter(t => sourceIds.includes(t.id));
-    const totalUsage = sources.reduce((acc, t) => acc + t.usageCount, 0);
-
-    // 2. Remove source tags
-    this.tags = this.tags.filter(t => !sourceIds.includes(t.id));
-
-    // 3. Find or Create target tag
-    const existingTargetIndex = this.tags.findIndex(t => t.name.toLowerCase() === targetName.toLowerCase());
-    
-    if (existingTargetIndex !== -1) {
-        // Update existing
-        this.tags[existingTargetIndex].usageCount += totalUsage;
-    } else {
-        // Create new
-        this.tags.push({
-            id: `t-merged-${Date.now()}`,
-            name: targetName,
-            type: 'tag',
-            status: 'active',
-            isOfficial: false,
-            usageCount: totalUsage
-        });
-    }
+    // Backend doesn't support tag merging
+    // This would need backend support
+    throw new Error('Tag merging not supported by backend');
   }
 }
 

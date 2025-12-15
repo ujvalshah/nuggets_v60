@@ -1,41 +1,40 @@
-
 import { AdminCollection } from '../types/admin';
-import { MOCK_ADMIN_COLLECTIONS } from './mockData';
-
-const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+import { apiClient } from '@/services/apiClient';
+import { mapCollectionToAdminCollection } from './adminApiMappers';
+import { Collection } from '@/types';
 
 class AdminCollectionsService {
-  private collections = [...MOCK_ADMIN_COLLECTIONS];
-
   async listCollections(query?: string): Promise<AdminCollection[]> {
-    await delay(600);
-    if (!query) return this.collections;
-    const q = query.toLowerCase();
-    return this.collections.filter(c => c.name.toLowerCase().includes(q));
+    const endpoint = query ? `/collections?q=${encodeURIComponent(query)}` : '/collections';
+    const collections = await apiClient.get<Collection[]>(endpoint, undefined, 'adminCollectionsService.listCollections');
+    
+    return collections.map(mapCollectionToAdminCollection);
   }
 
   async getCollectionDetails(id: string): Promise<AdminCollection | undefined> {
-    await delay(300);
-    return this.collections.find(c => c.id === id);
+    const collection = await apiClient.get<Collection>(`/collections/${id}`).catch(() => undefined);
+    if (!collection) return undefined;
+    return mapCollectionToAdminCollection(collection);
   }
 
   async getStats(): Promise<{ totalCommunity: number; totalNuggetsInCommunity: number }> {
-    await delay(200);
-    const publicCols = this.collections.filter(c => c.type === 'public');
+    const collections = await apiClient.get<Collection[]>('/collections', undefined, 'adminCollectionsService.getStats');
+    const publicCols = collections.filter(c => c.type === 'public');
+    
     return {
       totalCommunity: publicCols.length,
-      totalNuggetsInCommunity: publicCols.reduce((acc, c) => acc + c.itemCount, 0)
+      totalNuggetsInCommunity: publicCols.reduce((acc, c) => acc + (c.entries?.length || 0), 0)
     };
   }
 
   async updateCollectionStatus(id: string, status: 'active' | 'hidden'): Promise<void> {
-    await delay(400);
-    this.collections = this.collections.map(c => c.id === id ? { ...c, status } : c);
+    // Backend doesn't have status field for collections
+    // This would need backend support
+    throw new Error('Collection status update not supported by backend');
   }
 
   async deleteCollection(id: string): Promise<void> {
-    await delay(500);
-    this.collections = this.collections.filter(c => c.id !== id);
+    await apiClient.delete(`/collections/${id}`);
   }
 }
 
