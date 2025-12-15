@@ -24,6 +24,10 @@ export interface IUserProfile {
   gender?: string;
   dateOfBirth?: string;
   website?: string;
+  title?: string;
+  company?: string;
+  twitter?: string;
+  linkedin?: string;
 }
 
 export interface IUserSecurity {
@@ -87,7 +91,11 @@ const UserProfileSchema = new Schema<IUserProfile>({
   country: { type: String },
   gender: { type: String },
   dateOfBirth: { type: String },
-  website: { type: String }
+  website: { type: String },
+  title: { type: String },
+  company: { type: String },
+  twitter: { type: String },
+  linkedin: { type: String }
 }, { _id: false });
 
 const UserSecuritySchema = new Schema<IUserSecurity>({

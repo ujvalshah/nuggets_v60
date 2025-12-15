@@ -6,8 +6,37 @@ import { updateUserSchema } from '../utils/validation.js';
 
 export const getUsers = async (req: Request, res: Response) => {
   try {
-    const users = await User.find().select('-password'); // Exclude password field
-    res.json(normalizeDocs(users));
+    const { q } = req.query;
+    const page = Math.max(parseInt(req.query.page as string) || 1, 1);
+    const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 25, 1), 100);
+    const skip = (page - 1) * limit;
+
+    const query: any = {};
+    if (q && typeof q === 'string' && q.trim().length > 0) {
+      const regex = new RegExp(q.trim(), 'i');
+      query.$or = [
+        { 'profile.displayName': regex },
+        { 'profile.username': regex },
+        { 'auth.email': regex }
+      ];
+    }
+
+    const [users, total] = await Promise.all([
+      User.find(query)
+        .select('-password')
+        .sort({ 'auth.createdAt': -1 })
+        .skip(skip)
+        .limit(limit),
+      User.countDocuments(query)
+    ]);
+
+    res.json({
+      data: normalizeDocs(users),
+      total,
+      page,
+      limit,
+      hasMore: page * limit < total
+    });
   } catch (error: any) {
     console.error('[Users] Get users error:', error);
     res.status(500).json({ message: 'Internal server error' });
@@ -58,6 +87,31 @@ export const updateUser = async (req: Request, res: Response) => {
     }
     if (updateData.lastFeedVisit) {
       updateObj['appState.lastLoginAt'] = updateData.lastFeedVisit;
+    }
+    // Handle legacy flat profile fields
+    if (updateData.bio !== undefined) {
+      updateObj['profile.bio'] = updateData.bio;
+    }
+    if (updateData.location !== undefined) {
+      updateObj['profile.location'] = updateData.location;
+    }
+    if (updateData.website !== undefined) {
+      updateObj['profile.website'] = updateData.website;
+    }
+    if (updateData.avatarUrl !== undefined) {
+      updateObj['profile.avatarUrl'] = updateData.avatarUrl;
+    }
+    if (updateData.title !== undefined) {
+      updateObj['profile.title'] = updateData.title;
+    }
+    if (updateData.company !== undefined) {
+      updateObj['profile.company'] = updateData.company;
+    }
+    if (updateData.twitter !== undefined) {
+      updateObj['profile.twitter'] = updateData.twitter;
+    }
+    if (updateData.linkedin !== undefined) {
+      updateObj['profile.linkedin'] = updateData.linkedin;
     }
     
     // Handle direct nested updates if provided

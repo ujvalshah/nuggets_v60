@@ -32,6 +32,8 @@ import legalRouter from './routes/legal';
 import aiRouter from './routes/ai';
 import feedbackRouter from './routes/feedback.js';
 import moderationRouter from './routes/moderation.js';
+import adminRouter from './routes/admin.js';
+import unfurlRouter from './routes/unfurl.js';
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -67,6 +69,8 @@ app.use('/api/legal', legalRouter);
 app.use('/api/ai', aiRouter);
 app.use('/api/feedback', feedbackRouter);
 app.use('/api/moderation', moderationRouter);
+app.use('/api/unfurl', unfurlRouter);
+app.use('/api/admin', adminRouter);
 
 // Health Check
 app.get('/api/health', (req, res) => {

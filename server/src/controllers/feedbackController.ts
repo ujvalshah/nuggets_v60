@@ -31,7 +31,10 @@ const updateFeedbackStatusSchema = z.object({
  */
 export const getFeedback = async (req: Request, res: Response) => {
   try {
-    const { status, type } = req.query;
+    const { status, type, q } = req.query;
+    const page = Math.max(parseInt(req.query.page as string) || 1, 1);
+    const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 25, 1), 100);
+    const skip = (page - 1) * limit;
     
     // Build query
     const query: any = {};
@@ -41,11 +44,31 @@ export const getFeedback = async (req: Request, res: Response) => {
     if (type) {
       query.type = type;
     }
+    if (q && typeof q === 'string' && q.trim().length > 0) {
+      const regex = new RegExp(q.trim(), 'i');
+      query.$or = [
+        { content: regex },
+        { email: regex },
+        { 'user.name': regex },
+        { 'user.username': regex }
+      ];
+    }
     
-    const feedback = await Feedback.find(query)
-      .sort({ createdAt: -1 }); // Most recent first
+    const [feedback, total] = await Promise.all([
+      Feedback.find(query)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit),
+      Feedback.countDocuments(query)
+    ]);
     
-    res.json(normalizeDocs(feedback));
+    res.json({
+      data: normalizeDocs(feedback),
+      total,
+      page,
+      limit,
+      hasMore: page * limit < total
+    });
   } catch (error: any) {
     console.error('[Feedback] Get feedback error:', error);
     res.status(500).json({ message: 'Internal server error' });
