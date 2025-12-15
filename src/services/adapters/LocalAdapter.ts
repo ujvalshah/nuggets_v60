@@ -109,7 +109,7 @@ export class LocalAdapter implements IAdapter {
     }
   }
 
-  async getAllArticles(): Promise<Article[]> {
+  async getAllArticles(params?: { q?: string; page?: number; limit?: number }): Promise<Article[]> {
     this.initStorage();
     try {
       const data = localStorage.getItem(STORAGE_KEY);
@@ -118,6 +118,10 @@ export class LocalAdapter implements IAdapter {
       console.warn('Failed to get articles from storage:', e);
       return [];
     }
+  }
+
+  async getArticlesPaginated(): Promise<import('./IAdapter').PaginatedArticlesResponse> {
+    throw new Error('Pagination not supported by LocalAdapter. Use RestAdapter for paginated queries.');
   }
 
   async getArticleById(id: string): Promise<Article | undefined> {

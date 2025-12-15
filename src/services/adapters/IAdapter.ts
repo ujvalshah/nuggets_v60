@@ -1,8 +1,17 @@
 import { Article, User, Collection } from '@/types';
 
+export interface PaginatedArticlesResponse {
+  data: Article[];
+  total: number;
+  page: number;
+  limit: number;
+  hasMore: boolean;
+}
+
 export interface IAdapter {
   // Articles
-  getAllArticles(): Promise<Article[]>;
+  getAllArticles(params?: { q?: string; page?: number; limit?: number }): Promise<Article[]>;
+  getArticlesPaginated(params: { q?: string; page: number; limit: number }): Promise<PaginatedArticlesResponse>;
   getArticleById(id: string): Promise<Article | undefined>;
   getArticlesByAuthor(authorId: string): Promise<Article[]>;
   createArticle(article: Omit<Article, 'id' | 'publishedAt'>): Promise<Article>;

@@ -1,11 +1,28 @@
-import { IAdapter } from './IAdapter';
+import { IAdapter, PaginatedArticlesResponse } from './IAdapter';
 import { Article, User, Collection } from '@/types';
 import { apiClient } from '@/services/apiClient';
 
 export class RestAdapter implements IAdapter {
   // --- Articles ---
-  getAllArticles(): Promise<Article[]> {
-    return apiClient.get('/articles');
+  getAllArticles(params?: { q?: string; page?: number; limit?: number }): Promise<Article[]> {
+    const queryParams = new URLSearchParams();
+    if (params?.q) queryParams.set('q', params.q);
+    if (params?.page) queryParams.set('page', params.page.toString());
+    if (params?.limit) queryParams.set('limit', params.limit.toString());
+    
+    const endpoint = queryParams.toString() ? `/articles?${queryParams}` : '/articles';
+    return apiClient.get<PaginatedArticlesResponse>(endpoint)
+      .then(response => response.data);
+  }
+
+  // Paginated articles method - returns full pagination metadata
+  getArticlesPaginated(params: { q?: string; page: number; limit: number }): Promise<PaginatedArticlesResponse> {
+    const queryParams = new URLSearchParams();
+    if (params.q) queryParams.set('q', params.q);
+    queryParams.set('page', params.page.toString());
+    queryParams.set('limit', params.limit.toString());
+    
+    return apiClient.get<PaginatedArticlesResponse>(`/articles?${queryParams}`);
   }
 
   getArticleById(id: string): Promise<Article | undefined> {
@@ -17,7 +34,31 @@ export class RestAdapter implements IAdapter {
   }
 
   createArticle(article: Omit<Article, 'id' | 'publishedAt'>): Promise<Article> {
-    return apiClient.post('/articles', article);
+    // Transform frontend format to server API format
+    const payload: any = {
+      title: article.title,
+      content: article.content,
+      excerpt: article.excerpt,
+      authorId: article.author?.id || '',
+      authorName: article.author?.name || '',
+      // Server requires 'category' (singular, required string), use first category or 'General'
+      category: article.categories && article.categories.length > 0 
+        ? article.categories[0] 
+        : 'General',
+      categories: article.categories || [],
+      tags: article.tags || [],
+      readTime: article.readTime,
+      visibility: article.visibility || 'public',
+      publishedAt: article.publishedAt,
+      // Include additional fields that might be in the Article type
+      ...(article.images && { images: article.images }),
+      ...(article.documents && { documents: article.documents }),
+      ...(article.media && { media: article.media }),
+      ...(article.source_type && { source_type: article.source_type }),
+      ...(article.displayAuthor && { displayAuthor: article.displayAuthor }),
+    };
+    
+    return apiClient.post('/articles', payload);
   }
 
   updateArticle(id: string, updates: Partial<Article>): Promise<Article | null> {
@@ -59,8 +100,15 @@ export class RestAdapter implements IAdapter {
   }
 
   // --- Categories ---
-  getCategories(): Promise<string[]> {
-    return apiClient.get('/categories');
+  async getCategories(): Promise<string[]> {
+    // Backend returns Tag[] by default, but we need string[] for compatibility
+    // Use ?format=simple to get array of tag names
+    const tags = await apiClient.get<any[]>('/categories?format=simple');
+    // If backend returns Tag objects, extract names
+    if (tags && tags.length > 0 && typeof tags[0] === 'object') {
+      return tags.map(tag => tag.name || tag);
+    }
+    return tags;
   }
 
   async addCategory(category: string): Promise<void> {

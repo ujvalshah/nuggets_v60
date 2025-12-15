@@ -62,7 +62,7 @@ export const HomePage: React.FC<HomePageProps> = ({
     loadSidebarData();
   }, []);
 
-  const { data: articles = [], isLoading, isError, refetch } = useArticles({
+  const { articles = [], query } = useArticles({
     searchQuery,
     selectedCategories,
     selectedTag,
@@ -73,7 +73,7 @@ export const HomePage: React.FC<HomePageProps> = ({
 
   const handleRefreshFeed = async () => {
       window.scrollTo({ top: 0, behavior: 'smooth' });
-      await refetch();
+      await query.refetch();
   };
 
   const handleTouchStart = (e: React.TouchEvent) => {
@@ -112,12 +112,12 @@ export const HomePage: React.FC<HomePageProps> = ({
       );
   };
 
-  if (isError) {
+  if (query.isError) {
     return (
       <div className="w-full h-[60vh] flex flex-col items-center justify-center text-slate-500">
         <AlertCircle className="w-10 h-10 mb-2 text-red-500" />
         <p>Something went wrong loading the feed.</p>
-        <button onClick={() => refetch()} className="mt-4 px-4 py-2 bg-slate-100 dark:bg-slate-800 rounded-lg font-bold text-sm hover:bg-slate-200 dark:hover:bg-slate-700">Try Again</button>
+        <button onClick={() => query.refetch()} className="mt-4 px-4 py-2 bg-slate-100 dark:bg-slate-800 rounded-lg font-bold text-sm hover:bg-slate-200 dark:hover:bg-slate-700">Try Again</button>
       </div>
     );
   }
@@ -179,7 +179,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                     <ArticleGrid 
                         articles={articles}
                         viewMode="feed" // Forces full width single column
-                        isLoading={isLoading}
+                        isLoading={query.isLoading}
                         onArticleClick={setSelectedArticle}
                         isBookmarked={isBookmarked}
                         onToggleBookmark={toggleBookmark}
@@ -225,7 +225,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                 <ArticleGrid 
                     articles={articles}
                     viewMode={viewMode === 'utility' ? 'grid' : viewMode}
-                    isLoading={isLoading}
+                    isLoading={query.isLoading}
                     onArticleClick={setSelectedArticle}
                     isBookmarked={isBookmarked}
                     onToggleBookmark={toggleBookmark}

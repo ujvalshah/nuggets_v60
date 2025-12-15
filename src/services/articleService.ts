@@ -1,49 +1,35 @@
 import { storageService } from './storageService';
+import { PaginatedArticlesResponse } from './adapters/IAdapter';
 import { Article, FilterState } from '@/types';
 
+export type { PaginatedArticlesResponse };
+
 export const articleService = {
-  getArticles: async (filters: FilterState): Promise<Article[]> => {
-    // Fetch from dynamic storage
-    let filtered = await storageService.getAllArticles();
-
-    // 1. Filter by Query
-    if (filters.query) {
-      const q = filters.query.toLowerCase();
-      filtered = filtered.filter(a => 
-        a.title.toLowerCase().includes(q) || 
-        a.excerpt.toLowerCase().includes(q) ||
-        a.content.toLowerCase().includes(q) ||
-        a.categories.some(cat => cat.toLowerCase().includes(q)) ||
-        a.tags.some(tag => tag.toLowerCase().includes(q))
-      );
+  getArticles: async (filters: FilterState, page: number = 1): Promise<PaginatedArticlesResponse> => {
+    // Backend pagination is the single source of truth
+    // Backend supports: q (search), page, limit
+    // Backend does NOT support: categories filter, tag filter, sort order
+    // Note: Categories/tag filters are ignored - backend limitation
+    // Note: Sort order is always 'latest' - backend limitation
+    
+    const limit = filters.limit || 25;
+    
+    // Use type-safe interface method - no casting required
+    // If adapter doesn't support pagination, it will throw a clear error
+    try {
+      return await storageService.getArticlesPaginated({
+        q: filters.query || undefined,
+        page,
+        limit
+      });
+    } catch (error: any) {
+      // Re-throw with context if it's an adapter capability error
+      if (error.message && error.message.includes('not supported')) {
+        throw new Error(`Pagination not available: ${error.message}`);
+      }
+      // Propagate API errors as-is
+      throw error;
     }
-
-    // 2. Filter by Categories (Multiple)
-    if (filters.categories && filters.categories.length > 0) {
-      // Check if the article has ANY of the selected categories
-      filtered = filtered.filter(a => 
-        a.categories.some(cat => filters.categories.includes(cat))
-      );
-    }
-
-    // 3. Filter by Tag
-    if (filters.tag) {
-      filtered = filtered.filter(a => a.tags.includes(filters.tag!));
-    }
-
-    // 4. Sort
-    filtered.sort((a, b) => {
-      const dateA = new Date(a.publishedAt).getTime();
-      const dateB = new Date(b.publishedAt).getTime();
-      return filters.sort === 'oldest' ? dateA - dateB : dateB - dateA;
-    });
-
-    // 5. Limit
-    if (filters.limit && filters.limit > 0) {
-      filtered = filtered.slice(0, filters.limit);
-    }
-
-    return filtered;
   },
 
   getArticleById: async (id: string): Promise<Article | undefined> => {
