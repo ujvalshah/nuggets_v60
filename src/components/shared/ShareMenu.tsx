@@ -38,10 +38,10 @@ export const ShareMenu: React.FC<ShareMenuProps> = ({
   return (
     <button 
       onClick={handleShare} 
-      className={`w-7 h-7 flex items-center justify-center rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 transition-colors ${className}`}
+      className={`w-10 h-10 flex items-center justify-center rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-all hover:scale-105 active:scale-95 ${className}`}
       title="Share"
     >
-      <Share2 size={iconSize} strokeWidth={1.5} />
+      <Share2 size={iconSize || 18} strokeWidth={1.5} />
     </button>
   );
 };
