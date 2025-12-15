@@ -5,15 +5,40 @@ import { createArticleSchema, updateArticleSchema } from '../utils/validation.js
 
 export const getArticles = async (req: Request, res: Response) => {
   try {
-    const { authorId } = req.query;
+    const { authorId, q } = req.query;
+    const page = Math.max(parseInt(req.query.page as string) || 1, 1);
+    const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 25, 1), 100);
+    const skip = (page - 1) * limit;
     
-    let query: any = {};
+    const query: any = {};
     if (authorId) {
       query.authorId = authorId;
     }
+    if (q && typeof q === 'string' && q.trim().length > 0) {
+      const regex = new RegExp(q.trim(), 'i');
+      query.$or = [
+        { title: regex },
+        { excerpt: regex },
+        { content: regex },
+        { tags: regex }
+      ];
+    }
     
-    const articles = await Article.find(query).sort({ publishedAt: -1 });
-    res.json(normalizeDocs(articles));
+    const [articles, total] = await Promise.all([
+      Article.find(query)
+        .sort({ publishedAt: -1 })
+        .skip(skip)
+        .limit(limit),
+      Article.countDocuments(query)
+    ]);
+
+    res.json({
+      data: normalizeDocs(articles),
+      total,
+      page,
+      limit,
+      hasMore: page * limit < total
+    });
   } catch (error: any) {
     console.error('[Articles] Get articles error:', error);
     res.status(500).json({ message: 'Internal server error' });
