@@ -79,6 +79,56 @@ function parseUrl(urlString: string): { url: URL; domain: string } {
 }
 
 /**
+ * Shared content classification rule (must match frontend logic)
+ * 
+ * An URL is considered an IMAGE if:
+ * - It ends with .jpg / .jpeg / .png / .webp / .gif
+ * - OR matches known CDN image hosts (images.ctfassets.net, thumbs.*, cdn.*)
+ * 
+ * DO NOT fetch metadata for image URLs.
+ */
+function isImageUrl(urlString: string): boolean {
+  try {
+    const url = new URL(urlString);
+    const pathname = url.pathname.toLowerCase();
+    const hostname = url.hostname.toLowerCase();
+    
+    // Check for image file extensions
+    const imageExts = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg'];
+    if (imageExts.some(ext => pathname.endsWith(ext))) {
+      return true;
+    }
+    
+    // Check for known CDN image hosts
+    if (
+      hostname.includes('images.ctfassets.net') ||
+      hostname.includes('thumbs.') ||
+      hostname.includes('cdn.') ||
+      hostname.includes('img.') ||
+      hostname.includes('image.')
+    ) {
+      // Additional check: ensure it's likely an image URL (not just a CDN serving HTML)
+      // If it has query params like ?fm=webp or ?q=70, it's likely an image
+      if (urlString.includes('fm=') || urlString.includes('q=') || urlString.includes('format=')) {
+        return true;
+      }
+      // If pathname suggests image (no .html, .php, etc.)
+      if (!pathname.endsWith('.html') && !pathname.endsWith('.php') && !pathname.endsWith('/')) {
+        return true;
+      }
+    }
+  } catch {
+    // Invalid URL, fallback to extension check only
+    const imageExts = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg'];
+    if (imageExts.some(ext => urlString.toLowerCase().endsWith(ext))) {
+      return true;
+    }
+  }
+  
+  return false;
+}
+
+/**
  * Detect content type from URL
  */
 function detectContentType(url: URL, domain: string): Nugget['contentType'] {
@@ -95,9 +145,9 @@ function detectContentType(url: URL, domain: string): Nugget['contentType'] {
     return 'social';
   }
 
-  // Direct images
-  const imageExts = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg'];
-  if (imageExts.some(ext => pathname.endsWith(ext))) {
+  // Use shared image detection logic
+  const urlString = url.toString();
+  if (isImageUrl(urlString)) {
     return 'image';
   }
 
@@ -114,6 +164,9 @@ function detectContentType(url: URL, domain: string): Nugget['contentType'] {
 /**
  * TIER 0: Zero Risk - URL parsing only
  * Always returns a valid Nugget shell instantly
+ * 
+ * CRITICAL: DO NOT generate titles for image URLs
+ * Images skip metadata fetching, so titles should be null (user-provided or "Untitled Nugget")
  */
 function tier0(urlString: string): Nugget {
   const { url, domain } = parseUrl(urlString);
@@ -121,9 +174,18 @@ function tier0(urlString: string): Nugget {
   const platformName = PLATFORM_NAMES[domain] || domain;
   const platformColor = PLATFORM_COLORS[domain];
 
-  // Generate default title
-  let title = platformName;
-  if (contentType === 'video' && domain.includes('youtube')) {
+  // CRITICAL FIX: DO NOT generate titles for image URLs
+  // Image URLs skip metadata fetching, so we should not fabricate titles
+  // Titles should only come from:
+  // 1. User input
+  // 2. Fetched metadata (for non-image URLs)
+  let title: string | null = null;
+  
+  if (contentType === 'image') {
+    // Images: No auto-generated title
+    // Title will be null, allowing frontend to use user-provided title or "Untitled Nugget"
+    title = null;
+  } else if (contentType === 'video' && domain.includes('youtube')) {
     title = 'YouTube Video';
   } else if (contentType === 'social') {
     title = domain.includes('x.com') ? 'Post on X' : 'Tweet';
@@ -137,6 +199,7 @@ function tier0(urlString: string): Nugget {
       title = filename;
     }
   } else {
+    // For other content types, generate a default title
     title = `Content from ${platformName}`;
   }
 
@@ -145,7 +208,7 @@ function tier0(urlString: string): Nugget {
     url: urlString,
     domain,
     contentType,
-    title,
+    title: title || undefined, // Convert null to undefined for consistency
     source: {
       name: platformName,
       domain,
@@ -190,6 +253,71 @@ async function tier0_5(urlString: string, domain: string): Promise<Partial<Nugge
       enrichment.author = data.author_name;
     }
     // Don't override title/description - keep Tier 0 fallback
+
+    return enrichment;
+  } catch {
+    // Silent failure - continue immediately
+    return null;
+  }
+}
+
+/**
+ * TIER 0.6: Optional YouTube oEmbed (non-blocking)
+ * Only for YouTube, timeout 1000ms, never blocks fallback
+ * Fetches actual video title, author, and thumbnail
+ */
+async function tier0_6_youtube(urlString: string, domain: string): Promise<Partial<Nugget> | null> {
+  if (!domain.includes('youtube.com') && !domain.includes('youtu.be')) {
+    return null;
+  }
+
+  try {
+    const { controller, cleanup } = createTimeoutController(1000); // 1 second timeout
+
+    const oEmbedUrl = `https://www.youtube.com/oembed?url=${encodeURIComponent(urlString)}&format=json`;
+    const fetchPromise = fetch(oEmbedUrl, {
+      signal: controller.signal,
+      headers: {
+        'Accept': 'application/json',
+      },
+    });
+
+    const response = await withTimeout(fetchPromise, 1000, controller.signal);
+    cleanup();
+
+    if (!response || !response.ok) {
+      return null;
+    }
+
+    const data = await response.json();
+    
+    // Extract enrichment data
+    const enrichment: Partial<Nugget> = {};
+    
+    // Title is the most important - actual video title
+    if (data.title) {
+      enrichment.title = data.title;
+    }
+    
+    // Author/channel name
+    if (data.author_name) {
+      enrichment.author = data.author_name;
+    }
+    
+    // Thumbnail URL (if not already set)
+    if (data.thumbnail_url && !enrichment.media) {
+      enrichment.media = {
+        type: 'image',
+        src: data.thumbnail_url,
+        width: 1280,
+        height: 720,
+        aspectRatio: 1280 / 720,
+        renderMode: 'cover',
+        isEstimated: false,
+      };
+    }
+
+    enrichment.quality = 'partial';
 
     return enrichment;
   } catch {
@@ -505,6 +633,29 @@ export async function fetchUrlMetadata(
       }
     } catch {
       // Silent failure
+    }
+  }
+
+  // TIER 0.6: Optional YouTube oEmbed (non-blocking)
+  // Fetches actual video title, author, and thumbnail - perfect for YouTube videos
+  if (!checkTimeout() && (domain.includes('youtube.com') || domain.includes('youtu.be'))) {
+    try {
+      const enrichment = await withTimeout(
+        tier0_6_youtube(urlString, domain),
+        1000 // 1 second timeout
+      );
+
+      if (enrichment) {
+        Object.assign(baseNugget, enrichment);
+        // YouTube oEmbed provides reliable data, so we can cache and return early
+        // if we got a title (indicates successful fetch)
+        if (enrichment.title && enrichment.title !== 'YouTube Video') {
+          setCached(urlString, baseNugget);
+          return baseNugget;
+        }
+      }
+    } catch {
+      // Silent failure - continue to other tiers
     }
   }
 

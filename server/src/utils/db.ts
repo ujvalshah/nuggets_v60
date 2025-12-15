@@ -76,38 +76,68 @@ function calculateReadTime(content: string): number {
 
 /**
  * Transform article from backend format to frontend format
+ * Ensures all required fields exist with safe defaults
  */
 function transformArticle(doc: any): any {
   if (!doc) return null;
   
-  // Handle Mongoose document or plain object
-  const plainDoc = doc.toObject ? doc.toObject() : doc;
-  
-  // Extract _id first
-  const id = plainDoc._id?.toString() || plainDoc.id;
-  const { _id, __v, ...rest } = plainDoc;
-  
-  // Build frontend-compatible article
-  const article: any = {
-    id,
-    title: rest.title || '',
-    excerpt: rest.excerpt || (rest.content ? rest.content.substring(0, 150) + '...' : ''),
-    content: rest.content || '',
-    author: {
-      id: rest.authorId || '',
-      name: rest.authorName || '',
-      avatar_url: undefined // Can be added later if needed
-    },
+  try {
+    // Handle Mongoose document or plain object
+    const plainDoc = doc.toObject ? doc.toObject() : doc;
+    
+    // Extract _id first
+    const id = plainDoc._id?.toString() || plainDoc.id || '';
+    if (!id) {
+      console.warn('[transformArticle] Article missing ID:', plainDoc);
+      return null;
+    }
+    
+    const { _id, __v, ...rest } = plainDoc;
+    
+    // Ensure author data exists (critical for frontend)
+    const authorId = rest.authorId || '';
+    const authorName = rest.authorName || 'Unknown';
+    
+    if (!authorId || !authorName) {
+      console.warn('[transformArticle] Article missing author data:', { id, authorId, authorName });
+    }
+    
+    // Build frontend-compatible article with safe defaults
+    const article: any = {
+      id,
+      title: rest.title || 'Untitled',
+      excerpt: rest.excerpt || (rest.content ? rest.content.substring(0, 150) + '...' : ''),
+      content: rest.content || '',
+      author: {
+        id: authorId,
+        name: authorName,
+        avatar_url: rest.author?.avatar_url || undefined
+      },
     publishedAt: rest.publishedAt || new Date().toISOString(),
     categories: rest.categories && rest.categories.length > 0 
       ? rest.categories 
       : (rest.category ? [rest.category] : []), // Convert single category to array
     tags: rest.tags || [],
     readTime: rest.readTime || calculateReadTime(rest.content || ''),
-    visibility: rest.visibility || 'public'
-  };
-  
-  return article;
+    visibility: rest.visibility || 'public',
+    // Preserve media and metadata fields
+    media: rest.media || null,
+    images: rest.images || [],
+    video: rest.video,
+    documents: rest.documents || [],
+    themes: rest.themes || [],
+      engagement: rest.engagement,
+      source_type: rest.source_type,
+      created_at: rest.created_at,
+      updated_at: rest.updated_at,
+      displayAuthor: rest.displayAuthor
+    };
+    
+    return article;
+  } catch (error) {
+    console.error('[transformArticle] Error transforming article:', error);
+    return null;
+  }
 }
 
 /**
@@ -145,4 +175,5 @@ export function normalizeDoc(doc: any): any {
 export function normalizeDocs(docs: any[]): any[] {
   return docs.map(normalizeDoc).filter(Boolean);
 }
+
 

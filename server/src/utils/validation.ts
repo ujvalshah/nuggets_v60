@@ -4,10 +4,46 @@ import { z } from 'zod';
  * Validation schemas for request bodies
  */
 
-export const createArticleSchema = z.object({
+// Schema for previewMetadata (nested object)
+const previewMetadataSchema = z.object({
+  url: z.string().optional(),
+  finalUrl: z.string().optional(),
+  providerName: z.string().optional(),
+  siteName: z.string().optional(),
+  title: z.string().optional(),
+  description: z.string().optional(),
+  imageUrl: z.string().optional(),
+  faviconUrl: z.string().optional(),
+  authorName: z.string().optional(),
+  publishDate: z.string().optional(),
+  mediaType: z.string().optional(),
+}).optional();
+
+// Schema for media object
+const mediaSchema = z.object({
+  type: z.string(),
+  url: z.string(),
+  thumbnail_url: z.string().optional(),
+  aspect_ratio: z.string().optional(),
+  filename: z.string().optional(),
+  previewMetadata: previewMetadataSchema,
+}).optional().nullable();
+
+// Schema for document object
+const documentSchema = z.object({
+  title: z.string(),
+  url: z.string(),
+  type: z.string(),
+  size: z.string(),
+}).array().optional();
+
+// Base schema for article creation/updates (without refinement)
+const baseArticleSchema = z.object({
   title: z.string().min(1, 'Title is required').max(200, 'Title too long'),
   excerpt: z.string().optional(),
-  content: z.string().min(1, 'Content is required'),
+  // Content is optional - only required if there's no media, images, or documents
+  // This allows users to create nuggets with just URLs/images
+  content: z.string().default(''),
   authorId: z.string().min(1, 'Author ID is required'),
   authorName: z.string().min(1, 'Author name is required'),
   category: z.string().min(1, 'Category is required'),
@@ -15,10 +51,37 @@ export const createArticleSchema = z.object({
   publishedAt: z.string().optional(),
   tags: z.array(z.string()).default([]),
   readTime: z.number().optional(),
-  visibility: z.enum(['public', 'private']).default('public')
+  visibility: z.enum(['public', 'private']).default('public'),
+  // Media and attachment fields
+  media: mediaSchema,
+  images: z.array(z.string()).optional(),
+  documents: documentSchema,
+  source_type: z.string().optional(),
+  // Display author (for aliases)
+  displayAuthor: z.object({
+    name: z.string(),
+    avatarUrl: z.string().optional(),
+  }).optional(),
 });
 
-export const updateArticleSchema = createArticleSchema.partial();
+// Create schema with refinement: at least one of content/media/images/documents must be present
+export const createArticleSchema = baseArticleSchema.refine(
+  (data) => {
+    // At least one of: content, media, images, or documents must be present
+    const hasContent = data.content && data.content.trim().length > 0;
+    const hasMedia = data.media !== null && data.media !== undefined;
+    const hasImages = data.images && data.images.length > 0;
+    const hasDocuments = data.documents && data.documents.length > 0;
+    
+    return hasContent || hasMedia || hasImages || hasDocuments;
+  },
+  {
+    message: 'Please provide content, a URL, images, or documents',
+    path: ['content'], // Error will appear on content field
+  }
+);
+
+export const updateArticleSchema = baseArticleSchema.partial();
 
 export const createCollectionSchema = z.object({
   name: z.string().min(1, 'Name is required').max(100, 'Name too long'),
@@ -93,3 +156,4 @@ export function validate(schema: z.ZodSchema) {
     next();
   };
 }
+

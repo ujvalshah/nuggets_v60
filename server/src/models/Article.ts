@@ -108,7 +108,7 @@ const DocumentSchema = new Schema<IDocument>({
 const ArticleSchema = new Schema<IArticle>({
   title: { type: String, required: true },
   excerpt: { type: String }, // Optional excerpt
-  content: { type: String, required: true },
+  content: { type: String, default: '' }, // Optional - validation handled by Zod schema
   authorId: { type: String, required: true },
   authorName: { type: String, required: true },
   category: { type: String, required: true }, // Keep for backward compatibility
@@ -137,4 +137,5 @@ const ArticleSchema = new Schema<IArticle>({
 });
 
 export const Article = mongoose.model<IArticle>('Article', ArticleSchema);
+
 

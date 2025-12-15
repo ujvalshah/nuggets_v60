@@ -68,6 +68,17 @@ export const createArticle = async (req: Request, res: Response) => {
     }
 
     const data = validationResult.data;
+    
+    // Log payload size for debugging (especially for images)
+    const payloadSize = JSON.stringify(data).length;
+    if (payloadSize > 1000000) { // > 1MB
+      console.warn(`[Articles] Large payload detected: ${(payloadSize / 1024 / 1024).toFixed(2)}MB`);
+      if (data.images && data.images.length > 0) {
+        const imagesSize = data.images.reduce((sum: number, img: string) => sum + (img?.length || 0), 0);
+        console.warn(`[Articles] Images total size: ${(imagesSize / 1024 / 1024).toFixed(2)}MB`);
+      }
+    }
+    
     const newArticle = await Article.create({
       ...data,
       publishedAt: data.publishedAt || new Date().toISOString()
@@ -76,7 +87,36 @@ export const createArticle = async (req: Request, res: Response) => {
     res.status(201).json(normalizeDoc(newArticle));
   } catch (error: any) {
     console.error('[Articles] Create article error:', error);
-    res.status(500).json({ message: 'Internal server error' });
+    console.error('[Articles] Error name:', error.name);
+    console.error('[Articles] Error message:', error.message);
+    console.error('[Articles] Error stack:', error.stack);
+    
+    // Log more details for debugging
+    if (error.name === 'ValidationError') {
+      console.error('[Articles] Mongoose validation errors:', error.errors);
+      return res.status(400).json({ 
+        message: 'Validation failed', 
+        errors: Object.keys(error.errors).map(key => ({
+          path: key,
+          message: error.errors[key].message
+        }))
+      });
+    }
+    
+    // Check for BSON size limit (MongoDB document size limit is 16MB)
+    if (error.message && error.message.includes('BSON')) {
+      console.error('[Articles] Document size limit exceeded');
+      return res.status(413).json({ 
+        message: 'Payload too large. Please reduce image sizes or use fewer images.' 
+      });
+    }
+    
+    // Return more helpful error message in development
+    const errorMessage = process.env.NODE_ENV === 'development' 
+      ? error.message || 'Internal server error'
+      : 'Internal server error';
+    
+    res.status(500).json({ message: errorMessage });
   }
 };
 
