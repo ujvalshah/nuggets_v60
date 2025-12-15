@@ -1,73 +1,155 @@
-import React from 'react';
+import React, { useCallback, useMemo } from 'react';
 import { Article } from '@/types';
 import { EmbeddedMedia } from '@/components/embeds/EmbeddedMedia';
 import { Image } from '@/components/Image';
-import { ExternalLink, Lock } from 'lucide-react';
+import { ImageGrid } from './ImageGrid';
+import { Lock } from 'lucide-react';
 import { twMerge } from 'tailwind-merge';
 
 interface CardMediaProps {
   media: Article['media'];
   images: string[] | undefined;
-  sourceType: string | undefined;
   visibility: 'public' | 'private' | undefined;
-  onMediaClick: (e: React.MouseEvent) => void;
+  onMediaClick: (e: React.MouseEvent, imageIndex?: number) => void;
   className?: string;
+  articleTitle?: string; // For generating meaningful alt text
 }
 
-export const CardMedia: React.FC<CardMediaProps> = ({
+export const CardMedia: React.FC<CardMediaProps> = React.memo(({
   media,
   images,
-  sourceType,
   visibility,
   onMediaClick,
   className,
+  articleTitle,
 }) => {
   const hasMedia = !!media || (images && images.length > 0);
 
+  // Memoize aspect ratio calculations
+  const { aspectRatio, backgroundClass, isDocument, isSocialMedia, isImageOnly } = useMemo(() => {
+    if (!hasMedia) return { aspectRatio: undefined, backgroundClass: '', isDocument: false, isSocialMedia: false, isImageOnly: false };
+
+    // FIX #1: Aspect ratio validation and fallback
+    // aspect_ratio is stored as string like "16/9" or "4/3"
+    // CSS aspect-ratio property requires valid format: /^\d+\/\d+$/
+    // Invalid formats can cause layout shifts, so we validate strictly
+    const validateAspectRatio = (ratio: string): boolean => {
+      return /^\d+\/\d+$/.test(ratio.trim());
+    };
+
+    // For YouTube videos, use 16:9 aspect ratio and remove background
+    const isYouTube = media?.type === 'youtube';
+    // For documents, use fixed height instead of aspect ratio (compact horizontal layout)
+    const isDoc = media?.type === 'document' || 
+                     media?.type === 'link' && (
+                       media?.url?.toLowerCase().includes('drive.google.com') ||
+                       media?.url?.toLowerCase().includes('docs.google.com') ||
+                       media?.previewMetadata?.title?.match(/\.(pdf|doc|docx|xls|xlsx|ppt|pptx|txt|zip)$/i)
+                     );
+    // For LinkedIn/Twitter links, use compact horizontal layout (always, regardless of images)
+    const isSocial = media?.type === 'linkedin' || media?.type === 'twitter' || 
+                        media?.url?.toLowerCase().includes('linkedin.com') ||
+                        media?.url?.toLowerCase().includes('twitter.com') ||
+                        media?.url?.toLowerCase().includes('x.com');
+    
+    // For images without media object, don't force aspect ratio (let image determine)
+    const isImage = !media && images && images.length > 0;
+    
+    const rawAspectRatio = media?.aspect_ratio?.trim();
+    const aspect = isYouTube 
+      ? '16/9' // YouTube videos are always 16:9
+      : (rawAspectRatio && validateAspectRatio(rawAspectRatio)
+        ? rawAspectRatio
+        : isImage 
+          ? undefined // Let images use their natural aspect ratio
+          : '4/3'); // Safe fallback for invalid or missing ratios (only for media)
+
+    // For documents and social media, use transparent/light background (they have their own styling)
+    const bgClass = isYouTube 
+      ? 'bg-transparent' 
+      : (isDoc || isSocial)
+      ? 'bg-transparent'
+      : 'bg-slate-100 dark:bg-slate-800';
+
+    return { aspectRatio: aspect, backgroundClass: bgClass, isDocument: isDoc, isSocialMedia: isSocial, isImageOnly: isImage };
+  }, [hasMedia, media, images]);
+
   if (!hasMedia) return null;
 
-  // Use aspect ratio from metadata if available, otherwise default to 4/3
-  const aspectRatio = media?.aspect_ratio 
-    ? parseFloat(media.aspect_ratio) 
-    : 4/3;
-  
-  const aspectRatioStyle = aspectRatio 
-    ? { aspectRatio: `${aspectRatio}` }
-    : { aspectRatio: '4/3' };
+  // Memoize image click handler
+  const handleImageClick = useCallback((index: number) => {
+    const syntheticEvent = {
+      stopPropagation: () => {},
+      preventDefault: () => {}
+    } as React.MouseEvent;
+    onMediaClick(syntheticEvent, index);
+  }, [onMediaClick]);
 
   return (
     <div
       className={twMerge(
-        'w-full rounded-xl overflow-hidden bg-slate-100 dark:bg-slate-800 relative shrink-0 cursor-pointer group/media',
+        // Design System: Base media styling - variants override with specific aspect ratios
+        'w-full rounded-xl overflow-hidden relative shrink-0 cursor-pointer group/media',
+        backgroundClass,
+        // For documents and social media links, use fixed height instead of aspect ratio
+        (isDocument || isSocialMedia) ? 'h-16' : '',
         className
       )}
-      style={aspectRatioStyle}
+      style={
+        className?.includes('aspect-') || isDocument || isSocialMedia || isImageOnly 
+          ? {} 
+          : aspectRatio 
+            ? { aspectRatio } 
+            : {}
+      }
       onClick={onMediaClick}
     >
-      {media ? (
-        <EmbeddedMedia media={media} onClick={onMediaClick} />
-      ) : (
-        images && images.length > 0 && (
-          <Image
-            src={images[0]}
-            className="w-full h-full object-cover transition-transform duration-500 group-hover/media:scale-105"
-          />
-        )
-      )}
+      {/* Prioritize images array when it has multiple images, even if media exists */}
+      {(() => {
+        // Filter out any null, undefined, or empty image URLs
+        const validImages = images?.filter((img): img is string => 
+          typeof img === 'string' && img.trim().length > 0
+        ) || [];
+        
+        if (validImages.length > 0) {
+          if (validImages.length > 1) {
+            return (
+              <ImageGrid
+                images={validImages}
+                onImageClick={handleImageClick}
+                className="w-full h-full"
+                articleTitle={articleTitle}
+              />
+            );
+          } else {
+            // Single image: use object-contain to avoid cropping, preserve aspect ratio
+            return (
+              <div className="w-full h-full flex items-center justify-center">
+                <Image
+                  src={validImages[0]}
+                  alt={articleTitle ? `Image for ${articleTitle}` : 'Article image'}
+                  className="max-w-full max-h-full w-auto h-auto object-contain transition-transform duration-500 group-hover/media:scale-105"
+                />
+              </div>
+            );
+          }
+        }
+        
+        // Fallback to media if no valid images
+        if (media) {
+          return <EmbeddedMedia media={media} onClick={onMediaClick} />;
+        }
+        
+        return null;
+      })()}
 
-      <div className="absolute top-2 left-2 flex gap-1">
-        {sourceType === 'link' && (
-          <div className="bg-black/60 backdrop-blur-sm text-white text-[10px] font-bold px-2 py-0.5 rounded-full tracking-wide flex items-center gap-1 transition-transform group-hover/media:scale-105">
-            <ExternalLink size={8} /> Link
-          </div>
-        )}
-        {visibility === 'private' && (
-          <div className="bg-black/60 backdrop-blur-sm text-white p-1 rounded-full">
-            <Lock size={10} />
-          </div>
-        )}
-      </div>
+      {/* Removed all platform badges - keeping only private visibility indicator */}
+      {visibility === 'private' && (
+        <div className="absolute top-2 left-2 bg-black/60 backdrop-blur-sm text-white p-1 rounded-full">
+          <Lock size={10} />
+        </div>
+      )}
     </div>
   );
-};
+});
 

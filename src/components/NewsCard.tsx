@@ -9,6 +9,7 @@ import { CollectionPopover } from './CollectionPopover';
 import { ReportModal, ReportPayload } from './ReportModal';
 import { ArticleModal } from './ArticleModal';
 import { ImageLightbox } from './ImageLightbox';
+import { ArticleDetail } from './ArticleDetail';
 import { useToast } from '@/hooks/useToast';
 import { adminModerationService } from '@/admin/services/adminModerationService';
 import { useAuth } from '@/hooks/useAuth';
@@ -24,6 +25,7 @@ interface NewsCardProps {
   expanded?: boolean;
   onToggleExpand?: () => void;
   currentUserId?: string;
+  isPreview?: boolean;
 }
 
 export const NewsCard = forwardRef<HTMLDivElement, NewsCardProps>(
@@ -37,6 +39,7 @@ export const NewsCard = forwardRef<HTMLDivElement, NewsCardProps>(
       onClick,
       currentUserId,
       onTagClick,
+      isPreview = false,
     },
     ref
   ) => {
@@ -51,11 +54,17 @@ export const NewsCard = forwardRef<HTMLDivElement, NewsCardProps>(
       onCategoryClick,
       onTagClick,
       onClick,
+      isPreview,
     });
 
     const { logic, modals, refs, article: originalArticle, isOwner, isAdmin } = hookResult;
 
     // Switch on viewMode to render the appropriate variant
+    // Debug: Log viewMode to verify it's being passed correctly
+    if (process.env.NODE_ENV === 'development' && viewMode === 'utility') {
+      console.log('[NewsCard] Rendering utility variant for article:', article.id);
+    }
+    
     let variant;
     switch (viewMode) {
       case 'grid':
@@ -69,6 +78,7 @@ export const NewsCard = forwardRef<HTMLDivElement, NewsCardProps>(
             bookmarkButtonRef={refs.bookmarkButtonRef}
             isOwner={isOwner}
             isAdmin={isAdmin}
+            isPreview={isPreview}
           />
         );
         break;
@@ -83,6 +93,7 @@ export const NewsCard = forwardRef<HTMLDivElement, NewsCardProps>(
             bookmarkButtonRef={refs.bookmarkButtonRef}
             isOwner={isOwner}
             isAdmin={isAdmin}
+            isPreview={isPreview}
           />
         );
         break;
@@ -97,6 +108,7 @@ export const NewsCard = forwardRef<HTMLDivElement, NewsCardProps>(
             bookmarkButtonRef={refs.bookmarkButtonRef}
             isOwner={isOwner}
             isAdmin={isAdmin}
+            isPreview={isPreview}
           />
         );
         break;
@@ -111,6 +123,7 @@ export const NewsCard = forwardRef<HTMLDivElement, NewsCardProps>(
             bookmarkButtonRef={refs.bookmarkButtonRef}
             isOwner={isOwner}
             isAdmin={isAdmin}
+            isPreview={isPreview}
           />
         );
         break;
@@ -125,6 +138,7 @@ export const NewsCard = forwardRef<HTMLDivElement, NewsCardProps>(
             bookmarkButtonRef={refs.bookmarkButtonRef}
             isOwner={isOwner}
             isAdmin={isAdmin}
+            isPreview={isPreview}
           />
         );
     }
@@ -146,11 +160,14 @@ export const NewsCard = forwardRef<HTMLDivElement, NewsCardProps>(
           onClose={() => modals.setShowReport(false)}
           onSubmit={async (payload: ReportPayload) => {
             try {
+              // FIX #6: Normalize optional fields (trim strings, pass undefined when empty)
+              const normalizedComment = payload.comment?.trim() || undefined;
+
               await adminModerationService.submitReport(
                 payload.articleId,
                 'nugget',
                 payload.reason,
-                payload.comment,
+                normalizedComment,
                 currentUser ? {
                   id: currentUser.id,
                   name: currentUser.name
@@ -161,9 +178,27 @@ export const NewsCard = forwardRef<HTMLDivElement, NewsCardProps>(
                 } : undefined
               );
               toast.success('Report submitted successfully');
-            } catch (error) {
+            } catch (error: any) {
               console.error('Failed to submit report:', error);
-              toast.error('Failed to submit report. Please try again.');
+              
+              // FIX #3: Error handling specificity based on HTTP status
+              // Provides better UX by differentiating error types
+              let errorMessage: string;
+              const status = error?.response?.status;
+              
+              if (status === 400) {
+                errorMessage = 'Invalid report data. Please check your input.';
+              } else if (status === 429) {
+                errorMessage = 'Too many reports. Please wait a moment before trying again.';
+              } else if (status === 403) {
+                errorMessage = 'You do not have permission to submit this report.';
+              } else if (status >= 500) {
+                errorMessage = 'Server error. Please try again later.';
+              } else {
+                errorMessage = 'Failed to submit report. Please try again.';
+              }
+              
+              toast.error(errorMessage);
               throw error; // Re-throw so ReportModal can handle it
             }
           }}
@@ -180,6 +215,15 @@ export const NewsCard = forwardRef<HTMLDivElement, NewsCardProps>(
           isOpen={modals.showLightbox}
           onClose={() => modals.setShowLightbox(false)}
           images={originalArticle.images || []}
+          initialIndex={modals.lightboxInitialIndex || 0}
+          sidebarContent={
+            modals.showLightbox ? (
+              <ArticleDetail
+                article={originalArticle}
+                isModal={false}
+              />
+            ) : undefined
+          }
         />
       </>
     );

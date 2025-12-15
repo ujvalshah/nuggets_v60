@@ -12,7 +12,8 @@ export const CardTitle: React.FC<CardTitleProps> = ({ title, className }) => {
   return (
     <h3
       className={twMerge(
-        'text-sm font-bold text-slate-900 dark:text-slate-100 line-clamp-2 leading-snug mb-1 group-hover:text-primary-600 transition-colors',
+        // Design System: Standard UI - text-sm (14px) Bold for Card Titles (Grid)
+        'text-sm font-bold text-slate-900 dark:text-white line-clamp-2 leading-tight mb-1 group-hover:text-primary-600 transition-colors',
         className
       )}
     >
@@ -20,3 +21,4 @@ export const CardTitle: React.FC<CardTitleProps> = ({ title, className }) => {
     </h3>
   );
 };
+

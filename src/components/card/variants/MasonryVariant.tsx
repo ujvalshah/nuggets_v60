@@ -18,6 +18,7 @@ interface MasonryVariantProps {
   bookmarkButtonRef: React.RefObject<HTMLButtonElement>;
   isOwner: boolean;
   isAdmin: boolean;
+  isPreview?: boolean;
 }
 
 export const MasonryVariant: React.FC<MasonryVariantProps> = ({
@@ -29,12 +30,13 @@ export const MasonryVariant: React.FC<MasonryVariantProps> = ({
   bookmarkButtonRef,
   isOwner,
   isAdmin,
+  isPreview = false,
 }) => {
   const { data, flags, handlers } = logic;
 
   return (
     <div
-      className="group relative flex flex-col bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm hover:shadow-lg hover:border-slate-300 dark:hover:border-slate-700 transition-all duration-300 w-full p-4 gap-3 break-inside-avoid"
+      className="group relative flex flex-col bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm hover:shadow-lg hover:border-slate-300 dark:hover:border-slate-700 transition-all duration-300 w-full p-4 break-inside-avoid mb-6"
       onClick={handlers.onClick}
       style={{ height: 'auto' }}
     >
@@ -42,14 +44,19 @@ export const MasonryVariant: React.FC<MasonryVariantProps> = ({
         <CardMedia
           media={data.media}
           images={data.images}
-          sourceType={data.sourceType}
           visibility={data.visibility}
           onMediaClick={handlers.onMediaClick}
+          className="w-full"
+          articleTitle={data.title}
         />
       )}
 
       <div className="flex flex-col flex-1 min-w-0">
-        <CardBadge isTextNugget={data.isTextNugget} sourceType={data.sourceType} />
+        <CardBadge 
+          isTextNugget={data.isTextNugget} 
+          sourceType={data.sourceType}
+          media={data.media}
+        />
 
         <CardTags
           categories={data.categories}
@@ -65,14 +72,15 @@ export const MasonryVariant: React.FC<MasonryVariantProps> = ({
           excerpt={data.excerpt}
           content={data.content}
           isTextNugget={data.isTextNugget}
-          onReadMore={handlers.onReadMore}
+          variant="masonry"
         />
 
-        <div className="mt-auto pt-1.5 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between shrink-0">
+        <div className="mt-auto pt-1 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between shrink-0">
           <CardMeta
             authorName={data.authorName}
             authorId={data.authorId}
             formattedDate={data.formattedDate}
+            authorAvatarUrl={data.authorAvatarUrl}
             onAuthorClick={handlers.onAuthorClick}
           />
 
@@ -93,6 +101,7 @@ export const MasonryVariant: React.FC<MasonryVariantProps> = ({
             onToggleMenu={handlers.onToggleMenu}
             menuRef={menuRef}
             bookmarkButtonRef={bookmarkButtonRef}
+            isPreview={isPreview}
           />
         </div>
       </div>
@@ -103,3 +112,4 @@ export const MasonryVariant: React.FC<MasonryVariantProps> = ({
     </div>
   );
 };
+

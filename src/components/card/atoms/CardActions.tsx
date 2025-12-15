@@ -11,7 +11,7 @@ interface CardActionsProps {
   isSaved: boolean;
   isOwner: boolean;
   isAdmin: boolean;
-  onSave: () => void;
+  onSave?: () => void; // Made optional for preview mode
   onAddToCollection?: () => void;
   onReport?: () => void;
   onEdit?: () => void;
@@ -21,6 +21,7 @@ interface CardActionsProps {
   menuRef: React.RefObject<HTMLDivElement>;
   bookmarkButtonRef: React.RefObject<HTMLButtonElement>;
   className?: string;
+  isPreview?: boolean; // Add preview flag to hide ShareMenu
 }
 
 export const CardActions: React.FC<CardActionsProps> = ({
@@ -41,21 +42,26 @@ export const CardActions: React.FC<CardActionsProps> = ({
   menuRef,
   bookmarkButtonRef,
   className,
+  isPreview = false,
 }) => {
   return (
-    <div className={twMerge('flex items-center gap-1', className)}>
-      <ShareMenu
-        data={{
-          type: 'nugget',
-          id: articleId,
-          title: articleTitle,
-          shareUrl: `${window.location.origin}/#/article/${articleId}`,
-        }}
-        meta={{
-          author: authorName,
-          text: articleExcerpt,
-        }}
-      />
+    <div className={twMerge('flex items-center gap-0', className)}>
+      {/* Hide ShareMenu in preview mode (preview IDs are invalid) */}
+      {!isPreview && (
+        <ShareMenu
+          data={{
+            type: 'nugget',
+            id: articleId,
+            title: articleTitle,
+            shareUrl: `${window.location.origin}/#/article/${articleId}`,
+          }}
+          meta={{
+            author: authorName,
+            text: articleExcerpt,
+          }}
+        />
+      )}
+
 
       {onAddToCollection && (
         <button
@@ -63,26 +69,29 @@ export const CardActions: React.FC<CardActionsProps> = ({
             e.stopPropagation();
             onAddToCollection();
           }}
-          className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 transition-colors"
+          className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-all hover:scale-105 active:scale-95"
           title="Add to Collection"
         >
-          <FolderPlus size={14} />
+          <FolderPlus size={18} />
         </button>
       )}
 
-      <button
-        ref={bookmarkButtonRef}
-        onClick={(e) => {
-          e.stopPropagation();
-          onSave();
-        }}
-        className={`w-7 h-7 flex items-center justify-center rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors ${
-          isSaved ? 'text-primary-600' : 'text-slate-400'
-        }`}
-        title="Bookmark"
-      >
-        <Bookmark size={14} fill={isSaved ? 'currentColor' : 'none'} />
-      </button>
+      {/* Only show bookmark button if onSave handler exists */}
+      {onSave && (
+        <button
+          ref={bookmarkButtonRef}
+          onClick={(e) => {
+            e.stopPropagation();
+            onSave();
+          }}
+          className={`w-10 h-10 -mr-1 flex items-center justify-center rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-all hover:scale-105 active:scale-95 ${
+            isSaved ? 'text-primary-600 hover:text-primary-700' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'
+          }`}
+          title="Bookmark"
+        >
+          <Bookmark size={18} fill={isSaved ? 'currentColor' : 'none'} />
+        </button>
+      )}
 
       <div className="relative" ref={menuRef}>
         <button
@@ -90,9 +99,10 @@ export const CardActions: React.FC<CardActionsProps> = ({
             e.stopPropagation();
             onToggleMenu(e);
           }}
-          className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 transition-colors"
+          className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-all hover:scale-105 active:scale-95"
+          title="More options"
         >
-          <MoreVertical size={14} />
+          <MoreVertical size={18} />
         </button>
         {showMenu && (
           <div className="absolute right-0 bottom-full mb-1 w-32 bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-200 dark:border-slate-700 py-1 z-20 overflow-hidden">
@@ -139,3 +149,4 @@ export const CardActions: React.FC<CardActionsProps> = ({
     </div>
   );
 };
+

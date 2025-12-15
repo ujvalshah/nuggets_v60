@@ -18,6 +18,7 @@ interface FeedVariantProps {
   bookmarkButtonRef: React.RefObject<HTMLButtonElement>;
   isOwner: boolean;
   isAdmin: boolean;
+  isPreview?: boolean;
 }
 
 export const FeedVariant: React.FC<FeedVariantProps> = ({
@@ -29,71 +30,85 @@ export const FeedVariant: React.FC<FeedVariantProps> = ({
   bookmarkButtonRef,
   isOwner,
   isAdmin,
+  isPreview = false,
 }) => {
   const { data, flags, handlers } = logic;
 
   return (
     <div
-      className="group relative flex flex-col bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm hover:shadow-lg hover:border-slate-300 dark:hover:border-slate-700 transition-all duration-300 w-full p-4 gap-3"
+      className="group relative flex flex-col bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm hover:shadow-lg hover:border-slate-300 dark:hover:border-slate-700 transition-all duration-300 w-full p-5 gap-4"
       onClick={handlers.onClick}
     >
-      {data.hasMedia && (
-        <CardMedia
-          media={data.media}
-          images={data.images}
-          sourceType={data.sourceType}
-          visibility={data.visibility}
-          onMediaClick={handlers.onMediaClick}
-        />
-      )}
+      {/* 1. Tags on top - matching UtilityVariant hierarchy */}
+      <CardTags
+        categories={data.categories}
+        onCategoryClick={handlers.onCategoryClick}
+        showTagPopover={showTagPopover}
+        onToggleTagPopover={handlers.onToggleTagPopover}
+        tagPopoverRef={tagPopoverRef}
+      />
 
-      <div className="flex flex-col flex-1 min-w-0">
-        <CardBadge isTextNugget={data.isTextNugget} sourceType={data.sourceType} />
+      {/* 2. Title */}
+      {data.shouldShowTitle && <CardTitle title={data.title} />}
 
-        <CardTags
-          categories={data.categories}
-          onCategoryClick={handlers.onCategoryClick}
-          showTagPopover={showTagPopover}
-          onToggleTagPopover={handlers.onToggleTagPopover}
-          tagPopoverRef={tagPopoverRef}
-        />
+      {/* 3. Badge */}
+      <CardBadge 
+        isTextNugget={data.isTextNugget} 
+        sourceType={data.sourceType}
+        media={data.media}
+      />
 
-        {data.shouldShowTitle && <CardTitle title={data.title} />}
-
+      {/* 4. Body/Content - flex-1 to take available space, pushing media to bottom */}
+      <div className="flex flex-col flex-1 min-w-0 gap-4">
         <CardContent
           excerpt={data.excerpt}
           content={data.content}
           isTextNugget={data.isTextNugget}
-          onReadMore={handlers.onReadMore}
+          variant="utility"
         />
 
-        <div className="mt-auto pt-1.5 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between shrink-0">
-          <CardMeta
-            authorName={data.authorName}
-            authorId={data.authorId}
-            formattedDate={data.formattedDate}
-            onAuthorClick={handlers.onAuthorClick}
-          />
-
-          <CardActions
-            articleId={data.id}
+        {/* 5. Media anchored to bottom for uniformity across cards */}
+        {data.hasMedia && (
+          <CardMedia
+            media={data.media}
+            images={data.images}
+            visibility={data.visibility}
+            onMediaClick={handlers.onMediaClick}
+            className="mt-auto rounded-lg shrink-0"
             articleTitle={data.title}
-            articleExcerpt={data.excerpt}
-            authorName={data.authorName}
-            isSaved={flags.isSaved}
-            isOwner={isOwner}
-            isAdmin={isAdmin}
-            onSave={handlers.onSave}
-            onAddToCollection={handlers.onAddToCollection}
-            onReport={handlers.onReport}
-            onEdit={handlers.onEdit}
-            onDelete={handlers.onDelete}
-            showMenu={showMenu}
-            onToggleMenu={handlers.onToggleMenu}
-            menuRef={menuRef}
-            bookmarkButtonRef={bookmarkButtonRef}
           />
-        </div>
+        )}
+      </div>
+
+      {/* Footer */}
+      <div className="pt-1.5 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between shrink-0">
+        <CardMeta
+          authorName={data.authorName}
+          authorId={data.authorId}
+          formattedDate={data.formattedDate}
+          authorAvatarUrl={data.authorAvatarUrl}
+          onAuthorClick={handlers.onAuthorClick}
+        />
+
+        <CardActions
+          articleId={data.id}
+          articleTitle={data.title}
+          articleExcerpt={data.excerpt}
+          authorName={data.authorName}
+          isSaved={flags.isSaved}
+          isOwner={isOwner}
+          isAdmin={isAdmin}
+          onSave={handlers.onSave}
+          onAddToCollection={handlers.onAddToCollection}
+          onReport={handlers.onReport}
+          onEdit={handlers.onEdit}
+          onDelete={handlers.onDelete}
+          showMenu={showMenu}
+          onToggleMenu={handlers.onToggleMenu}
+          menuRef={menuRef}
+          bookmarkButtonRef={bookmarkButtonRef}
+          isPreview={isPreview}
+        />
       </div>
 
       {data.showContributor && data.contributorName && (
@@ -102,3 +117,4 @@ export const FeedVariant: React.FC<FeedVariantProps> = ({
     </div>
   );
 };
+

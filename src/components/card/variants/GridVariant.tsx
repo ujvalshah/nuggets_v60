@@ -18,6 +18,7 @@ interface GridVariantProps {
   bookmarkButtonRef: React.RefObject<HTMLButtonElement>;
   isOwner: boolean;
   isAdmin: boolean;
+  isPreview?: boolean;
 }
 
 export const GridVariant: React.FC<GridVariantProps> = ({
@@ -29,6 +30,7 @@ export const GridVariant: React.FC<GridVariantProps> = ({
   bookmarkButtonRef,
   isOwner,
   isAdmin,
+  isPreview = false,
 }) => {
   const { data, flags, handlers } = logic;
 
@@ -38,13 +40,27 @@ export const GridVariant: React.FC<GridVariantProps> = ({
       onClick={handlers.onClick}
     >
       {data.hasMedia && (
-        <CardMedia
-          media={data.media}
-          images={data.images}
-          sourceType={data.sourceType}
-          visibility={data.visibility}
-          onMediaClick={handlers.onMediaClick}
-        />
+        <div className="relative">
+          <CardMedia
+            media={data.media}
+            images={data.images}
+            visibility={data.visibility}
+            onMediaClick={handlers.onMediaClick}
+            className="aspect-[4/3]"
+            articleTitle={data.title}
+          />
+          {/* Source Badge Overlay - Top-Left Corner */}
+          {!data.isTextNugget && data.sourceType === 'link' && (
+            <CardBadge
+              isTextNugget={data.isTextNugget}
+              sourceType={data.sourceType}
+              media={data.media}
+              variant="overlay"
+              size="sm"
+              className="absolute top-3 left-3 z-20"
+            />
+          )}
+        </div>
       )}
 
       <div className="flex flex-col flex-1 min-w-0">
@@ -62,14 +78,15 @@ export const GridVariant: React.FC<GridVariantProps> = ({
           excerpt={data.excerpt}
           content={data.content}
           isTextNugget={data.isTextNugget}
-          onReadMore={handlers.onReadMore}
+          variant="grid"
         />
 
-        <div className="mt-auto pt-1.5 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between shrink-0">
+        <div className="mt-auto pt-1 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between shrink-0">
           <CardMeta
             authorName={data.authorName}
             authorId={data.authorId}
             formattedDate={data.formattedDate}
+            authorAvatarUrl={data.authorAvatarUrl}
             onAuthorClick={handlers.onAuthorClick}
           />
 
@@ -90,6 +107,7 @@ export const GridVariant: React.FC<GridVariantProps> = ({
             onToggleMenu={handlers.onToggleMenu}
             menuRef={menuRef}
             bookmarkButtonRef={bookmarkButtonRef}
+            isPreview={isPreview}
           />
         </div>
       </div>
@@ -100,3 +118,4 @@ export const GridVariant: React.FC<GridVariantProps> = ({
     </div>
   );
 };
+

@@ -7,18 +7,26 @@ interface TagPillProps {
   onClick?: (e: React.MouseEvent) => void;
 }
 
+// Format category label: lowercase and add hashtag prefix
+const formatCategoryLabel = (category: string): string => {
+  return `#${category.toLowerCase()}`;
+};
+
 const TagPill: React.FC<TagPillProps> = ({ label, onClick }) => {
+  const displayLabel = formatCategoryLabel(label);
+  
   const pill = (
     <span
       onClick={onClick}
       className={twMerge(
+        // Compact design: Small size with amber/yellow/gold contrast colors
         'inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium transition-colors border',
-        'bg-slate-50 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700',
+        'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/20 dark:text-amber-400 dark:border-amber-800',
         onClick &&
-          'cursor-pointer hover:border-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:shadow-sm'
+          'cursor-pointer hover:border-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/30 hover:shadow-sm'
       )}
     >
-      {label}
+      {displayLabel}
     </span>
   );
   return onClick ? <Tooltip content="Click to filter">{pill}</Tooltip> : pill;
@@ -48,7 +56,12 @@ export const CardTags: React.FC<CardTagsProps> = ({
 
   return (
     <div
-      className={twMerge('flex flex-wrap items-center gap-1.5 mb-2 relative', className)}
+      className={twMerge(
+        'flex flex-wrap items-center gap-1.5 mb-2 relative',
+        'bg-amber-50 dark:bg-amber-900/20', // Subtle amber tint - using solid light amber
+        'rounded-lg px-2 py-1.5', // Slight padding and rounded corners for the tinted area
+        className
+      )}
     >
       {visibleCategories.map((cat) => (
         <TagPill
@@ -69,7 +82,7 @@ export const CardTags: React.FC<CardTagsProps> = ({
                 onToggleTagPopover(e);
               }
             }}
-            className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold bg-slate-100 text-slate-500 hover:bg-slate-200 transition-colors"
+            className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 dark:bg-amber-900/20 dark:text-amber-400 dark:border-amber-800 dark:hover:bg-amber-900/30 transition-colors"
           >
             +{remainingCount}
           </button>
@@ -88,7 +101,7 @@ export const CardTags: React.FC<CardTagsProps> = ({
                     }}
                     className="text-left text-xs px-2 py-1 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition-colors"
                   >
-                    {cat}
+                    {formatCategoryLabel(cat)}
                   </button>
                 ))}
               </div>
@@ -99,3 +112,4 @@ export const CardTags: React.FC<CardTagsProps> = ({
     </div>
   );
 };
+
