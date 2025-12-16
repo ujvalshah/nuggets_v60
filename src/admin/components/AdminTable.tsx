@@ -1,5 +1,5 @@
 
-import React, { useMemo, useRef } from 'react';
+import React, { useRef } from 'react';
 import { ChevronLeft, ChevronRight, Loader2, Search, ArrowUp, ArrowDown } from 'lucide-react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 
@@ -304,27 +304,36 @@ export function AdminTable<T extends { id: string }>({
                 style={{ display: 'block', position: 'relative', height: virtualHeight, overflowY: 'auto' }}
                 className="divide-y divide-slate-100 dark:divide-slate-800"
               >
-                <tr style={{ height: virtual.getTotalSize(), position: 'relative' }}>
-                  <td style={{ padding: 0, margin: 0, border: 0 }} colSpan={columns.length + (selection?.enabled ? 1 : 0)}>
-                    <div style={{ position: 'absolute', inset: 0 }}>
-                      {virtual.getVirtualItems().map((item) => {
-                        const row = data[item.index];
-                        return (
-                          <div
-                            key={row.id}
-                            style={{
-                              position: 'absolute',
-                              top: item.start,
-                              left: 0,
-                              width: '100%',
-                              height: item.size
-                            }}
-                          >
-                            {renderRow(row, item.index)}
-                          </div>
-                        );
-                      })}
-                    </div>
+                <tr style={{ height: virtual.getTotalSize(), position: 'relative', display: 'block' }}>
+                  <td style={{ padding: 0, margin: 0, border: 0, display: 'block', height: '100%', position: 'relative' }} colSpan={columns.length + (selection?.enabled ? 1 : 0)}>
+                    {virtual.getVirtualItems().map((item) => {
+                      const row = data[item.index];
+                      const rowElement = renderRow(row, item.index) as React.ReactElement<React.HTMLAttributes<HTMLTableRowElement>>;
+                      const rowProps = (rowElement.props || {}) as React.HTMLAttributes<HTMLTableRowElement>;
+                      const children = React.Children.toArray((rowElement.props as any)?.children || []);
+                      return (
+                        <div
+                          key={row.id}
+                          style={{
+                            position: 'absolute',
+                            top: item.start,
+                            left: 0,
+                            width: '100%',
+                            height: item.size,
+                            display: 'table',
+                            tableLayout: 'fixed'
+                          }}
+                        >
+                          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                            <tbody>
+                              <tr {...rowProps}>
+                                {children}
+                              </tr>
+                            </tbody>
+                          </table>
+                        </div>
+                      );
+                    })}
                   </td>
                 </tr>
               </tbody>

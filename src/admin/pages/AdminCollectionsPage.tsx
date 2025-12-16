@@ -27,6 +27,7 @@ export const AdminCollectionsPage: React.FC = () => {
   const [sortKey, setSortKey] = useState<string>('createdAt');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [dateFilter, setDateFilter] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
 
   // Selection
   const [selectedIds, setSelectedIds] = useState<string[]>([]);

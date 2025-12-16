@@ -1,5 +1,4 @@
-
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { AdminTable, Column } from '../components/AdminTable';
 import { AdminSummaryBar } from '../components/AdminSummaryBar';
 import { AdminReport } from '../types/admin';
@@ -11,6 +10,8 @@ import { ConfirmActionModal } from '@/components/settings/ConfirmActionModal';
 import { formatDate } from '@/utils/formatters';
 import { useAdminHeader } from '../layout/AdminLayout';
 import { useSearchParams } from 'react-router-dom';
+
+console.log('[AdminModerationPage] module evaluated');
 
 export const AdminModerationPage: React.FC = () => {
   const { setPageHeader } = useAdminHeader();
@@ -44,35 +45,33 @@ export const AdminModerationPage: React.FC = () => {
     );
   }, [filter]);
 
-  // Initialize filters from URL
+  // ONE-TIME URL → STATE HYDRATION: Read URL params ONCE on mount only
   useEffect(() => {
     const statusParam = searchParams.get('status');
     const date = searchParams.get('date');
     if (statusParam === 'open' || statusParam === 'resolved' || statusParam === 'dismissed') {
       setFilter(statusParam);
     }
-    if (date) setDateFilter(date);
+    if (date) {
+      setDateFilter(date);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Sync filters to URL
-  useEffect(() => {
-    const params: Record<string, string> = {};
-    if (filter) params.status = filter;
-    if (dateFilter) params.date = dateFilter;
-    setSearchParams(params, { replace: true });
-  }, [filter, dateFilter, setSearchParams]);
-
-  const loadData = async () => {
+  // STATE-DRIVEN DATA LOADING: Loads whenever filter or dateFilter changes
+  // No initialization gates - data loads immediately based on state
+  const loadData = useCallback(async () => {
     setIsLoading(true);
     try {
+      const activeFilter = filter || 'open';
+      
       const [reportsData, statsData] = await Promise.all([
-        adminModerationService.listReports(filter),
+        adminModerationService.listReports(activeFilter),
         adminModerationService.getStats()
       ]);
       
       let filteredReports = reportsData;
-      if (dateFilter) {
+      if (dateFilter && dateFilter.trim() !== '') {
           const d = new Date(dateFilter).toDateString();
           filteredReports = reportsData.filter(r => new Date(r.createdAt).toDateString() === d);
       }
@@ -81,17 +80,28 @@ export const AdminModerationPage: React.FC = () => {
       setStats(statsData);
       setErrorMessage(null);
     } catch (e: any) {
+      console.error('[AdminModeration] Error loading reports:', e);
       if (e.message !== 'Request cancelled') {
         setErrorMessage("Could not load reports. Please retry.");
       }
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [filter, dateFilter]);
 
+  // Load data whenever filter or dateFilter state changes
   useEffect(() => {
     loadData();
-  }, [filter, dateFilter]);
+  }, [loadData]);
+
+  // PASSIVE URL SYNC: Write-only side-effect that syncs state to URL
+  // Never reads from URL - only writes state changes to URL
+  useEffect(() => {
+    const params: Record<string, string> = {};
+    if (filter) params.status = filter;
+    if (dateFilter) params.date = dateFilter;
+    setSearchParams(params, { replace: true });
+  }, [filter, dateFilter, setSearchParams]);
 
   const executeResolution = async () => {
     if (!resolveTarget) return;

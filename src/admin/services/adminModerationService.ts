@@ -3,23 +3,25 @@ import { apiClient } from '@/services/apiClient';
 import { mapReportToAdminReport, RawReport } from './adminApiMappers';
 
 class AdminModerationService {
-  async listReports(filter?: 'open' | 'resolved' | 'dismissed'): Promise<AdminReport[]> {
-    // Build query params
+  async listReports(filter?: 'open' | 'resolved' | 'dismissed', cancelKey?: string): Promise<AdminReport[]> {
+    // Build query params - always send status, default to 'open'
     const params = new URLSearchParams();
-    if (filter) {
-      params.append('status', filter);
-    }
+    const statusFilter = filter || 'open'; // Default to 'open' if not provided
+    params.append('status', statusFilter);
     
     const queryString = params.toString();
-    const endpoint = `/moderation/reports${queryString ? `?${queryString}` : ''}`;
+    const endpoint = `/moderation/reports?${queryString}`;
     
-    const response = await apiClient.get<{ data: RawReport[] } | RawReport[]>(endpoint, undefined, 'adminModerationService.listReports');
+    // Use provided cancelKey or default to service method name
+    // This allows parallel requests (like in getStats) to use unique keys
+    const requestCancelKey = cancelKey || 'adminModerationService.listReports';
+    const response = await apiClient.get<{ data: RawReport[] } | RawReport[]>(endpoint, undefined, requestCancelKey);
     
     // Handle paginated response format { data: [...], total, ... } or direct array
     const reports = Array.isArray(response) ? response : (response.data || []);
     
     if (!Array.isArray(reports)) {
-      console.error('Expected reports array but got:', typeof reports);
+      console.error('[AdminModerationService] Expected reports array but got:', typeof reports, response);
       return [];
     }
     
@@ -34,11 +36,18 @@ class AdminModerationService {
   }
 
   async getStats(): Promise<{ open: number; resolved: number; dismissed: number }> {
-    const reports = await this.listReports();
+    // Fetch all statuses separately for accurate counts
+    // Use unique cancellation keys for each parallel request to prevent mutual cancellation
+    const [openReports, resolvedReports, dismissedReports] = await Promise.all([
+      this.listReports('open', 'adminModerationService.getStats.open'),
+      this.listReports('resolved', 'adminModerationService.getStats.resolved'),
+      this.listReports('dismissed', 'adminModerationService.getStats.dismissed')
+    ]);
+    
     return {
-      open: reports.filter(r => r.status === 'open').length,
-      resolved: reports.filter(r => r.status === 'resolved').length,
-      dismissed: reports.filter(r => r.status === 'dismissed').length,
+      open: openReports.length,
+      resolved: resolvedReports.length,
+      dismissed: dismissedReports.length,
     };
   }
 
