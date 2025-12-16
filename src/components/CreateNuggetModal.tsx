@@ -24,10 +24,13 @@ import { ContentEditor } from './CreateNuggetModal/ContentEditor';
 import { UrlInput } from './CreateNuggetModal/UrlInput';
 import { AttachmentManager, FileAttachment } from './CreateNuggetModal/AttachmentManager';
 import { FormFooter } from './CreateNuggetModal/FormFooter';
+import type { Article } from '@/types';
 
 interface CreateNuggetModalProps {
   isOpen: boolean;
   onClose: () => void;
+  mode?: 'create' | 'edit';
+  initialData?: Article;
 }
 
 // FileAttachment is now imported from AttachmentManager
@@ -35,12 +38,15 @@ interface CreateNuggetModalProps {
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB (before compression)
 const MAX_FILE_SIZE_AFTER_COMPRESSION = 500 * 1024; // 500KB (after compression)
 
-export const CreateNuggetModal: React.FC<CreateNuggetModalProps> = ({ isOpen, onClose }) => {
+export const CreateNuggetModal: React.FC<CreateNuggetModalProps> = ({ isOpen, onClose, mode = 'create', initialData }) => {
   // Auth
   const { currentUser, currentUserId, isAdmin } = useAuth();
   const authorName = currentUser?.name || 'User';
   const navigate = useNavigate();
   const toast = useToast();
+  
+  // Ref to track if form has been initialized from initialData (prevents re-initialization)
+  const initializedFromDataRef = useRef<string | null>(null);
 
   // Content State
   const [title, setTitle] = useState('');
@@ -102,11 +108,39 @@ export const CreateNuggetModal: React.FC<CreateNuggetModalProps> = ({ isOpen, on
     if (isOpen) {
       loadData();
       document.body.style.overflow = 'hidden';
+      
+      // Initialize form from initialData when in edit mode (only once per nugget)
+      if (mode === 'edit' && initialData && initializedFromDataRef.current !== initialData.id) {
+        setTitle(initialData.title || '');
+        setContent(initialData.content || '');
+        setCategories(initialData.categories || []);
+        setVisibility(initialData.visibility || 'public');
+        
+        // Extract URLs from media
+        const urlFromMedia = initialData.media?.url || initialData.media?.previewMetadata?.url;
+        if (urlFromMedia) {
+          setUrls([urlFromMedia]);
+          setDetectedLink(urlFromMedia);
+          if (initialData.media) {
+            setLinkMetadata(initialData.media);
+          }
+        } else {
+          setUrls([]);
+        }
+        
+        // Note: We don't pre-fill attachments or collections in edit mode
+        // as they require file objects and collection membership is separate
+        
+        initializedFromDataRef.current = initialData.id;
+      } else if (mode === 'create') {
+        // Reset initialization ref when switching to create mode
+        initializedFromDataRef.current = null;
+      }
     } else {
       document.body.style.overflow = 'unset';
     }
     return () => { document.body.style.overflow = 'unset'; };
-  }, [isOpen]);
+  }, [isOpen, mode, initialData]);
 
   // Focus trap and initial focus when modal opens
   useEffect(() => {
@@ -207,6 +241,8 @@ export const CreateNuggetModal: React.FC<CreateNuggetModalProps> = ({ isOpen, on
     setContentError(null);
     setTagsTouched(false);
     setContentTouched(false);
+    // Reset initialization ref
+    initializedFromDataRef.current = null;
   };
 
   const handleClose = () => {
@@ -623,6 +659,12 @@ export const CreateNuggetModal: React.FC<CreateNuggetModalProps> = ({ isOpen, on
         return;
     }
     
+    // Validate edit mode has initialData
+    if (mode === 'edit' && !initialData) {
+        setError("Cannot edit: nugget data is missing.");
+        return;
+    }
+    
     setIsSubmitting(true);
     setError(null);
     try {
@@ -633,6 +675,102 @@ export const CreateNuggetModal: React.FC<CreateNuggetModalProps> = ({ isOpen, on
         const wordCount = content.trim().split(/\s+/).length;
         const readTime = Math.max(1, Math.ceil(wordCount / 200));
 
+        // Handle edit mode - only update editable fields
+        if (mode === 'edit' && initialData) {
+            // Prepare update payload with only editable fields
+            const updatePayload: Partial<Article> = {
+                title: finalTitle,
+                content: content.trim() || '',
+                categories,
+                visibility,
+            };
+            
+            // Update excerpt if content changed
+            const excerptText = content.trim() || finalTitle || '';
+            updatePayload.excerpt = excerptText.length > 150 ? excerptText.substring(0, 150) + '...' : excerptText;
+            
+            // Handle URLs/media updates
+            const imageUrls: string[] = [];
+            const linkUrls: string[] = [];
+            
+            for (const url of urls) {
+                const urlType = detectProviderFromUrl(url);
+                if (urlType === 'image') {
+                    imageUrls.push(url);
+                } else {
+                    linkUrls.push(url);
+                }
+            }
+            
+            const primaryUrl = linkUrls.length > 0 ? linkUrls[0] : detectedLink;
+            
+            // Update media if URLs changed
+            if (linkMetadata || primaryUrl) {
+                updatePayload.media = linkMetadata ? {
+                    ...linkMetadata,
+                    previewMetadata: linkMetadata.previewMetadata ? {
+                        ...linkMetadata.previewMetadata,
+                        url: linkMetadata.previewMetadata.url || primaryUrl || '',
+                        siteName: customDomain || linkMetadata.previewMetadata.siteName,
+                    } : {
+                        url: primaryUrl || '',
+                        title: finalTitle,
+                        siteName: customDomain || undefined,
+                    }
+                } : (primaryUrl ? {
+                    type: detectProviderFromUrl(primaryUrl),
+                    url: primaryUrl,
+                    previewMetadata: {
+                        url: primaryUrl,
+                        title: finalTitle,
+                        siteName: customDomain || undefined,
+                    }
+                } : null);
+            }
+            
+            // Update images if image URLs were added
+            if (imageUrls.length > 0) {
+                const existingImages = initialData.images || [];
+                updatePayload.images = [...existingImages, ...imageUrls];
+            }
+            
+            // Call update
+            const updatedArticle = await storageService.updateArticle(initialData.id, updatePayload);
+            
+            if (!updatedArticle) {
+                throw new Error('Failed to update nugget');
+            }
+            
+            // Optimistically update query cache
+            queryClient.setQueryData(['articles'], (oldData: any) => {
+                if (!oldData) return oldData;
+                // Handle paginated response
+                if (oldData.data && Array.isArray(oldData.data)) {
+                    return {
+                        ...oldData,
+                        data: oldData.data.map((a: Article) => 
+                            a.id === updatedArticle.id ? updatedArticle : a
+                        )
+                    };
+                }
+                // Handle array response
+                if (Array.isArray(oldData)) {
+                    return oldData.map((a: Article) => 
+                        a.id === updatedArticle.id ? updatedArticle : a
+                    );
+                }
+                return oldData;
+            });
+            
+            // Also invalidate to ensure consistency
+            await queryClient.invalidateQueries({ queryKey: ['articles'] });
+            
+            toast.success('Nugget updated successfully');
+            handleClose();
+            return;
+        }
+        
+        // CREATE MODE (existing logic)
         const uploadedImages: string[] = [];
         const uploadedDocs: any[] = [];
 
@@ -797,7 +935,9 @@ export const CreateNuggetModal: React.FC<CreateNuggetModalProps> = ({ isOpen, on
         
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-3 border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 z-20 shrink-0">
-            <h2 id="modal-title" className="text-sm font-bold text-slate-900 dark:text-white">Create Nugget</h2>
+            <h2 id="modal-title" className="text-sm font-bold text-slate-900 dark:text-white">
+              {mode === 'edit' ? 'Edit Nugget' : 'Create Nugget'}
+            </h2>
             <button 
               onClick={handleClose} 
               aria-label="Close modal"
