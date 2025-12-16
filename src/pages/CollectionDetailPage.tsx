@@ -10,6 +10,7 @@ import { ArticleModal } from '@/components/ArticleModal';
 import { getCollectionTheme } from '@/constants/theme';
 import { ShareMenu } from '@/components/shared/ShareMenu';
 import { useAuth } from '@/hooks/useAuth';
+import { toSentenceCase } from '@/utils/formatters';
 
 export const CollectionDetailPage: React.FC = () => {
   const { collectionId } = useParams<{ collectionId: string }>();
@@ -115,7 +116,9 @@ export const CollectionDetailPage: React.FC = () => {
                         <Folder size={32} strokeWidth={1.5} />
                     </div>
                     <div>
-                        <h1 className="text-3xl font-bold text-white mb-2">{collection.name}</h1>
+                        <h1 className="text-3xl font-bold text-white mb-2">
+                          {toSentenceCase(collection.name)}
+                        </h1>
                         <p className="text-slate-400 max-w-2xl leading-relaxed">{collection.description || "No description provided."}</p>
                         <div className="flex items-center gap-6 mt-4 text-sm text-slate-400 font-medium">
                             <span className="flex items-center gap-1.5"><Layers size={16} /> {nuggets.length} nuggets</span>
@@ -129,7 +132,7 @@ export const CollectionDetailPage: React.FC = () => {
                         data={{
                             type: 'collection',
                             id: collection.id,
-                            title: collection.name,
+                            title: toSentenceCase(collection.name),
                             shareUrl: `${window.location.origin}/#/collections/${collection.id}`
                         }}
                         meta={{

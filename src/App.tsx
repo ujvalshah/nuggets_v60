@@ -3,7 +3,6 @@ import React, { useState, useEffect, Suspense, lazy } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { Header } from '@/components/Header';
 import { BackToTopButton } from '@/components/UI/BackToTopButton';
-import { FeedbackButton } from '@/components/UI/FeedbackButton';
 import { ToastContainer } from '@/components/UI/Toast';
 import { ToastProvider } from '@/context/ToastContext';
 import { AuthProvider } from '@/context/AuthContext';
@@ -125,7 +124,6 @@ const AppContent: React.FC = () => {
         </Routes>
       </Suspense>
       
-      <FeedbackButton />
       <BackToTopButton />
       <ToastContainer />
       

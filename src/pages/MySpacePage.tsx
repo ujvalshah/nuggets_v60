@@ -151,7 +151,7 @@ export const MySpacePage: React.FC<MySpacePageProps> = ({ currentUserId }) => {
   const publicCollections = safeCollections.filter(c => c.type === 'public');
   const privateFolders = safeCollections.filter(c => c.type === 'private');
 
-  // Hierarchy: Top Level Tabs
+  // Hierarchy: Top Level Tabs - Updated per requirements
   const tabs: { id: string; label: string; count?: number }[] = [
     { 
         id: 'nuggets', 
@@ -159,18 +159,16 @@ export const MySpacePage: React.FC<MySpacePageProps> = ({ currentUserId }) => {
         count: isOwner ? (publicNuggets.length + privateNuggets.length) : publicNuggets.length 
     },
     { 
+        id: 'bookmarks', 
+        label: 'Bookmarks', 
+        count: bookmarkedArticles.length 
+    },
+    { 
         id: 'collections', 
-        label: 'Collections', 
+        label: 'Community Collections', 
         count: publicCollections.length 
     },
   ];
-
-  if (isOwner) {
-    // Add Private Folders tab for owner
-    tabs.push({ id: 'folders', label: 'Folders', count: privateFolders.length });
-    // Add All Bookmarks tab for owner
-    tabs.push({ id: 'bookmarks', label: 'All Saved', count: bookmarkedArticles.length });
-  }
 
   const handleUpdateProfile = (updated: User) => setProfileUser(updated);
 
