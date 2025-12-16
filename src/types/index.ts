@@ -133,6 +133,7 @@ export interface Collection {
   createdAt: string;
   updatedAt?: string;
   followersCount: number;
+  followers?: string[]; // Array of userIds who follow this collection
   entries: CollectionEntry[];
   type: 'public' | 'private';
   

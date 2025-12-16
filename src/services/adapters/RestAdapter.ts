@@ -51,7 +51,7 @@ export class RestAdapter implements IAdapter {
       tags: article.tags || [],
       readTime: article.readTime,
       visibility: article.visibility || 'public',
-      publishedAt: article.publishedAt,
+      publishedAt: new Date().toISOString(), // Generate timestamp for new articles
       // Include additional fields that might be in the Article type
       ...(article.images && article.images.length > 0 && { images: article.images }),
       ...(article.documents && article.documents.length > 0 && { documents: article.documents }),
@@ -65,7 +65,29 @@ export class RestAdapter implements IAdapter {
   }
 
   updateArticle(id: string, updates: Partial<Article>): Promise<Article | null> {
-    return apiClient.put(`/articles/${id}`, updates);
+    // Transform Article format to backend API format
+    const payload: any = {};
+    
+    // Map editable fields
+    if (updates.title !== undefined) payload.title = updates.title;
+    if (updates.content !== undefined) payload.content = updates.content;
+    if (updates.excerpt !== undefined) payload.excerpt = updates.excerpt;
+    if (updates.categories !== undefined) {
+      payload.categories = updates.categories;
+      // Backend also requires category (singular) - use first category or 'General'
+      payload.category = updates.categories && updates.categories.length > 0 
+        ? updates.categories[0] 
+        : 'General';
+    }
+    if (updates.visibility !== undefined) payload.visibility = updates.visibility;
+    if (updates.media !== undefined) payload.media = updates.media;
+    if (updates.images !== undefined) payload.images = updates.images;
+    if (updates.documents !== undefined) payload.documents = updates.documents;
+    if (updates.source_type !== undefined) payload.source_type = updates.source_type;
+    if (updates.displayAuthor !== undefined) payload.displayAuthor = updates.displayAuthor;
+    
+    // Use PATCH for partial updates (more RESTful)
+    return apiClient.patch<Article>(`/articles/${id}`, payload);
   }
 
   deleteArticle(id: string): Promise<boolean> {
@@ -167,6 +189,14 @@ export class RestAdapter implements IAdapter {
 
   async flagEntryAsIrrelevant(collectionId: string, articleId: string, userId: string): Promise<void> {
     await apiClient.post(`/collections/${collectionId}/entries/${articleId}/flag`, { userId });
+  }
+
+  async followCollection(collectionId: string): Promise<void> {
+    await apiClient.post(`/collections/${collectionId}/follow`, {});
+  }
+
+  async unfollowCollection(collectionId: string): Promise<void> {
+    await apiClient.post(`/collections/${collectionId}/unfollow`, {});
   }
 }
 

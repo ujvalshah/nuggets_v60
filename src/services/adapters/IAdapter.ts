@@ -43,6 +43,8 @@ export interface IAdapter {
   addArticleToCollection(collectionId: string, articleId: string, userId: string): Promise<void>;
   removeArticleFromCollection(collectionId: string, articleId: string, userId: string): Promise<void>;
   flagEntryAsIrrelevant(collectionId: string, articleId: string, userId: string): Promise<void>;
+  followCollection(collectionId: string): Promise<void>;
+  unfollowCollection(collectionId: string): Promise<void>;
 }
 
 
