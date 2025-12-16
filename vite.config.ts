@@ -15,6 +15,9 @@ export default defineConfig(({ mode }) => {
       port: 3000,
       host: '0.0.0.0',
       proxy: {
+        // Proxy all /api/* requests to backend server
+        // This includes admin moderation routes: /api/moderation/reports, /api/admin/stats
+        // No conditional disabling - all admin routes use same proxy
         '/api': {
           target: 'http://localhost:5000',
           changeOrigin: true,

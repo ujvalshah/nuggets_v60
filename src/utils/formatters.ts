@@ -74,4 +74,28 @@ export const normalizeCategoryLabel = (input: string): string => {
   return `#${cleaned}`;
 };
 
+/**
+ * Converts a string to Sentence case (first letter uppercase, rest lowercase)
+ * Handles edge cases like "AI" staying as "AI"
+ */
+export const toSentenceCase = (input: string): string => {
+  if (!input) return '';
+  // Split by spaces and capitalize first letter of each word
+  return input
+    .split(' ')
+    .map((word, index) => {
+      if (index === 0) {
+        // First word: capitalize first letter, lowercase rest
+        return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+      } else {
+        // Subsequent words: lowercase unless it's an acronym (all caps)
+        if (word === word.toUpperCase() && word.length > 1) {
+          return word; // Keep acronyms as-is
+        }
+        return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+      }
+    })
+    .join(' ');
+};
+
 
