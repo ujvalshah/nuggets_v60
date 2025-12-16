@@ -75,61 +75,69 @@ export const UtilityVariant: React.FC<UtilityVariantProps> = ({
       role="article"
       aria-label={ariaLabel}
       tabIndex={0}
-      className="group relative flex flex-col bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm hover:shadow-lg hover:border-slate-300 dark:hover:border-slate-700 transition-all duration-300 w-full p-5 gap-4 h-full min-h-[400px] cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"
-      onClick={handlers.onClick}
+      className="group relative flex flex-col bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm hover:shadow-lg hover:border-slate-300 dark:hover:border-slate-700 transition-all duration-300 w-full p-5 gap-4 h-full min-h-[400px] focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"
       onKeyDown={handleKeyDown}
     >
-      {/* 1. Header Zone: Tags (Left) + Source Badge (Right) */}
-      <div className="flex justify-between items-start gap-2">
-        <div className="flex-1 min-w-0">
-          <CardTags
-            categories={data.categories}
-            onCategoryClick={handlers.onCategoryClick}
-            showTagPopover={showTagPopover}
-            onToggleTagPopover={handlers.onToggleTagPopover}
-            tagPopoverRef={tagPopoverRef}
-          />
+      {/* Card Body - Clickable area for opening drawer */}
+      <div 
+        className="flex flex-col flex-1 min-w-0 gap-4 cursor-pointer"
+        onClick={handlers.onClick}
+      >
+        {/* 1. Header Zone: Tags (Left) + Source Badge (Right) */}
+        <div className="flex justify-between items-start gap-2">
+          <div className="flex-1 min-w-0">
+            <CardTags
+              categories={data.categories}
+              onCategoryClick={handlers.onCategoryClick}
+              showTagPopover={showTagPopover}
+              onToggleTagPopover={handlers.onToggleTagPopover}
+              tagPopoverRef={tagPopoverRef}
+            />
+          </div>
+          {/* Source Badge - Right Side of Header */}
+          {!data.isTextNugget && data.sourceType === 'link' && (
+            <CardBadge
+              isTextNugget={data.isTextNugget}
+              sourceType={data.sourceType}
+              media={data.media}
+              variant="inline"
+              size="sm"
+            />
+          )}
         </div>
-        {/* Source Badge - Right Side of Header */}
-        {!data.isTextNugget && data.sourceType === 'link' && (
-          <CardBadge
+
+        {/* 2. Title */}
+        {data.shouldShowTitle && <CardTitle title={data.title} />}
+
+        {/* 3. Body/Content - flex-1 to take available space, pushing media to bottom */}
+        <div className="flex flex-col flex-1 min-w-0 gap-4">
+          <CardContent
+            excerpt={data.excerpt}
+            content={data.content}
             isTextNugget={data.isTextNugget}
-            sourceType={data.sourceType}
-            media={data.media}
-            variant="inline"
-            size="sm"
+            variant="utility"
+            allowExpansion={true}
           />
-        )}
+          
+          {/* 4. Media anchored to bottom for uniformity across cards */}
+          {data.hasMedia && (
+            <CardMedia
+              media={data.media}
+              images={data.images}
+              visibility={data.visibility}
+              onMediaClick={handlers.onMediaClick}
+              className="mt-auto rounded-lg shrink-0"
+              articleTitle={data.title}
+            />
+          )}
+        </div>
       </div>
 
-      {/* 2. Title */}
-      {data.shouldShowTitle && <CardTitle title={data.title} />}
-
-      {/* 3. Body/Content - flex-1 to take available space, pushing media to bottom */}
-      <div className="flex flex-col flex-1 min-w-0 gap-4">
-        <CardContent
-          excerpt={data.excerpt}
-          content={data.content}
-          isTextNugget={data.isTextNugget}
-          variant="utility"
-          allowExpansion={true}
-        />
-        
-        {/* 4. Media anchored to bottom for uniformity across cards */}
-        {data.hasMedia && (
-          <CardMedia
-            media={data.media}
-            images={data.images}
-            visibility={data.visibility}
-            onMediaClick={handlers.onMediaClick}
-            className="mt-auto rounded-lg shrink-0"
-            articleTitle={data.title}
-          />
-        )}
-      </div>
-
-      {/* Footer */}
-      <div className="pt-1.5 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between shrink-0">
+      {/* Footer - Actions only, must NOT open drawer */}
+      <div 
+        className="pt-1.5 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between shrink-0"
+        onClick={(e) => e.stopPropagation()}
+      >
         <CardMeta
           authorName={data.authorName}
           authorId={data.authorId}

@@ -46,10 +46,11 @@ export const NewsCard = forwardRef<HTMLDivElement, NewsCardProps>(
     const toast = useToast();
     const { currentUser } = useAuth();
 
-    // Call the logic hook
+    // Call the logic hook - pass isBookmarked state from parent
     const hookResult = useNewsCard({
       article,
       currentUserId,
+      isBookmarkedState: isBookmarked, // Pass the boolean bookmark state from parent
       onToggleBookmark,
       onCategoryClick,
       onTagClick,

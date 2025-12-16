@@ -72,6 +72,7 @@ export interface NewsCardLogic {
 interface UseNewsCardProps {
   article: Article;
   currentUserId?: string;
+  isBookmarkedState?: boolean; // Accept bookmark state from parent (boolean)
   onToggleBookmark?: (id: string) => void;
   onCategoryClick?: (category: string) => void;
   onTagClick?: (tag: string) => void;
@@ -82,6 +83,7 @@ interface UseNewsCardProps {
 export const useNewsCard = ({
   article,
   currentUserId,
+  isBookmarkedState,
   onToggleBookmark,
   onCategoryClick,
   onTagClick,
@@ -92,7 +94,9 @@ export const useNewsCard = ({
   const toast = useToast();
   const { isAdmin = false } = useAuth(); // Phase 3: Default to false to ensure boolean type
   const { withAuth } = useRequireAuth();
-  const { isBookmarked, toggleBookmark } = useBookmarks();
+  
+  // Use parent's bookmark state if provided, otherwise fallback to local hook
+  const { isBookmarked: isBookmarkedLocal, toggleBookmark } = useBookmarks();
 
   // ────────────────────────────────────────
   // STATE
@@ -225,9 +229,10 @@ export const useNewsCard = ({
   // ────────────────────────────────────────
   // FLAGS
   // ────────────────────────────────────────
+  // Use parent's bookmark state if provided, otherwise use local hook
   const flags: NewsCardFlags = {
     isLiked: false, // TODO: Implement like functionality if needed
-    isSaved: isBookmarked(article.id),
+    isSaved: isBookmarkedState !== undefined ? isBookmarkedState : isBookmarkedLocal(article.id),
     isRead: false, // TODO: Implement read tracking if needed
   };
 
@@ -235,7 +240,6 @@ export const useNewsCard = ({
   // HANDLERS
   // ────────────────────────────────────────
   const handleSave = () => {
-    const bookmarkHandler = onToggleBookmark || toggleBookmark;
     const wasBookmarked = flags.isSaved;
 
     if (onToggleBookmark) {
@@ -332,9 +336,20 @@ export const useNewsCard = ({
     }
   };
 
+  const [showEditModal, setShowEditModal] = useState(false);
+
   const handleEdit = () => {
-    toast.info('Edit coming soon');
+    setShowEditModal(true);
     setShowMenu(false);
+  };
+
+  const handleOpenDetails = () => {
+    // Open Article Details drawer (same as clicking the card)
+    if (onClick) {
+      onClick(article);
+    } else {
+      setShowFullModal(true);
+    }
   };
 
   const handleReport = () => {
@@ -401,11 +416,17 @@ export const useNewsCard = ({
         onReadMore: () => setShowFullModal(true),
       };
 
+  // Add onOpenDetails to handlers
+  const handlersWithDetails: NewsCardHandlers & { onOpenDetails?: () => void } = {
+    ...handlers,
+    onOpenDetails: handleOpenDetails,
+  };
+
   return {
     logic: {
       data,
       flags,
-      handlers,
+      handlers: handlersWithDetails,
     },
     // Modal state and refs (used by Controller for rendering modals)
     modals: {
@@ -416,11 +437,13 @@ export const useNewsCard = ({
       lightboxInitialIndex,
       showMenu,
       showTagPopover,
+      showEditModal,
       setShowCollection,
       setShowReport,
       setShowFullModal,
       setShowLightbox,
       setLightboxInitialIndex,
+      setShowEditModal,
       collectionMode,
       setCollectionMode,
       collectionAnchor,
