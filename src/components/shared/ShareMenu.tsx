@@ -18,9 +18,12 @@ interface ShareMenuProps {
 export const ShareMenu: React.FC<ShareMenuProps> = ({ 
   data, 
   className = '',
-  iconSize = 14 
+  iconSize = 14
 }) => {
-  const handleShare = async () => {
+  const handleShare = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    
+    // Perform share action only - never open drawer
     if (navigator.share) {
       try {
         await navigator.share({

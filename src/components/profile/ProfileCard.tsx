@@ -105,9 +105,9 @@ export const ProfileCard: React.FC<ProfileCardProps> = ({ user, isOwner, nuggetC
   };
 
   return (
-    <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm sticky top-24 flex flex-col gap-6">
-      {/* 1. Avatar Section */}
-      <div className="relative w-24 h-24">
+    <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm sticky top-24 flex flex-col gap-6 items-center text-center">
+      {/* 1. Avatar Section - Centered */}
+      <div className="relative w-24 h-24 mx-auto">
         <div className="w-full h-full rounded-full bg-slate-100 dark:bg-slate-800 border-4 border-white dark:border-slate-900 shadow-lg flex items-center justify-center overflow-hidden">
             <Avatar name={formData.name} src={formData.avatarUrl} size="xl" className="w-full h-full text-3xl" />
         </div>
