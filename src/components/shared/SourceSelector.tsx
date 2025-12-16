@@ -35,21 +35,22 @@ export const SourceSelector: React.FC<SourceSelectorProps> = ({
   initialDomain,
   className,
 }) => {
-  const [isEditing, setIsEditing] = useState(false);
-  const [customInput, setCustomInput] = useState<string>('');
-
   // Extract domain from URL
   const parsedDomain = currentUrl ? extractDomain(currentUrl) : null;
 
   // Determine which domain to display (custom > parsed > null)
   const displayDomain = initialDomain || parsedDomain;
 
-  // Initialize custom input when entering edit mode
+  // Initialize editing state: start in edit mode if no domain is set
+  const [isEditing, setIsEditing] = useState(!displayDomain);
+  const [customInput, setCustomInput] = useState<string>(initialDomain || parsedDomain || '');
+
+  // Initialize custom input when entering edit mode or when domain changes
   useEffect(() => {
-    if (isEditing) {
+    if (isEditing || !displayDomain) {
       setCustomInput(initialDomain || parsedDomain || '');
     }
-  }, [isEditing, initialDomain, parsedDomain]);
+  }, [isEditing, initialDomain, parsedDomain, displayDomain]);
 
   const handleSave = () => {
     const trimmed = customInput.trim();
@@ -72,23 +73,24 @@ export const SourceSelector: React.FC<SourceSelectorProps> = ({
     }
   };
 
-  // Don't render if no URL is detected
-  if (!currentUrl) {
-    return null;
-  }
+  // Determine label based on whether we have a detected URL
+  const labelText = currentUrl && parsedDomain ? 'Detected Source' : 'Source';
+
+  // Show edit mode if explicitly editing, or if no domain is set (allows manual entry)
+  const showEditMode = isEditing || !displayDomain;
 
   return (
     <div className={twMerge('flex flex-col gap-2', className)}>
       {/* Label */}
       <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-        Source & Favicon
+        {labelText}
       </label>
 
-      {/* View Mode */}
-      {!isEditing ? (
+      {/* View Mode - Show when we have a domain and not editing */}
+      {!showEditMode ? (
         <div className="flex items-center gap-2">
           <SourceBadge
-            url={currentUrl}
+            url={currentUrl || undefined}
             customDomain={initialDomain || undefined}
             size="md"
           />
@@ -102,7 +104,7 @@ export const SourceSelector: React.FC<SourceSelectorProps> = ({
           </button>
         </div>
       ) : (
-        /* Edit Mode */
+        /* Edit Mode - Show when editing or when no domain is set */
         <div className="flex items-center gap-2">
           <div className="flex-1 relative">
             <input
@@ -110,8 +112,8 @@ export const SourceSelector: React.FC<SourceSelectorProps> = ({
               value={customInput}
               onChange={(e) => setCustomInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Domain for favicon (e.g. ft.com)"
-              autoFocus
+              placeholder="Source domain (e.g. ft.com)"
+              autoFocus={showEditMode}
               className="w-full h-8 px-3 text-sm bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent text-slate-900 dark:text-white placeholder-slate-400"
             />
           </div>
@@ -123,14 +125,16 @@ export const SourceSelector: React.FC<SourceSelectorProps> = ({
           >
             <Check size={16} />
           </button>
-          <button
-            onClick={handleCancel}
-            className="p-1.5 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition-colors"
-            title="Cancel"
-            aria-label="Cancel editing"
-          >
-            <X size={16} />
-          </button>
+          {displayDomain && (
+            <button
+              onClick={handleCancel}
+              className="p-1.5 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition-colors"
+              title="Cancel"
+              aria-label="Cancel editing"
+            >
+              <X size={16} />
+            </button>
+          )}
         </div>
       )}
     </div>

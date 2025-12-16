@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { X, Globe, Lock, Loader2 } from 'lucide-react';
 import { getInitials } from '@/utils/formatters';
 import { storageService } from '@/services/storageService';
-import { detectProviderFromUrl, shouldFetchMetadata } from '@/utils/urlUtils';
+import { detectProviderFromUrl, shouldFetchMetadata, shouldAutoGenerateTitle } from '@/utils/urlUtils';
 import { queryClient } from '@/queryClient';
 import { GenericLinkPreview } from './embeds/GenericLinkPreview';
 import { Collection } from '@/types';
@@ -237,18 +237,26 @@ export const CreateNuggetModal: React.FC<CreateNuggetModalProps> = ({ isOpen, on
             if (metadata) {
               setLinkMetadata(metadata);
               
-              // Auto-fill title from metadata if title is empty
-              // Skip titles that look like domains or URLs (bad metadata)
+              // Auto-fill title from metadata ONLY for Social/Video content types
+              // CRITICAL: Never auto-generate titles for news sites, articles, blogs, etc.
               setTitle(prevTitle => {
+                // Only proceed if title is empty AND content type allows auto-title generation
                 if (!prevTitle.trim() && metadata.previewMetadata?.title) {
-                  const metaTitle = metadata.previewMetadata.title.trim();
-                  // Skip if title is just a domain or URL pattern
-                  const isBadTitle = metaTitle.match(/^(https?:\/\/|www\.|Content from|content from)/i) ||
-                                    metaTitle.match(/^[a-z0-9-]+\.[a-z]{2,}$/i) || // Just domain
-                                    metaTitle.length < 3; // Too short
-                  if (!isBadTitle) {
-                    return metaTitle;
+                  // Check if this URL allows auto-title generation (Social/Video only)
+                  const urlForCheck = firstLinkUrl || metadata.url || '';
+                  
+                  // Only auto-fill if it's a Social or Video platform
+                  if (shouldAutoGenerateTitle(urlForCheck)) {
+                    const metaTitle = metadata.previewMetadata.title.trim();
+                    // Skip if title is just a domain or URL pattern
+                    const isBadTitle = metaTitle.match(/^(https?:\/\/|www\.|Content from|content from)/i) ||
+                                      metaTitle.match(/^[a-z0-9-]+\.[a-z]{2,}$/i) || // Just domain
+                                      metaTitle.length < 3; // Too short
+                    if (!isBadTitle) {
+                      return metaTitle;
+                    }
                   }
+                  // For non-Social/Video content types, leave title empty (user must provide)
                 }
                 return prevTitle;
               });
@@ -618,18 +626,10 @@ export const CreateNuggetModal: React.FC<CreateNuggetModalProps> = ({ isOpen, on
     setIsSubmitting(true);
     setError(null);
     try {
-        // Use provided title or derive from content, or fallback
-        // Avoid auto-filling bad titles from metadata (like "Content from images.ctfassets.net")
-        let derivedTitle = '';
-        if (!title.trim()) {
-            const firstLine = content.split('\n')[0].replace(/\*\*/g, '').trim();
-            // Check if first line looks like a good title (not just a URL or domain)
-            if (firstLine && firstLine.length > 0 && !firstLine.match(/^(https?:\/\/|www\.|[a-z0-9-]+\.[a-z]{2,})/i)) {
-                derivedTitle = firstLine.substring(0, 80).trim();
-            }
-        }
-        
-        const finalTitle = title.trim() || derivedTitle || 'Untitled Nugget';
+        // CRITICAL: Do NOT derive titles from content for text-only nuggets
+        // Auto-title generation is STRICTLY LIMITED to Social/Video content types
+        // Text-only nuggets must have user-provided titles or use "Untitled Nugget" fallback
+        const finalTitle = title.trim() || 'Untitled Nugget';
         const wordCount = content.trim().split(/\s+/).length;
         const readTime = Math.max(1, Math.ceil(wordCount / 200));
 
@@ -689,6 +689,7 @@ export const CreateNuggetModal: React.FC<CreateNuggetModalProps> = ({ isOpen, on
             visibility,
             // Store multiple URLs in a custom field if supported, or use first URL for media
             // For now, using first URL for media compatibility
+            // Also create media object for text nuggets if customDomain is set (for source badge display)
             media: linkMetadata ? {
                 ...linkMetadata,
                 previewMetadata: linkMetadata.previewMetadata ? {
@@ -708,7 +709,16 @@ export const CreateNuggetModal: React.FC<CreateNuggetModalProps> = ({ isOpen, on
                     title: finalTitle,
                     siteName: customDomain || undefined,
                 }
-            } : null),
+            } : (customDomain ? {
+                // For text nuggets with custom domain, create minimal media object for source badge
+                type: 'link' as const,
+                url: `https://${customDomain}`,
+                previewMetadata: {
+                    url: `https://${customDomain}`,
+                    title: finalTitle,
+                    siteName: customDomain,
+                }
+            } : null)),
             source_type: (primaryUrl || imageUrls.length > 0) ? 'link' : 'text',
             // Store additional URLs in content or a notes field if needed
             // For now, we'll append URLs to content if they're not already there
@@ -978,18 +988,15 @@ export const CreateNuggetModal: React.FC<CreateNuggetModalProps> = ({ isOpen, on
                     onErrorChange={setContentError}
                 />
 
-                {/* Source Selector - Show when link URL is added (not image URLs) */}
-                {(() => {
-                    // Get first non-image URL for source selector
-                    const linkUrl = urls.find(url => detectProviderFromUrl(url) !== 'image') || detectedLink;
-                    return linkUrl ? (
-                        <SourceSelector
-                            currentUrl={linkUrl}
-                            onDomainChange={setCustomDomain}
-                            initialDomain={customDomain}
-                        />
-                    ) : null;
-                })()}
+                {/* Source Selector - Always visible for manual favicon/domain entry */}
+                {/* TEMPORARILY DISABLED: Hide favicon selector */}
+                {false && (
+                    <SourceSelector
+                        currentUrl={urls.find(url => detectProviderFromUrl(url) !== 'image') || detectedLink || null}
+                        onDomainChange={setCustomDomain}
+                        initialDomain={customDomain}
+                    />
+                )}
 
                 {/* Attachments Preview */}
                 {/* Upload Progress Indicator */}
@@ -1093,7 +1100,8 @@ export const CreateNuggetModal: React.FC<CreateNuggetModalProps> = ({ isOpen, on
                                         <X size={12} />
                                     </button>
                                     {/* Source Badge Preview - Shows in real-time */}
-                                    {!hasMultipleLinks && (
+                                    {/* TEMPORARILY DISABLED: Hide favicon preview */}
+                                    {false && !hasMultipleLinks && (
                                         <div className="absolute top-2 left-2 z-10">
                                             <SourceBadge
                                                 url={primaryLinkUrl || ''}

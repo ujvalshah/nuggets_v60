@@ -278,10 +278,13 @@ export const useNewsCard = ({
   };
 
   const handleClick = () => {
-    // Clicking on title/body opens article detail drawer
-    setShowFullModal(true);
+    // If parent provides onClick handler, let it handle opening the modal
+    // Otherwise, open the internal modal
     if (onClick) {
       onClick(article);
+    } else {
+      // Only open internal modal if no parent handler is provided
+      setShowFullModal(true);
     }
   };
 

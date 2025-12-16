@@ -62,6 +62,7 @@ export const ArticleModal: React.FC<ArticleModalProps> = ({
           flex flex-col border-l border-slate-200 dark:border-slate-800
           animate-in slide-in-from-right duration-300 ease-out
         "
+        onClick={(e) => e.stopPropagation()}
       >
         <div className="flex-1 overflow-y-auto custom-scrollbar bg-white dark:bg-slate-950 relative h-full">
             <ArticleDetail 

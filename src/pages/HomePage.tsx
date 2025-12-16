@@ -1,11 +1,13 @@
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Article, SortOrder, Collection } from '@/types';
 import { useBookmarks } from '@/hooks/useBookmarks';
 import { useArticles } from '@/hooks/useArticles';
 import { Loader2, AlertCircle, TrendingUp, Folder, Hash } from 'lucide-react';
 import { ArticleModal } from '@/components/ArticleModal';
 import { ArticleGrid } from '@/components/ArticleGrid';
+import { Feed } from '@/components/Feed';
+import { CategoryFilterBar } from '@/components/header/CategoryFilterBar';
 import { storageService } from '@/services/storageService';
 import { Badge } from '@/components/UI/Badge';
 import { useAuth } from '@/hooks/useAuth';
@@ -82,14 +84,65 @@ export const HomePage: React.FC<HomePageProps> = ({
     };
   }, []);
 
-  const { articles = [], query } = useArticles({
+  const { articles: allArticles = [], query } = useArticles({
     searchQuery,
-    selectedCategories,
+    selectedCategories: selectedCategories.length > 0 && selectedCategories[0] !== 'Today' ? selectedCategories : [],
     selectedTag,
     sortOrder,
     userId: currentUserId,
     limit: 25 // Increased from 6 to show more nuggets on homepage
   });
+
+  // Calculate category counts from articles
+  const categoriesWithCounts = useMemo(() => {
+    const categoryCountMap = new Map<string, number>();
+    
+    allArticles.forEach(article => {
+      article.categories?.forEach(cat => {
+        const count = categoryCountMap.get(cat) || 0;
+        categoryCountMap.set(cat, count + 1);
+      });
+    });
+
+    return Array.from(categoryCountMap.entries()).map(([label, count]) => ({
+      id: label.toLowerCase().replace(/\s+/g, '-'),
+      label,
+      count,
+    }));
+  }, [allArticles]);
+
+  // Determine active category from selectedCategories
+  const activeCategory = useMemo(() => {
+    if (selectedCategories.length === 0) return 'All';
+    if (selectedCategories.includes('Today')) return 'Today';
+    return selectedCategories[0] || 'All';
+  }, [selectedCategories]);
+
+  // Handle "Today" filtering client-side
+  const articles = useMemo(() => {
+    if (activeCategory === 'Today') {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const todayEnd = new Date(today);
+      todayEnd.setHours(23, 59, 59, 999);
+      
+      return allArticles.filter(article => {
+        const publishedDate = new Date(article.publishedAt);
+        return publishedDate >= today && publishedDate <= todayEnd;
+      });
+    }
+    return allArticles;
+  }, [allArticles, activeCategory]);
+
+  // Handle category selection from CategoryFilterBar
+  const handleCategorySelect = (categoryLabel: string) => {
+    if (categoryLabel === 'All') {
+      setSelectedCategories([]);
+    } else {
+      // Single-select pattern: replace array with single category
+      setSelectedCategories([categoryLabel]);
+    }
+  };
 
   const handleRefreshFeed = async () => {
       window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -154,6 +207,13 @@ export const HomePage: React.FC<HomePageProps> = ({
 
       <div className="w-full transition-transform duration-300 ease-out origin-top" style={{ transform: `translateY(${pullY}px)` }}>
         
+        {/* Category Filter Bar - Triage Controller */}
+        <CategoryFilterBar
+          categories={categoriesWithCounts}
+          activeCategory={activeCategory}
+          onSelect={handleCategorySelect}
+        />
+        
         {/* Holy Grail Layout for Feed View */}
         {viewMode === 'feed' ? (
             <div className="max-w-[1800px] mx-auto px-4 sm:px-6 lg:px-8 py-6 grid grid-cols-1 md:grid-cols-12 gap-6 lg:gap-8 items-start">
@@ -195,18 +255,17 @@ export const HomePage: React.FC<HomePageProps> = ({
                 </div>
 
                 {/* Center: Feed */}
+                {/* Phase 3 Complete: Feed uses unified useInfiniteArticles hook with React Query */}
                 <div className="md:col-span-9 lg:col-span-6 w-full mx-auto">
-                    <ArticleGrid 
-                        articles={articles}
-                        viewMode="feed" // Forces full width single column
-                        isLoading={query.isLoading}
+                    <Feed
+                        activeCategory={activeCategory}
+                        searchQuery={searchQuery}
+                        sortOrder={sortOrder}
                         onArticleClick={setSelectedArticle}
                         isBookmarked={isBookmarked}
                         onToggleBookmark={toggleBookmark}
+                        onCategoryClick={toggleCategory}
                         onTagClick={(t) => setSelectedTag(t)}
-                        onCategoryClick={(c) => toggleCategory(c)}
-                        emptyTitle="No nuggets found"
-                        emptyMessage="We couldn't find any nuggets matching your filters."
                         currentUserId={currentUserId}
                     />
                 </div>
