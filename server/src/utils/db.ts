@@ -152,7 +152,7 @@ export function normalizeDoc(doc: any): any {
     return transformArticle(doc);
   }
   
-  // Handle other documents (User, Collection, etc.)
+  // Handle other documents (User, Collection, Report, etc.)
   if (doc.toObject) {
     const obj = doc.toObject();
     const { _id, __v, ...rest } = obj;

@@ -4,6 +4,7 @@ import { Article } from '../models/Article.js';
 import { Report } from '../models/Report.js';
 import { Feedback } from '../models/Feedback.js';
 import { LRUCache } from '../utils/lruCache.js';
+import { buildModerationQuery, getModerationStats } from '../services/moderationService.js';
 
 // Short-lived cache to avoid hammering the database
 // Cache up to 10 entries for 2 minutes each
@@ -24,7 +25,7 @@ export async function getAdminStats(req: Request, res: Response) {
     userAgg,
     articleAgg,
     flaggedNuggetsAgg,
-    reportsAgg,
+    moderationStats,
     feedbackAgg
   ] = await Promise.all([
     // User stats
@@ -83,21 +84,16 @@ export async function getAdminStats(req: Request, res: Response) {
     ]),
 
     // Flagged nuggets (unique targetIds with open reports)
+    // Use shared query builder for consistency
     Report.aggregate([
-      { $match: { targetType: 'nugget', status: 'open' } },
+      { $match: buildModerationQuery({ status: 'open', targetType: 'nugget' }) },
       { $group: { _id: '$targetId' } },
       { $count: 'flagged' }
     ]),
 
     // Moderation stats by status
-    Report.aggregate([
-      {
-        $group: {
-          _id: '$status',
-          count: { $sum: 1 }
-        }
-      }
-    ]),
+    // Use shared query builder for consistency with moderation list endpoint
+    getModerationStats(),
 
     // Feedback stats by status
     Feedback.aggregate([
@@ -114,13 +110,16 @@ export async function getAdminStats(req: Request, res: Response) {
   const articleStatsRaw = articleAgg[0] || { total: 0, public: 0, private: 0 };
   const flaggedNuggets = flaggedNuggetsAgg[0]?.flagged || 0;
 
-  const moderationStats = reportsAgg.reduce(
-    (acc: Record<string, number>, item: any) => {
-      acc[item._id] = item.count;
-      return acc;
-    },
-    { open: 0, resolved: 0, dismissed: 0 }
-  );
+  // Moderation stats already in correct format from getModerationStats()
+  // TEMPORARY: Log query for debugging
+  if (process.env.NODE_ENV === 'development') {
+    console.log('[ModerationQuery] Dashboard stats query:');
+    console.log('[ModerationQuery] Collection: reports');
+    console.log('[ModerationQuery] Open query:', JSON.stringify(buildModerationQuery({ status: 'open' }), null, 2));
+    console.log('[ModerationQuery] Resolved query:', JSON.stringify(buildModerationQuery({ status: 'resolved' }), null, 2));
+    console.log('[ModerationQuery] Dismissed query:', JSON.stringify(buildModerationQuery({ status: 'dismissed' }), null, 2));
+    console.log('[ModerationQuery] Stats result:', moderationStats);
+  }
 
   const feedbackStats = feedbackAgg.reduce(
     (acc: Record<string, number>, item: any) => {
@@ -166,4 +165,5 @@ export async function getAdminStats(req: Request, res: Response) {
 
   return res.json(response);
 }
+
 

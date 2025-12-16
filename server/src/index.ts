@@ -130,6 +130,12 @@ async function startServer() {
     // Connect to MongoDB
     await connectDB();
     
+    // Log database connection info (masked for security)
+    const dbName = mongoose.connection.db?.databaseName || 'unknown';
+    const env = process.env.NODE_ENV || 'development';
+    console.log(`[Server] Database: ${dbName}`);
+    console.log(`[Server] Environment: ${env}`);
+    
     // Seed database if empty
     // TEMPORARILY DISABLED: Seeding is disabled. Re-enable by uncommenting the line below when needed.
     // await seedDatabase();
@@ -137,7 +143,7 @@ async function startServer() {
     // Start server and store reference for graceful shutdown
     server = app.listen(PORT, () => {
       console.log(`[Server] ✓ Running on port ${PORT}`);
-      console.log(`[Server] Environment: ${process.env.NODE_ENV || 'development'}`);
+      console.log(`[Server] Environment: ${env}`);
       console.log(`[Server] Compression: Enabled`);
       console.log(`[Server] Graceful Shutdown: Enabled`);
     });

@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { Report } from '../models/Report.js';
 import { normalizeDoc, normalizeDocs } from '../utils/db.js';
 import { z } from 'zod';
+import { buildModerationQuery } from '../services/moderationService.js';
 
 // Validation schemas
 const createReportSchema = z.object({
@@ -34,26 +35,19 @@ export const getReports = async (req: Request, res: Response) => {
     const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 25, 1), 100);
     const skip = (page - 1) * limit;
     
-    // Build query
-    const query: any = {};
-    if (status) {
-      query.status = status;
-    }
-    if (targetType) {
-      query.targetType = targetType;
-    }
-    if (targetId) {
-      query.targetId = targetId;
-    }
-    if (q && typeof q === 'string' && q.trim().length > 0) {
-      const regex = new RegExp(q.trim(), 'i');
-      query.$or = [
-        { reason: regex },
-        { description: regex },
-        { 'reporter.name': regex },
-        { 'respondent.name': regex },
-        { targetId: regex }
-      ];
+    // Use shared query builder - ensures consistency with stats endpoint
+    const query = buildModerationQuery({
+      status: status as 'open' | 'resolved' | 'dismissed' | undefined,
+      targetType: targetType as 'nugget' | 'user' | 'collection' | undefined,
+      targetId: targetId as string | undefined,
+      searchQuery: q as string | undefined
+    });
+    
+    // TEMPORARY: Log final query for debugging (remove after verification)
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[ModerationQuery] Collection: reports');
+      console.log('[ModerationQuery] Query:', JSON.stringify(query, null, 2));
+      console.log('[ModerationQuery] Status value:', query.status);
     }
     
     const [reports, total] = await Promise.all([
@@ -64,8 +58,19 @@ export const getReports = async (req: Request, res: Response) => {
       Report.countDocuments(query)
     ]);
     
+    // Normalize reports - ensure all fields are properly converted
+    const normalizedReports = normalizeDocs(reports);
+    
+    // Debug logging (remove in production if not needed)
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`[Moderation] Found ${reports.length} reports (total: ${total}) with query:`, query);
+      if (reports.length > 0) {
+        console.log(`[Moderation] First report status:`, reports[0]?.status);
+      }
+    }
+    
     res.json({
-      data: normalizeDocs(reports),
+      data: normalizedReports,
       total,
       page,
       limit,
@@ -92,13 +97,28 @@ export const createReport = async (req: Request, res: Response) => {
       });
     }
 
-    const { id, ...reportData } = validationResult.data; // Remove id if present (let MongoDB generate _id)
+    // Remove id if present (let MongoDB generate _id)
+    const reportData = validationResult.data;
+    if ('id' in reportData) {
+      delete (reportData as any).id;
+    }
     
-    // Create new report
+    // Create new report - explicitly set status to 'open'
     const newReport = await Report.create({
       ...reportData,
       status: 'open'
     });
+    
+    // Debug logging (remove in production if not needed)
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`[Moderation] Created report:`, {
+        id: newReport._id?.toString(),
+        targetId: newReport.targetId,
+        targetType: newReport.targetType,
+        status: newReport.status,
+        reason: newReport.reason
+      });
+    }
     
     res.status(201).json(normalizeDoc(newReport));
   } catch (error: any) {
@@ -140,3 +160,4 @@ export const resolveReport = async (req: Request, res: Response) => {
     res.status(500).json({ message: 'Internal server error' });
   }
 };
+
