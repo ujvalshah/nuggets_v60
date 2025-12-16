@@ -64,7 +64,8 @@ export const FeedVariant: React.FC<FeedVariantProps> = ({
           excerpt={data.excerpt}
           content={data.content}
           isTextNugget={data.isTextNugget}
-          variant="utility"
+          variant="feed"
+          allowExpansion={true}
         />
 
         {/* 5. Media anchored to bottom for uniformity across cards */}

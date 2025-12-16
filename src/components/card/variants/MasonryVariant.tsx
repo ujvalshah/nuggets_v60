@@ -73,6 +73,7 @@ export const MasonryVariant: React.FC<MasonryVariantProps> = ({
           content={data.content}
           isTextNugget={data.isTextNugget}
           variant="masonry"
+          allowExpansion={true}
         />
 
         <div className="mt-auto pt-1 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between shrink-0">

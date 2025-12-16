@@ -146,15 +146,15 @@ export const CardContent: React.FC<CardContentProps> = React.memo(({
           {isCurrentlyTruncated ? (
             <button
               onClick={handleExpand}
-              className="text-xs font-medium text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 focus:outline-none focus:ring-2 focus:ring-primary-500 rounded px-1 py-0.5 transition-colors"
+              className="text-xs font-medium text-slate-500 dark:text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-300 dark:focus:ring-slate-600 rounded px-1 py-0.5 transition-colors"
               aria-label="Read more content"
             >
-              Read more
+              ...Read more
             </button>
           ) : (
             <button
               onClick={handleCollapse}
-              className="text-xs font-medium text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 focus:outline-none focus:ring-2 focus:ring-primary-500 rounded px-1 py-0.5 transition-colors"
+              className="text-xs font-medium text-slate-500 dark:text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-300 dark:focus:ring-slate-600 rounded px-1 py-0.5 transition-colors"
               aria-label="Show less content"
             >
               Show less
