@@ -13,6 +13,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { toSentenceCase } from '@/utils/formatters';
 
 export const CollectionDetailPage: React.FC = () => {
+  // URL params are the single source of truth for selected collection
   const { collectionId } = useParams<{ collectionId: string }>();
   const navigate = useNavigate();
   const toast = useToast();
@@ -24,72 +25,109 @@ export const CollectionDetailPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [selectedArticle, setSelectedArticle] = useState<Article | null>(null);
 
+  // URL-driven fetching: collectionId from useParams is the ONLY fetch trigger
+  // Effect depends ONLY on collectionId to prevent render loops
   useEffect(() => {
-    if (collectionId) loadData(collectionId);
-  }, [collectionId]);
-
-  const loadData = async (id: string) => {
-    setIsLoading(true);
-    try {
-      // Fetch collection first
-      const col = await storageService.getCollectionById(id);
-      if (!col) { 
-        navigate('/collections'); 
-        return; 
-      }
-      
-      // Extract unique user IDs needed for contributor resolution
-      const uniqueUserIds = [...new Set(col.entries.map(entry => entry.addedByUserId))];
-      
-      // Fetch only required users in parallel
-      const userPromises = uniqueUserIds.map(userId => 
-        storageService.getUserById(userId).catch(() => undefined)
-      );
-      const users = await Promise.all(userPromises);
-      const userMap = new Map(users.filter((u): u is NonNullable<typeof u> => u !== undefined).map(u => [u.id, u]));
-
-      // Fetch specific articles in parallel using Promise.all
-      const articlePromises = col.entries.map(async (entry) => {
-        try {
-          const article = await storageService.getArticleById(entry.articleId);
-          if (!article) return null;
-          
-          // Inject addedBy data for display
-          const adder = userMap.get(entry.addedByUserId);
-          const contributor: Contributor | undefined = adder ? {
-              userId: adder.id,
-              name: adder.name,
-              username: adder.username || (adder.email ? adder.email.split('@')[0] : undefined), 
-              avatarUrl: adder.avatarUrl,
-              addedAt: entry.addedAt
-          } : undefined;
-
-          return {
-              ...article,
-              addedBy: contributor
-          };
-        } catch (error) {
-          // Handle case where article was deleted but entry still exists
-          console.warn(`Failed to fetch article ${entry.articleId}:`, error);
-          return null;
-        }
-      });
-
-      // Wait for all article fetches to complete and filter out nulls
-      const articleResults = await Promise.all(articlePromises);
-      const collectionNuggets = articleResults.filter((article): article is Article => article !== null);
-
-      setCollection(col);
-      setNuggets(collectionNuggets);
-    } catch (e) { 
-      console.error('Failed to load collection data:', e);
-      toast.error('Failed to load collection', {
-        description: 'Please try again later.'
-      });
-    } finally { 
-      setIsLoading(false); 
+    // If no collectionId in URL, redirect to collections page
+    if (!collectionId) {
+      navigate('/collections', { replace: true });
+      return;
     }
-  };
+
+    // Clear previous state when collectionId changes (prevents stale data)
+    setCollection(null);
+    setNuggets([]);
+    setIsLoading(true);
+    setSelectedArticle(null);
+
+    // Track if this effect is still valid (prevents race conditions)
+    let isMounted = true;
+
+    const loadData = async (id: string) => {
+      setIsLoading(true);
+      try {
+        // Fetch collection first
+        const col = await storageService.getCollectionById(id);
+        
+        // Check if component is still mounted and collectionId hasn't changed
+        if (!isMounted || collectionId !== id) return;
+        
+        if (!col) { 
+          navigate('/collections', { replace: true }); 
+          return; 
+        }
+        
+        // Extract unique user IDs needed for contributor resolution
+        const uniqueUserIds = [...new Set(col.entries.map(entry => entry.addedByUserId))];
+        
+        // Fetch only required users in parallel
+        const userPromises = uniqueUserIds.map(userId => 
+          storageService.getUserById(userId).catch(() => undefined)
+        );
+        const users = await Promise.all(userPromises);
+        const userMap = new Map(users.filter((u): u is NonNullable<typeof u> => u !== undefined).map(u => [u.id, u]));
+
+        // Fetch specific articles in parallel using Promise.all
+        const articlePromises = col.entries.map(async (entry) => {
+          try {
+            const article = await storageService.getArticleById(entry.articleId);
+            if (!article) return null;
+            
+            // Inject addedBy data for display
+            const adder = userMap.get(entry.addedByUserId);
+            const contributor: Contributor | undefined = adder ? {
+                userId: adder.id,
+                name: adder.name,
+                username: adder.username || (adder.email ? adder.email.split('@')[0] : undefined), 
+                avatarUrl: adder.avatarUrl,
+                addedAt: entry.addedAt
+            } : undefined;
+
+            return {
+                ...article,
+                addedBy: contributor
+            };
+          } catch (error) {
+            // Handle case where article was deleted but entry still exists
+            console.warn(`Failed to fetch article ${entry.articleId}:`, error);
+            return null;
+          }
+        });
+
+        // Wait for all article fetches to complete and filter out nulls
+        const articleResults = await Promise.all(articlePromises);
+        const collectionNuggets = articleResults.filter((article): article is Article => article !== null);
+
+        // Only update state if still mounted and collectionId hasn't changed
+        if (isMounted && collectionId === id) {
+          setCollection(col);
+          setNuggets(collectionNuggets);
+        }
+      } catch (e) { 
+        // Only show error if still mounted and collectionId hasn't changed
+        if (isMounted && collectionId === id) {
+          console.error('Failed to load collection data:', e);
+          toast.error('Failed to load collection', {
+            description: 'Please try again later.'
+          });
+        }
+      } finally { 
+        // Only update loading state if still mounted and collectionId hasn't changed
+        if (isMounted && collectionId === id) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    loadData(collectionId);
+
+    // Cleanup: mark as unmounted to prevent state updates after navigation
+    return () => {
+      isMounted = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [collectionId]); // Only collectionId triggers fetch - navigate and toast are stable and don't need to be in deps
+
 
   const handleAddNugget = () => {
       toast.info("To add a nugget:", {

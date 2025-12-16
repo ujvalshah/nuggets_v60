@@ -1,9 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Collection } from '@/types';
 import { getCollectionTheme } from '@/constants/theme';
 import { Folder, Lock, Check, Plus, Layers, Users, ArrowRight } from 'lucide-react';
 import { ShareMenu } from '../shared/ShareMenu';
 import { toSentenceCase } from '@/utils/formatters';
+import { useAuth } from '@/hooks/useAuth';
+import { storageService } from '@/services/storageService';
+import { useToast } from '@/hooks/useToast';
 
 interface CollectionCardProps {
   collection: Collection;
@@ -12,6 +15,8 @@ interface CollectionCardProps {
   selectionMode?: boolean;
   isSelected?: boolean;
   onSelect?: (id: string) => void;
+  // Optional callback to update collection in parent state
+  onCollectionUpdate?: (updatedCollection: Collection) => void;
 }
 
 export const CollectionCard: React.FC<CollectionCardProps> = ({ 
@@ -19,16 +24,60 @@ export const CollectionCard: React.FC<CollectionCardProps> = ({
     onClick,
     selectionMode,
     isSelected,
-    onSelect
+    onSelect,
+    onCollectionUpdate
 }) => {
   const theme = getCollectionTheme(collection.id);
-  const [isFollowing, setIsFollowing] = useState(false);
+  const { currentUserId } = useAuth();
+  const toast = useToast();
+  const [isLoading, setIsLoading] = useState(false);
+  
+  // Derive isFollowing from backend data (collection.followers array)
+  const isFollowing = currentUserId ? (collection.followers || []).includes(currentUserId) : false;
   
   const isPrivate = collection.type === 'private';
 
-  const handleFollow = (e: React.MouseEvent) => {
+  const handleFollow = async (e: React.MouseEvent) => {
       e.stopPropagation();
-      setIsFollowing(!isFollowing);
+      if (!currentUserId || isLoading) return;
+
+      const wasFollowing = isFollowing;
+      const previousFollowersCount = collection.followersCount;
+      
+      // Optimistic update
+      const optimisticCollection: Collection = {
+          ...collection,
+          followers: wasFollowing 
+              ? (collection.followers || []).filter(id => id !== currentUserId)
+              : [...(collection.followers || []), currentUserId],
+          followersCount: wasFollowing 
+              ? Math.max(0, previousFollowersCount - 1)
+              : previousFollowersCount + 1
+      };
+      
+      if (onCollectionUpdate) {
+          onCollectionUpdate(optimisticCollection);
+      }
+
+      setIsLoading(true);
+      
+      try {
+          if (wasFollowing) {
+              await storageService.unfollowCollection(collection.id);
+          } else {
+              await storageService.followCollection(collection.id);
+          }
+          
+          // Success - optimistic update already applied
+      } catch (error: any) {
+          // Rollback on error
+          if (onCollectionUpdate) {
+              onCollectionUpdate(collection);
+          }
+          toast.error(`Failed to ${wasFollowing ? 'unfollow' : 'follow'} collection`);
+      } finally {
+          setIsLoading(false);
+      }
   };
 
   const handleCardClick = (e: React.MouseEvent) => {
@@ -72,15 +121,17 @@ export const CollectionCard: React.FC<CollectionCardProps> = ({
                 </div>
 
                 {/* Follow Button - Hide in selection mode & Hide for private folders (can't follow private) */}
-                {!selectionMode && !isPrivate && (
+                {!selectionMode && !isPrivate && currentUserId && (
                     <button 
                         onClick={handleFollow}
+                        disabled={isLoading}
                         className={`
                             flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg transition-all border
                             ${isFollowing 
                                 ? 'bg-green-50 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-900' 
                                 : 'bg-white text-slate-500 border-slate-200 hover:border-primary-300 hover:text-primary-700 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700'
                             }
+                            ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}
                         `}
                     >
                         {isFollowing ? (
@@ -119,7 +170,7 @@ export const CollectionCard: React.FC<CollectionCardProps> = ({
                 <div className="flex gap-4 text-xs font-medium text-slate-500 dark:text-slate-400">
                     <span className="flex items-center gap-1.5" title="Items"><Folder size={14} className="text-slate-400 dark:text-slate-500" /> {collection.entries.length}</span>
                     {!isPrivate && (
-                        <span className="flex items-center gap-1.5" title="Followers"><Users size={14} className="text-slate-400 dark:text-slate-500" /> {collection.followersCount + (isFollowing ? 1 : 0)}</span>
+                        <span className="flex items-center gap-1.5" title="Followers"><Users size={14} className="text-slate-400 dark:text-slate-500" /> {collection.followersCount}</span>
                     )}
                 </div>
                 

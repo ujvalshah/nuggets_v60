@@ -10,6 +10,8 @@ interface CollectionsGridProps {
   selectionMode?: boolean;
   selectedIds?: string[];
   onSelect?: (id: string) => void;
+  // Update callback
+  onCollectionUpdate?: (updatedCollection: Collection) => void;
 }
 
 export const CollectionsGrid: React.FC<CollectionsGridProps> = ({ 
@@ -17,7 +19,8 @@ export const CollectionsGrid: React.FC<CollectionsGridProps> = ({
     onCollectionClick,
     selectionMode = false,
     selectedIds = [],
-    onSelect
+    onSelect,
+    onCollectionUpdate
 }) => {
   if (collections.length === 0) {
     return (
@@ -38,6 +41,7 @@ export const CollectionsGrid: React.FC<CollectionsGridProps> = ({
             selectionMode={selectionMode}
             isSelected={selectedIds.includes(col.id)}
             onSelect={onSelect}
+            onCollectionUpdate={onCollectionUpdate}
         />
       ))}
     </div>

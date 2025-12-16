@@ -139,21 +139,56 @@ export const CollectionsPage: React.FC = () => {
       setSelectedIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
   };
 
-  const handleBulkFollow = (action: 'follow' | 'unfollow') => {
+  const handleBulkFollow = async (action: 'follow' | 'unfollow') => {
       if (selectedIds.length === 0) return;
       
+      // Store previous state for rollback
+      const previousCollections = [...collections];
+      
+      // Optimistic update
       setCollections(prev => prev.map(c => {
           if (selectedIds.includes(c.id)) {
               const change = action === 'follow' ? 1 : -1;
-              return { ...c, followersCount: Math.max(0, c.followersCount + change) };
+              const newFollowersCount = Math.max(0, c.followersCount + change);
+              return { 
+                  ...c, 
+                  followersCount: newFollowersCount,
+                  followers: action === 'follow' 
+                      ? [...(c.followers || []), 'temp'] // Temporary, will be updated by backend
+                      : (c.followers || []).slice(0, -1) // Remove last (optimistic)
+              };
           }
           return c;
       }));
 
-      toast.success(`${action === 'follow' ? 'Followed' : 'Unfollowed'} ${selectedIds.length} collections`);
-      setSelectionMode(false);
-      setSelectedIds([]);
-      setIsActionMenuOpen(false);
+      try {
+          // Parallel API calls
+          await Promise.all(
+              selectedIds.map(id => 
+                  action === 'follow' 
+                      ? storageService.followCollection(id)
+                      : storageService.unfollowCollection(id)
+              )
+          );
+          
+          // Reload collections to get accurate state from backend
+          await loadCollections();
+          
+          toast.success(`${action === 'follow' ? 'Followed' : 'Unfollowed'} ${selectedIds.length} collections`);
+          setSelectionMode(false);
+          setSelectedIds([]);
+          setIsActionMenuOpen(false);
+      } catch (error: any) {
+          // Rollback on error
+          setCollections(previousCollections);
+          toast.error(`Failed to ${action} collections`);
+      }
+  };
+
+  const handleCollectionUpdate = (updatedCollection: Collection) => {
+      setCollections(prev => prev.map(c => 
+          c.id === updatedCollection.id ? updatedCollection : c
+      ));
   };
 
   if (isLoading) return <div className="min-h-screen flex items-center justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500"></div></div>;
@@ -277,6 +312,7 @@ export const CollectionsPage: React.FC = () => {
                                 selectionMode={selectionMode}
                                 isSelected={selectedIds.includes(col.id)}
                                 onSelect={handleSelect}
+                                onCollectionUpdate={handleCollectionUpdate}
                             />
                         ))}
                     </div>
