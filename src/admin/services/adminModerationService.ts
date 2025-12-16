@@ -51,8 +51,24 @@ class AdminModerationService {
     };
   }
 
-  async resolveReport(id: string, resolution: 'resolved' | 'dismissed'): Promise<void> {
-    await apiClient.patch(`/moderation/reports/${id}/resolve`, { resolution });
+  async resolveReport(id: string, actionReason?: string): Promise<AdminReport> {
+    const response = await apiClient.post<{ data: RawReport } | RawReport>(
+      `/moderation/reports/${id}/resolve`,
+      { actionReason: actionReason || undefined }
+    );
+    // Handle both response formats: { data: RawReport } or RawReport
+    const report = (response as any).data || response as RawReport;
+    return mapReportToAdminReport(report);
+  }
+
+  async dismissReport(id: string, actionReason?: string): Promise<AdminReport> {
+    const response = await apiClient.post<{ data: RawReport } | RawReport>(
+      `/moderation/reports/${id}/dismiss`,
+      { actionReason: actionReason || undefined }
+    );
+    // Handle both response formats: { data: RawReport } or RawReport
+    const report = (response as any).data || response as RawReport;
+    return mapReportToAdminReport(report);
   }
 
   async submitReport(

@@ -38,6 +38,10 @@ interface AdminTableProps<T> {
   // Row Click Prop
   onRowClick?: (row: T) => void;
 
+  // Expanded Row Props
+  expandedRowId?: string | null;
+  expandedRowContent?: (row: T) => React.ReactNode;
+
   // Selection Props
   selection?: {
     selectedIds: string[];
@@ -66,6 +70,8 @@ export function AdminTable<T extends { id: string }>({
   sortDirection,
   onSortChange,
   onRowClick,
+  expandedRowId,
+  expandedRowContent,
   selection,
   emptyState,
   virtualized = false,
@@ -155,52 +161,63 @@ export function AdminTable<T extends { id: string }>({
 
   const renderRow = (row: T, index: number) => {
     const isSelected = selection?.selectedIds.includes(row.id);
+    const isExpanded = expandedRowId === row.id;
     return (
-      <tr 
-        key={row.id} 
-        onClick={() => onRowClick?.(row)}
-        onKeyDown={(e) => {
-          if (!onRowClick) return;
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            onRowClick(row);
-          }
-        }}
-        tabIndex={onRowClick ? 0 : -1}
-        role="row"
-        className={`
-            group border-b border-slate-50 dark:border-slate-800/50 last:border-0 transition-colors
-            ${onRowClick ? 'cursor-pointer' : ''}
-            ${isSelected ? 'bg-primary-50/50 dark:bg-primary-900/10' : 'hover:bg-slate-50/80 dark:hover:bg-slate-800/40'}
-            focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2
-        `}
-      >
-        {selection?.enabled && (
-          <td className={`px-4 py-3 w-10 sticky left-0 z-20 ${isSelected ? 'bg-primary-50/50 dark:bg-primary-900/10' : 'bg-white dark:bg-slate-900 group-hover:bg-slate-50/80 dark:group-hover:bg-slate-800/40'} shadow-[1px_0_5px_-2px_rgba(0,0,0,0.1)]`} onClick={e => e.stopPropagation()}>
-            <input 
-              type="checkbox" 
-              aria-label={`Select row ${row.id}`}
-              className="rounded border-slate-300 dark:border-slate-600 focus:ring-primary-500 focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 cursor-pointer"
-              checked={isSelected}
-              onChange={(e) => handleSelectRow(row.id, e.target.checked)}
-            />
-          </td>
-        )}
+      <>
+        <tr 
+          key={row.id} 
+          onClick={() => onRowClick?.(row)}
+          onKeyDown={(e) => {
+            if (!onRowClick) return;
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              onRowClick(row);
+            }
+          }}
+          tabIndex={onRowClick ? 0 : -1}
+          role="row"
+          className={`
+              group border-b border-slate-50 dark:border-slate-800/50 last:border-0 transition-colors
+              ${onRowClick ? 'cursor-pointer' : ''}
+              ${isSelected ? 'bg-primary-50/50 dark:bg-primary-900/10' : 'hover:bg-slate-50/80 dark:hover:bg-slate-800/40'}
+              ${isExpanded ? 'bg-slate-50 dark:bg-slate-800/60' : ''}
+              focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2
+          `}
+        >
+          {selection?.enabled && (
+            <td className={`px-4 py-3 w-10 sticky left-0 z-20 ${isSelected ? 'bg-primary-50/50 dark:bg-primary-900/10' : isExpanded ? 'bg-slate-50 dark:bg-slate-800/60' : 'bg-white dark:bg-slate-900 group-hover:bg-slate-50/80 dark:group-hover:bg-slate-800/40'} shadow-[1px_0_5px_-2px_rgba(0,0,0,0.1)]`} onClick={e => e.stopPropagation()}>
+              <input 
+                type="checkbox" 
+                aria-label={`Select row ${row.id}`}
+                className="rounded border-slate-300 dark:border-slate-600 focus:ring-primary-500 focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 cursor-pointer"
+                checked={isSelected}
+                onChange={(e) => handleSelectRow(row.id, e.target.checked)}
+              />
+            </td>
+          )}
 
-        {columns.map((col, colIdx) => (
-          <td 
-            key={`${row.id}-${col.key || colIdx}`} 
-            className={`
-              px-4 py-3 align-middle text-sm whitespace-nowrap
-              ${col.align === 'center' ? 'text-center' : col.align === 'right' ? 'text-right' : 'text-left'}
-              ${col.hideOnMobile ? 'hidden md:table-cell' : ''}
-              ${getStickyClass(col, false)}
-            `}
-          >
-            {col.render ? col.render(row, index) : (row as any)[col.key]}
-          </td>
-        ))}
-      </tr>
+          {columns.map((col, colIdx) => (
+            <td 
+              key={`${row.id}-${col.key || colIdx}`} 
+              className={`
+                px-4 py-3 align-middle text-sm whitespace-nowrap
+                ${col.align === 'center' ? 'text-center' : col.align === 'right' ? 'text-right' : 'text-left'}
+                ${col.hideOnMobile ? 'hidden md:table-cell' : ''}
+                ${getStickyClass(col, false)}
+              `}
+            >
+              {col.render ? col.render(row, index) : (row as any)[col.key]}
+            </td>
+          ))}
+        </tr>
+        {isExpanded && expandedRowContent && (
+          <tr key={`${row.id}-expanded`} className="border-b border-slate-50 dark:border-slate-800/50">
+            <td colSpan={columns.length + (selection?.enabled ? 1 : 0)} className="px-4 py-4 bg-slate-50/50 dark:bg-slate-800/30">
+              {expandedRowContent(row)}
+            </td>
+          </tr>
+        )}
+      </>
     );
   };
   
@@ -308,9 +325,15 @@ export function AdminTable<T extends { id: string }>({
                   <td style={{ padding: 0, margin: 0, border: 0, display: 'block', height: '100%', position: 'relative' }} colSpan={columns.length + (selection?.enabled ? 1 : 0)}>
                     {virtual.getVirtualItems().map((item) => {
                       const row = data[item.index];
-                      const rowElement = renderRow(row, item.index) as React.ReactElement<React.HTMLAttributes<HTMLTableRowElement>>;
-                      const rowProps = (rowElement.props || {}) as React.HTMLAttributes<HTMLTableRowElement>;
-                      const children = React.Children.toArray((rowElement.props as any)?.children || []);
+                      const isExpanded = expandedRowId === row.id;
+                      const rowElements = renderRow(row, item.index);
+                      const rows = React.Children.toArray(rowElements);
+                      const mainRow = rows[0] as React.ReactElement<React.HTMLAttributes<HTMLTableRowElement>>;
+                      const expandedRow = rows[1] as React.ReactElement<React.HTMLAttributes<HTMLTableRowElement>> | undefined;
+                      
+                      // Calculate height - expanded row needs more space
+                      const rowHeight = isExpanded && expandedRow ? item.size * 3 : item.size;
+                      
                       return (
                         <div
                           key={row.id}
@@ -319,16 +342,23 @@ export function AdminTable<T extends { id: string }>({
                             top: item.start,
                             left: 0,
                             width: '100%',
-                            height: item.size,
+                            height: rowHeight,
                             display: 'table',
                             tableLayout: 'fixed'
                           }}
                         >
                           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                             <tbody>
-                              <tr {...rowProps}>
-                                {children}
-                              </tr>
+                              {mainRow && (
+                                <tr {...(mainRow.props || {})}>
+                                  {React.Children.toArray(mainRow.props.children)}
+                                </tr>
+                              )}
+                              {isExpanded && expandedRow && (
+                                <tr {...(expandedRow.props || {})}>
+                                  {React.Children.toArray(expandedRow.props.children)}
+                                </tr>
+                              )}
                             </tbody>
                           </table>
                         </div>
