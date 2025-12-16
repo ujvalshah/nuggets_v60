@@ -18,6 +18,10 @@ export interface IReport extends Document {
   reporter: IReportReporter;
   respondent?: IReportRespondent;
   status: 'open' | 'resolved' | 'dismissed';
+  resolvedAt?: Date;
+  dismissedAt?: Date;
+  actionedBy?: string; // Admin user ID who performed the action
+  actionReason?: string; // Optional reason for the action
   createdAt: Date;
 }
 
@@ -53,7 +57,11 @@ const ReportSchema = new Schema<IReport>({
     enum: ['open', 'resolved', 'dismissed'], 
     default: 'open',
     index: true
-  }
+  },
+  resolvedAt: { type: Date },
+  dismissedAt: { type: Date },
+  actionedBy: { type: String }, // Admin user ID
+  actionReason: { type: String, trim: true } // Optional reason for action
 }, {
   timestamps: { createdAt: true, updatedAt: false } // Only createdAt, no updatedAt
 });
@@ -64,3 +72,4 @@ ReportSchema.index({ createdAt: -1 });
 ReportSchema.index({ targetId: 1, targetType: 1 });
 
 export const Report = mongoose.model<IReport>('Report', ReportSchema);
+

@@ -111,16 +111,6 @@ export async function getAdminStats(req: Request, res: Response) {
   const flaggedNuggets = flaggedNuggetsAgg[0]?.flagged || 0;
 
   // Moderation stats already in correct format from getModerationStats()
-  // TEMPORARY: Log query for debugging
-  if (process.env.NODE_ENV === 'development') {
-    console.log('[ModerationQuery] Dashboard stats query:');
-    console.log('[ModerationQuery] Collection: reports');
-    console.log('[ModerationQuery] Open query:', JSON.stringify(buildModerationQuery({ status: 'open' }), null, 2));
-    console.log('[ModerationQuery] Resolved query:', JSON.stringify(buildModerationQuery({ status: 'resolved' }), null, 2));
-    console.log('[ModerationQuery] Dismissed query:', JSON.stringify(buildModerationQuery({ status: 'dismissed' }), null, 2));
-    console.log('[ModerationQuery] Stats result:', moderationStats);
-  }
-
   const feedbackStats = feedbackAgg.reduce(
     (acc: Record<string, number>, item: any) => {
       acc[item._id] = item.count;

@@ -59,6 +59,7 @@ export const createCollection = async (req: Request, res: Response) => {
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       followersCount: 0,
+      followers: [],
       entries: []
     });
     
@@ -222,6 +223,61 @@ export const flagEntry = async (req: Request, res: Response) => {
     res.json(normalizeDoc(collection));
   } catch (error: any) {
     console.error('[Collections] Flag entry error:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+export const followCollection = async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user?.userId;
+    if (!userId) {
+      return res.status(401).json({ message: 'Authentication required' });
+    }
+
+    const collection = await Collection.findById(req.params.id);
+    if (!collection) {
+      return res.status(404).json({ message: 'Collection not found' });
+    }
+
+    // Idempotent: only add if not already following
+    if (!collection.followers || !collection.followers.includes(userId)) {
+      collection.followers = collection.followers || [];
+      collection.followers.push(userId);
+      collection.followersCount = (collection.followersCount || 0) + 1;
+      collection.updatedAt = new Date().toISOString();
+      await collection.save();
+    }
+
+    res.json(normalizeDoc(collection));
+  } catch (error: any) {
+    console.error('[Collections] Follow collection error:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+export const unfollowCollection = async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user?.userId;
+    if (!userId) {
+      return res.status(401).json({ message: 'Authentication required' });
+    }
+
+    const collection = await Collection.findById(req.params.id);
+    if (!collection) {
+      return res.status(404).json({ message: 'Collection not found' });
+    }
+
+    // Idempotent: only remove if currently following
+    if (collection.followers && collection.followers.includes(userId)) {
+      collection.followers = collection.followers.filter((id: string) => id !== userId);
+      collection.followersCount = Math.max(0, (collection.followersCount || 0) - 1);
+      collection.updatedAt = new Date().toISOString();
+      await collection.save();
+    }
+
+    res.json(normalizeDoc(collection));
+  } catch (error: any) {
+    console.error('[Collections] Unfollow collection error:', error);
     res.status(500).json({ message: 'Internal server error' });
   }
 };

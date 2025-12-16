@@ -1,8 +1,10 @@
 import { Request, Response } from 'express';
 import { Report } from '../models/Report.js';
+import { ModerationAuditLog } from '../models/ModerationAuditLog.js';
 import { normalizeDoc, normalizeDocs } from '../utils/db.js';
 import { z } from 'zod';
 import { buildModerationQuery } from '../services/moderationService.js';
+import { AdminRequest } from '../middleware/requireAdmin.js';
 
 // Validation schemas
 const createReportSchema = z.object({
@@ -21,7 +23,8 @@ const createReportSchema = z.object({
 });
 
 const resolveReportSchema = z.object({
-  resolution: z.enum(['resolved', 'dismissed'])
+  resolution: z.enum(['resolved', 'dismissed']),
+  actionReason: z.string().max(500).optional()
 });
 
 /**
@@ -42,13 +45,6 @@ export const getReports = async (req: Request, res: Response) => {
       targetId: targetId as string | undefined,
       searchQuery: q as string | undefined
     });
-    
-    // TEMPORARY: Log final query for debugging (remove after verification)
-    if (process.env.NODE_ENV === 'development') {
-      console.log('[ModerationQuery] Collection: reports');
-      console.log('[ModerationQuery] Query:', JSON.stringify(query, null, 2));
-      console.log('[ModerationQuery] Status value:', query.status);
-    }
     
     const [reports, total] = await Promise.all([
       Report.find(query)
@@ -128,35 +124,129 @@ export const createReport = async (req: Request, res: Response) => {
 };
 
 /**
- * PATCH /api/moderation/reports/:id/resolve
- * Resolve or dismiss a report
+ * POST /api/moderation/reports/:id/resolve
+ * Resolve a report (idempotent)
+ * Only admins can perform this action
  */
-export const resolveReport = async (req: Request, res: Response) => {
+export const resolveReport = async (req: AdminRequest, res: Response) => {
   try {
-    // Validate input
-    const validationResult = resolveReportSchema.safeParse(req.body);
-    if (!validationResult.success) {
-      return res.status(400).json({ 
-        message: 'Validation failed', 
-        errors: validationResult.error.errors 
-      });
+    if (!req.userId) {
+      return res.status(401).json({ message: 'Authentication required' });
     }
 
-    const { resolution } = validationResult.data;
-    
-    const report = await Report.findByIdAndUpdate(
-      req.params.id,
-      { status: resolution },
-      { new: true, runValidators: true }
-    );
-    
+    const reportId = req.params.id;
+    const { actionReason } = req.body || {};
+
+    // Find the report
+    const report = await Report.findById(reportId);
     if (!report) {
       return res.status(404).json({ message: 'Report not found' });
     }
-    
+
+    const previousStatus = report.status;
+
+    // Idempotency: If already resolved, return success
+    if (previousStatus === 'resolved') {
+      return res.json(normalizeDoc(report));
+    }
+
+    // Cannot resolve if dismissed
+    if (previousStatus === 'dismissed') {
+      return res.status(409).json({ 
+        message: 'Cannot resolve a dismissed report' 
+      });
+    }
+
+    // Update report
+    const now = new Date();
+    report.status = 'resolved';
+    report.resolvedAt = now;
+    report.actionedBy = req.userId;
+    if (actionReason) {
+      report.actionReason = actionReason;
+    }
+    await report.save();
+
+    // Create audit log
+    await ModerationAuditLog.create({
+      reportId: reportId,
+      action: 'resolve',
+      performedBy: req.userId,
+      previousStatus: previousStatus,
+      newStatus: 'resolved',
+      timestamp: now,
+      metadata: {
+        actionReason: actionReason || null
+      }
+    });
+
     res.json(normalizeDoc(report));
   } catch (error: any) {
     console.error('[Moderation] Resolve report error:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+/**
+ * POST /api/moderation/reports/:id/dismiss
+ * Dismiss a report (idempotent)
+ * Only admins can perform this action
+ */
+export const dismissReport = async (req: AdminRequest, res: Response) => {
+  try {
+    if (!req.userId) {
+      return res.status(401).json({ message: 'Authentication required' });
+    }
+
+    const reportId = req.params.id;
+    const { actionReason } = req.body || {};
+
+    // Find the report
+    const report = await Report.findById(reportId);
+    if (!report) {
+      return res.status(404).json({ message: 'Report not found' });
+    }
+
+    const previousStatus = report.status;
+
+    // Idempotency: If already dismissed, return success
+    if (previousStatus === 'dismissed') {
+      return res.json(normalizeDoc(report));
+    }
+
+    // Cannot dismiss if resolved
+    if (previousStatus === 'resolved') {
+      return res.status(409).json({ 
+        message: 'Cannot dismiss a resolved report' 
+      });
+    }
+
+    // Update report
+    const now = new Date();
+    report.status = 'dismissed';
+    report.dismissedAt = now;
+    report.actionedBy = req.userId;
+    if (actionReason) {
+      report.actionReason = actionReason;
+    }
+    await report.save();
+
+    // Create audit log
+    await ModerationAuditLog.create({
+      reportId: reportId,
+      action: 'dismiss',
+      performedBy: req.userId,
+      previousStatus: previousStatus,
+      newStatus: 'dismissed',
+      timestamp: now,
+      metadata: {
+        actionReason: actionReason || null
+      }
+    });
+
+    res.json(normalizeDoc(report));
+  } catch (error: any) {
+    console.error('[Moderation] Dismiss report error:', error);
     res.status(500).json({ message: 'Internal server error' });
   }
 };

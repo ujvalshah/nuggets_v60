@@ -16,6 +16,9 @@ router.post('/', authenticateToken, articlesController.createArticle);
 // PUT /api/articles/:id - Update article (requires authentication)
 router.put('/:id', authenticateToken, articlesController.updateArticle);
 
+// PATCH /api/articles/:id - Partial update article (requires authentication)
+router.patch('/:id', authenticateToken, articlesController.updateArticle);
+
 // DELETE /api/articles/:id - Delete article (requires authentication)
 router.delete('/:id', authenticateToken, articlesController.deleteArticle);
 

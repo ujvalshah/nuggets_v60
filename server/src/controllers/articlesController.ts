@@ -152,6 +152,24 @@ export const createArticle = async (req: Request, res: Response) => {
 
 export const updateArticle = async (req: Request, res: Response) => {
   try {
+    // Get current user from authentication middleware
+    const currentUserId = (req as any).user?.userId;
+    if (!currentUserId) {
+      return res.status(401).json({ message: 'Authentication required' });
+    }
+
+    // Find article first to verify ownership
+    const existingArticle = await Article.findById(req.params.id);
+    if (!existingArticle) {
+      return res.status(404).json({ message: 'Article not found' });
+    }
+
+    // Verify ownership (user must be the author or admin)
+    // Note: Admin check would require role from JWT, for now just check authorId
+    if (existingArticle.authorId !== currentUserId) {
+      return res.status(403).json({ message: 'You can only edit your own articles' });
+    }
+
     // Validate input
     const validationResult = updateArticleSchema.safeParse(req.body);
     if (!validationResult.success) {

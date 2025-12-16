@@ -14,6 +14,7 @@ export interface ICollection extends Document {
   createdAt: string;
   updatedAt: string;
   followersCount: number;
+  followers: string[]; // Array of userIds who follow this collection
   entries: ICollectionEntry[];
   type: 'private' | 'public';
 }
@@ -32,6 +33,7 @@ const CollectionSchema = new Schema<ICollection>({
   createdAt: { type: String, required: true },
   updatedAt: { type: String, required: true },
   followersCount: { type: Number, default: 0 },
+  followers: { type: [String], default: [] }, // Array of userIds
   entries: { type: [CollectionEntrySchema], default: [] },
   type: { type: String, enum: ['private', 'public'], default: 'public' }
 }, {
@@ -42,4 +44,5 @@ const CollectionSchema = new Schema<ICollection>({
 CollectionSchema.index({ creatorId: 1, type: 1 });
 
 export const Collection = mongoose.model<ICollection>('Collection', CollectionSchema);
+
 

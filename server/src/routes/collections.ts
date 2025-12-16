@@ -15,4 +15,8 @@ router.post('/:id/entries', authenticateToken, collectionsController.addEntry);
 router.delete('/:id/entries/:articleId', authenticateToken, collectionsController.removeEntry);
 router.post('/:id/entries/:articleId/flag', authenticateToken, collectionsController.flagEntry);
 
+// Follow/Unfollow (require authentication)
+router.post('/:id/follow', authenticateToken, collectionsController.followCollection);
+router.post('/:id/unfollow', authenticateToken, collectionsController.unfollowCollection);
+
 export default router;
