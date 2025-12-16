@@ -105,4 +105,50 @@ export const shouldFetchMetadata = (url: string): boolean => {
   return false;
 };
 
+/**
+ * Check if auto-title generation is allowed for a given content type or URL
+ * 
+ * AUTO-TITLE GENERATION IS STRICTLY LIMITED TO:
+ * - Social Networks: X/Twitter, LinkedIn, Facebook, Threads, Reddit
+ * - Video Platforms: YouTube, Vimeo, other video-hosting platforms
+ * 
+ * FORBIDDEN for:
+ * - News websites
+ * - Articles/Blogs
+ * - Documentation
+ * - PDFs
+ * - Images
+ * - Generic URLs
+ * 
+ * @param contentTypeOrUrl - Content type string ('social', 'video', 'article', etc.) or URL string
+ * @returns true ONLY if content type is 'social' or 'video', false otherwise
+ */
+export const shouldAutoGenerateTitle = (contentTypeOrUrl: string): boolean => {
+  if (!contentTypeOrUrl) return false;
+  
+  // If it's a content type string (from backend)
+  if (contentTypeOrUrl === 'social' || contentTypeOrUrl === 'video') {
+    return true;
+  }
+  
+  // If it's a URL, check if it's a social or video platform
+  const lowerUrl = contentTypeOrUrl.toLowerCase();
+  
+  // Social networks
+  if (lowerUrl.includes('twitter.com') || lowerUrl.includes('x.com')) return true;
+  if (lowerUrl.includes('linkedin.com')) return true;
+  if (lowerUrl.includes('instagram.com')) return true;
+  if (lowerUrl.includes('tiktok.com')) return true;
+  if (lowerUrl.includes('facebook.com')) return true;
+  if (lowerUrl.includes('threads.net')) return true;
+  if (lowerUrl.includes('reddit.com')) return true;
+  
+  // Video platforms
+  if (lowerUrl.includes('youtube.com') || lowerUrl.includes('youtu.be')) return true;
+  if (lowerUrl.includes('vimeo.com')) return true;
+  
+  // All other content types/URLs - NO auto-title generation
+  return false;
+};
+
 

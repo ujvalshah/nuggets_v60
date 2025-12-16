@@ -2,7 +2,7 @@ import { BatchRow } from '@/types/batch';
 import { storageService } from './storageService';
 import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
-import { detectProviderFromUrl } from '@/utils/urlUtils';
+import { detectProviderFromUrl, shouldAutoGenerateTitle } from '@/utils/urlUtils';
 import { normalizeCategoryLabel } from '@/utils/formatters';
 import { unfurlUrl } from './unfurlService';
 import type { Article } from '@/types';
@@ -80,7 +80,19 @@ function nuggetToArticle(
   customContent?: string,
   categories: string[] = []
 ): Article {
-  const title = customTitle || nuggetMedia?.previewMetadata?.title || 'Untitled Nugget';
+  // CRITICAL: Only use metadata title for Social/Video content types
+  // For news sites, articles, blogs, etc., metadata title should be ignored
+  let title = customTitle;
+  if (!title && nuggetMedia?.previewMetadata?.title) {
+    // Only use metadata title if URL allows auto-title generation (Social/Video only)
+    if (shouldAutoGenerateTitle(url)) {
+      title = nuggetMedia.previewMetadata.title;
+    }
+  }
+  // Fallback to "Untitled Nugget" if no title is available
+  if (!title) {
+    title = 'Untitled Nugget';
+  }
   const description = nuggetMedia?.previewMetadata?.description || '';
   const content = customContent || description || url;
   const excerpt = content.substring(0, 150) + (content.length > 150 ? '...' : '');
@@ -418,13 +430,21 @@ export const batchService = {
         );
         
         // Create the article using existing storage service
-        // Priority: User-provided title > Metadata title > Fallback
-        // Use empty string check to ensure metadata title is used when user title is empty
-        const resolvedTitle = (row.title && row.title.trim()) 
-          ? row.title 
-          : (articleData.media?.previewMetadata?.title && articleData.media.previewMetadata.title.trim())
-          ? articleData.media.previewMetadata.title
-          : articleData.title;
+        // Priority: User-provided title > Metadata title (ONLY for Social/Video) > Fallback
+        // CRITICAL: Metadata titles should ONLY be used for Social/Video content types
+        let resolvedTitle = row.title && row.title.trim() ? row.title : undefined;
+        
+        if (!resolvedTitle && articleData.media?.previewMetadata?.title) {
+          // Only use metadata title if URL allows auto-title generation (Social/Video only)
+          if (shouldAutoGenerateTitle(row.url)) {
+            resolvedTitle = articleData.media.previewMetadata.title.trim();
+          }
+        }
+        
+        // Final fallback
+        if (!resolvedTitle) {
+          resolvedTitle = articleData.title;
+        }
         
         await storageService.createArticle({
           title: resolvedTitle,
