@@ -162,6 +162,53 @@ function detectContentType(url: URL, domain: string): Nugget['contentType'] {
 }
 
 /**
+ * Check if auto-title generation is allowed for a given content type
+ * 
+ * AUTO-TITLE GENERATION IS STRICTLY LIMITED TO:
+ * - Social Networks: X/Twitter, LinkedIn, Facebook, Threads, Reddit
+ * - Video Platforms: YouTube, Vimeo, other video-hosting platforms
+ * 
+ * FORBIDDEN for:
+ * - News websites
+ * - Articles/Blogs
+ * - Documentation
+ * - PDFs
+ * - Images
+ * - Generic URLs
+ * 
+ * @param contentType - Content type string ('social', 'video', 'article', etc.)
+ * @param urlString - Optional URL string for additional validation
+ * @returns true ONLY if content type is 'social' or 'video', false otherwise
+ */
+function shouldAutoGenerateTitle(contentType: Nugget['contentType'], urlString?: string): boolean {
+  // Only Social and Video content types allow auto-title generation
+  if (contentType === 'social' || contentType === 'video') {
+    return true;
+  }
+  
+  // Additional URL-based check for edge cases
+  if (urlString) {
+    const lowerUrl = urlString.toLowerCase();
+    
+    // Social networks
+    if (lowerUrl.includes('twitter.com') || lowerUrl.includes('x.com')) return true;
+    if (lowerUrl.includes('linkedin.com')) return true;
+    if (lowerUrl.includes('instagram.com')) return true;
+    if (lowerUrl.includes('tiktok.com')) return true;
+    if (lowerUrl.includes('facebook.com')) return true;
+    if (lowerUrl.includes('threads.net')) return true;
+    if (lowerUrl.includes('reddit.com')) return true;
+    
+    // Video platforms
+    if (lowerUrl.includes('youtube.com') || lowerUrl.includes('youtu.be')) return true;
+    if (lowerUrl.includes('vimeo.com')) return true;
+  }
+  
+  // All other content types - NO auto-title generation
+  return false;
+}
+
+/**
  * TIER 0: Zero Risk - URL parsing only
  * Always returns a valid Nugget shell instantly
  * 
@@ -174,34 +221,32 @@ function tier0(urlString: string): Nugget {
   const platformName = PLATFORM_NAMES[domain] || domain;
   const platformColor = PLATFORM_COLORS[domain];
 
-  // CRITICAL FIX: DO NOT generate titles for image URLs
-  // Image URLs skip metadata fetching, so we should not fabricate titles
+  // CRITICAL: Auto-title generation is STRICTLY LIMITED to Social/Video content types
+  // DO NOT generate titles for:
+  // - News websites (article content type)
+  // - Blogs (article content type)
+  // - Documents (document content type)
+  // - Images (image content type)
+  // - Generic URLs (article content type)
+  //
   // Titles should only come from:
-  // 1. User input
-  // 2. Fetched metadata (for non-image URLs)
+  // 1. User input (always takes precedence)
+  // 2. Fetched metadata titles (ONLY for Social/Video platforms)
   let title: string | null = null;
   
-  if (contentType === 'image') {
-    // Images: No auto-generated title
-    // Title will be null, allowing frontend to use user-provided title or "Untitled Nugget"
-    title = null;
-  } else if (contentType === 'video' && domain.includes('youtube')) {
-    title = 'YouTube Video';
-  } else if (contentType === 'social') {
-    title = domain.includes('x.com') ? 'Post on X' : 'Tweet';
-  } else if (contentType === 'document') {
-    const pathname = url.pathname;
-    const filename = pathname.split('/').pop() || 'Document';
-    // Decode URL-encoded filename
-    try {
-      title = decodeURIComponent(filename);
-    } catch {
-      title = filename;
+  // Only generate titles for Social and Video content types
+  if (shouldAutoGenerateTitle(contentType, urlString)) {
+    if (contentType === 'video' && domain.includes('youtube')) {
+      title = 'YouTube Video';
+    } else if (contentType === 'social') {
+      title = domain.includes('x.com') ? 'Post on X' : 'Tweet';
     }
-  } else {
-    // For other content types, generate a default title
-    title = `Content from ${platformName}`;
+    // Note: Actual titles from metadata (oEmbed, OG tags) will come from higher tiers
+    // This is just a minimal fallback for Social/Video platforms
   }
+  
+  // For all other content types (article, document, image), title remains null
+  // Frontend will use user-provided title or "Untitled Nugget" fallback
 
   return {
     id: `nugget-${Date.now()}`,
@@ -359,7 +404,12 @@ async function tier1(urlString: string, isAdmin: boolean): Promise<Partial<Nugge
 
     const enrichment: Partial<Nugget> = {};
 
+    // Only set title if content type allows auto-title generation (Social/Video only)
+    // Microlink can return titles for all content types, but we must filter them
     if (data.data?.title) {
+      // Note: We can't check contentType here as it's not available in tier1
+      // The title will be filtered later in fetchUrlMetadata based on baseNugget.contentType
+      // For now, we set it and let the main function decide
       enrichment.title = data.data.title;
     }
     if (data.data?.description) {
@@ -673,10 +723,19 @@ export async function fetchUrlMetadata(
       );
 
       if (enrichment) {
+        // CRITICAL: Only apply title if content type allows auto-title generation
+        // Microlink can return titles for all content types, but we must filter them
+        if (enrichment.title && !shouldAutoGenerateTitle(baseNugget.contentType, urlString)) {
+          // Remove title for non-Social/Video content types
+          delete enrichment.title;
+        }
+        
         Object.assign(baseNugget, enrichment);
-        // Cache and return if Microlink succeeded
-        setCached(urlString, baseNugget);
-        return baseNugget;
+        // Cache and return if Microlink succeeded (only if we got meaningful data)
+        if (enrichment.title || enrichment.description || enrichment.media) {
+          setCached(urlString, baseNugget);
+          return baseNugget;
+        }
       }
     } catch {
       // Continue to next tier
@@ -684,6 +743,8 @@ export async function fetchUrlMetadata(
   }
 
   // TIER 2: Open Graph
+  // NOTE: Tier 2 is only attempted for 'article' content type (line 709)
+  // However, we still need to filter titles since articles should NOT auto-generate titles
   if (shouldTryOG && !checkTimeout()) {
     try {
       const enrichment = await withTimeout(
@@ -692,6 +753,13 @@ export async function fetchUrlMetadata(
       );
 
       if (enrichment) {
+        // CRITICAL: Articles should NOT auto-generate titles from OG tags
+        // Only Social/Video content types are allowed to auto-generate titles
+        if (enrichment.title && !shouldAutoGenerateTitle(baseNugget.contentType, urlString)) {
+          // Remove title for non-Social/Video content types (including articles)
+          delete enrichment.title;
+        }
+        
         Object.assign(baseNugget, enrichment);
       }
     } catch {

@@ -5,15 +5,20 @@ import { createArticleSchema, updateArticleSchema } from '../utils/validation.js
 
 export const getArticles = async (req: Request, res: Response) => {
   try {
-    const { authorId, q } = req.query;
+    const { authorId, q, category, categories, sort } = req.query;
     const page = Math.max(parseInt(req.query.page as string) || 1, 1);
     const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 25, 1), 100);
     const skip = (page - 1) * limit;
     
+    // Build MongoDB query object
     const query: any = {};
+    
+    // Author filter
     if (authorId) {
       query.authorId = authorId;
     }
+    
+    // Search query (case-insensitive regex)
     if (q && typeof q === 'string' && q.trim().length > 0) {
       const regex = new RegExp(q.trim(), 'i');
       query.$or = [
@@ -24,9 +29,34 @@ export const getArticles = async (req: Request, res: Response) => {
       ];
     }
     
+    // Category filter (case-insensitive, supports both single and array)
+    if (category && typeof category === 'string') {
+      // Single category: case-insensitive match
+      query.categories = { $in: [new RegExp(`^${category.trim()}$`, 'i')] };
+    } else if (categories) {
+      // Multiple categories: handle both string and array
+      const categoryArray = Array.isArray(categories) 
+        ? categories 
+        : [categories];
+      query.categories = { 
+        $in: categoryArray
+          .filter((cat): cat is string => typeof cat === 'string')
+          .map((cat: string) => new RegExp(`^${cat.trim()}$`, 'i'))
+      };
+    }
+    
+    // Sort parameter (map frontend values to MongoDB sort)
+    const sortMap: Record<string, any> = {
+      'latest': { publishedAt: -1 },
+      'oldest': { publishedAt: 1 },
+      'title': { title: 1 },
+      'title-desc': { title: -1 }
+    };
+    const sortOrder = sortMap[sort as string] || { publishedAt: -1 }; // Default: latest first
+    
     const [articles, total] = await Promise.all([
       Article.find(query)
-        .sort({ publishedAt: -1 })
+        .sort(sortOrder)
         .skip(skip)
         .limit(limit),
       Article.countDocuments(query)

@@ -75,12 +75,14 @@ export async function unfurlUrl(req: Request, res: Response) {
     console.error('[Unfurl] Unexpected error:', error);
 
     // Create a minimal fallback
+    // CRITICAL: Do not generate titles for non-Social/Video content types
+    // Articles should have null title (user must provide)
     const fallback = {
       id: `nugget-${Date.now()}`,
       url: req.body?.url || 'unknown',
       domain: 'unknown',
       contentType: 'article' as const,
-      title: 'Content Preview',
+      title: undefined, // No auto-generated title for articles
       source: {
         name: 'Unknown',
         domain: 'unknown',
