@@ -6,7 +6,7 @@ import { ProfileCard } from '@/components/profile/ProfileCard';
 import { TabsBar } from '@/components/profile/TabsBar';
 import { NewsCard } from '@/components/NewsCard';
 import { CollectionsGrid } from '@/components/profile/CollectionsGrid';
-import { Loader2, Layers, CheckSquare, X, Trash2, Lock, Globe, FolderPlus, ChevronDown, Info, Folder, Plus, Edit2 } from 'lucide-react';
+import { Loader2, Layers, CheckSquare, X, Trash2, Lock, Globe, FolderPlus, ChevronDown, Info, Plus } from 'lucide-react';
 import { ArticleModal } from '@/components/ArticleModal';
 import { AddToCollectionModal } from '@/components/AddToCollectionModal';
 import { useToast } from '@/hooks/useToast';
@@ -21,7 +21,6 @@ interface MySpacePageProps {
 // Dynamic descriptions based on state
 const getDescription = (tab: string, visibility: 'public' | 'private') => {
   if (tab === 'collections') return "Thematic lists you have curated for the community.";
-  if (tab === 'folders') return "Your private folders for organizing nuggets. Visible only to you.";
   if (tab === 'nuggets') {
       return visibility === 'public' 
         ? "Your nuggets that you've shared with the community."
@@ -148,7 +147,6 @@ export const MySpacePage: React.FC<MySpacePageProps> = ({ currentUserId }) => {
   
   // SEGREGATION LOGIC
   const publicCollections = safeCollections.filter(c => c.type === 'public');
-  const privateFolders = safeCollections.filter(c => c.type === 'private');
 
   // Hierarchy: Top Level Tabs - Updated per requirements
   const tabs: { id: string; label: string; count?: number }[] = [
@@ -179,16 +177,17 @@ export const MySpacePage: React.FC<MySpacePageProps> = ({ currentUserId }) => {
   const handleBulkDelete = async () => {
       if (selectedIds.length === 0) return;
       
-      if (activeTab === 'collections' || activeTab === 'folders') {
+      if (activeTab === 'collections') {
           for (const id of selectedIds) {
               await storageService.deleteCollection(id);
           }
-          toast.success(`Deleted ${selectedIds.length} ${activeTab === 'folders' ? 'folders' : 'collections'}`);
+          toast.success(`Deleted ${selectedIds.length} collection${selectedIds.length > 1 ? 's' : ''}`);
       } else {
+          // Delete articles (both public and private nuggets)
           for (const id of selectedIds) {
               await storageService.deleteArticle(id);
           }
-          toast.success(`Deleted ${selectedIds.length} nuggets`);
+          toast.success(`Deleted ${selectedIds.length} nugget${selectedIds.length > 1 ? 's' : ''}`);
       }
       
       setShowDeleteConfirm(false);
@@ -470,8 +469,6 @@ export const MySpacePage: React.FC<MySpacePageProps> = ({ currentUserId }) => {
       else currentList = privateNuggets;
   } else if (activeTab === 'collections') {
       currentList = publicCollections;
-  } else if (activeTab === 'folders') {
-      currentList = privateFolders;
   }
 
   // Determine current description
@@ -656,7 +653,7 @@ export const MySpacePage: React.FC<MySpacePageProps> = ({ currentUserId }) => {
 
             {/* Content Grid */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                {activeTab === 'collections' || activeTab === 'folders' ? (
+                {activeTab === 'collections' ? (
                     <div className="col-span-full">
                         <CollectionsGrid 
                           collections={currentList} 
@@ -686,14 +683,7 @@ export const MySpacePage: React.FC<MySpacePageProps> = ({ currentUserId }) => {
 
                 {currentList.length === 0 && (
                   <div className="col-span-full py-16 text-center border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-2xl">
-                    {activeTab === 'folders' ? (
-                        <div className="flex flex-col items-center">
-                            <Folder className="w-12 h-12 text-slate-300 mb-2" />
-                            <p className="text-slate-400 text-sm">No folders yet.</p>
-                        </div>
-                    ) : (
-                        <p className="text-slate-400 text-sm">Nothing to see here yet.</p>
-                    )}
+                    <p className="text-slate-400 text-sm">Nothing to see here yet.</p>
                   </div>
                 )}
               </div>
@@ -714,8 +704,8 @@ export const MySpacePage: React.FC<MySpacePageProps> = ({ currentUserId }) => {
         isOpen={showDeleteConfirm}
         onClose={() => setShowDeleteConfirm(false)}
         onConfirm={handleBulkDelete}
-        title={activeTab === 'folders' ? "Delete Folders?" : "Delete Items?"}
-        description={`Are you sure you want to delete ${selectedIds.length} items? This cannot be undone.`}
+        title={activeTab === 'collections' ? "Delete Collections?" : "Delete Nuggets?"}
+        description={`Are you sure you want to delete ${selectedIds.length} ${activeTab === 'collections' ? 'collection' : 'nugget'}${selectedIds.length > 1 ? 's' : ''}? This cannot be undone.`}
         actionLabel="Delete"
         isDestructive
       />

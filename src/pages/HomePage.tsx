@@ -60,7 +60,11 @@ export const HomePage: React.FC<HomePageProps> = ({
             // Sort by nugget count (descending) and take top 10
             const sortedCols = cols
                 .filter(c => c.type === 'public')
-                .sort((a, b) => b.entries.length - a.entries.length)
+                .sort((a, b) => {
+                    const countA = a.validEntriesCount ?? a.entries?.length ?? 0;
+                    const countB = b.validEntriesCount ?? b.entries?.length ?? 0;
+                    return countB - countA;
+                })
                 .slice(0, 10);
                 
             setFeaturedCollections(sortedCols);
@@ -284,7 +288,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                                         </div>
                                         <div className="flex-1 min-w-0">
                                             <div className="text-xs font-bold text-slate-700 dark:text-slate-300 truncate group-hover:text-primary-600 transition-colors">{col.name}</div>
-                                            <div className="text-[10px] text-slate-400 font-medium">{col.entries.length} nuggets</div>
+                                            <div className="text-[10px] text-slate-400 font-medium">{col.validEntriesCount ?? col.entries?.length ?? 0} nuggets</div>
                                         </div>
                                     </div>
                                 </div>

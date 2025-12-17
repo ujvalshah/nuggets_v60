@@ -120,7 +120,7 @@ export const CollectionsPage: React.FC = () => {
             case 'created': valA = new Date(a.createdAt).getTime(); valB = new Date(b.createdAt).getTime(); break;
             case 'updated': valA = new Date(a.updatedAt || a.createdAt).getTime(); valB = new Date(b.updatedAt || b.createdAt).getTime(); break;
             case 'followers': valA = a.followersCount; valB = b.followersCount; break;
-            case 'nuggets': valA = a.entries.length; valB = b.entries.length; break;
+            case 'nuggets': valA = a.validEntriesCount ?? a.entries?.length ?? 0; valB = b.validEntriesCount ?? b.entries?.length ?? 0; break;
             case 'name': valA = a.name.toLowerCase(); valB = b.name.toLowerCase(); break;
             default: return 0;
         }
@@ -191,7 +191,32 @@ export const CollectionsPage: React.FC = () => {
       ));
   };
 
-  if (isLoading) return <div className="min-h-screen flex items-center justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500"></div></div>;
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 pb-32">
+        <div className="sticky top-[4.5rem] z-30 bg-slate-900 border-b border-slate-800 shadow-sm">
+          <div className="max-w-[1280px] mx-auto px-4 sm:px-6 lg:px-8 py-6">
+            <div className="h-8 bg-slate-800 rounded w-64 animate-pulse" />
+          </div>
+        </div>
+        <div className="max-w-[1280px] mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            {[...Array(6)].map((_, i) => (
+              <div key={i} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 animate-pulse">
+                <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-3/4 mb-4" />
+                <div className="h-3 bg-slate-200 dark:bg-slate-700 rounded w-full mb-2" />
+                <div className="h-3 bg-slate-200 dark:bg-slate-700 rounded w-2/3 mb-5" />
+                <div className="flex gap-4 mt-auto pt-3 border-t border-slate-100 dark:border-slate-800">
+                  <div className="h-3 bg-slate-200 dark:bg-slate-700 rounded w-16" />
+                  <div className="h-3 bg-slate-200 dark:bg-slate-700 rounded w-20" />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 pb-32">

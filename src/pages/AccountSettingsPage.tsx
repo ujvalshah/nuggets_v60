@@ -454,7 +454,7 @@ export const AccountSettingsPage: React.FC<{ userId: string }> = ({ userId }) =>
                 <div className="px-6 pb-6 pt-2">
                   <div className="h-px w-full bg-red-200/50 dark:bg-red-900/30 mb-6" />
                   <p className="text-sm text-slate-600 dark:text-slate-300 mb-6 max-w-xl leading-relaxed">
-                    Deleting your account is permanent. All your nuggets, collections, and bookmarks will be wiped immediately. This action cannot be undone.
+                    Deleting your account is permanent. All your nuggets and collections will be wiped immediately. This action cannot be undone.
                   </p>
                   <button 
                     onClick={() => setShowDeleteModal(true)}
