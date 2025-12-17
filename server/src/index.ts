@@ -34,6 +34,7 @@ import feedbackRouter from './routes/feedback.js';
 import moderationRouter from './routes/moderation.js';
 import adminRouter from './routes/admin.js';
 import unfurlRouter from './routes/unfurl.js';
+import bookmarkFoldersRouter from './routes/bookmarkFolders.js';
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -71,6 +72,7 @@ app.use('/api/feedback', feedbackRouter);
 app.use('/api/moderation', moderationRouter);
 app.use('/api/unfurl', unfurlRouter);
 app.use('/api/admin', adminRouter);
+app.use('/api/bookmark-folders', bookmarkFoldersRouter);
 
 // Health Check
 app.get('/api/health', (req, res) => {
