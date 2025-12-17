@@ -498,15 +498,32 @@ export const removeBookmarkFromFolder = async (req: Request, res: Response) => {
     }
 
     // Remove the link
-    await BookmarkFolderLink.deleteOne({ bookmarkId, folderId });
+    const deleteResult = await BookmarkFolderLink.deleteOne({ bookmarkId, folderId });
+    
+    if (deleteResult.deletedCount === 0) {
+      // Link didn't exist - might have been already deleted, but that's okay
+      console.warn(`[BookmarkFolders] Link not found for bookmarkId=${bookmarkId}, folderId=${folderId}`);
+    }
 
     // Ensure bookmark is still in at least one folder (General fallback)
-    await ensureBookmarkInGeneralFolder(bookmarkId, userId);
+    // Only check if we actually deleted a link
+    if (deleteResult.deletedCount > 0) {
+      await ensureBookmarkInGeneralFolder(bookmarkId, userId);
+    }
 
     res.status(204).send();
   } catch (error: any) {
     console.error('[BookmarkFolders] Remove bookmark from folder error:', error);
-    res.status(500).json({ message: 'Internal server error' });
+    console.error('[BookmarkFolders] Error details:', {
+      message: error.message,
+      stack: error.stack,
+      bookmarkId: req.query.bookmarkId,
+      folderId: req.query.folderId
+    });
+    res.status(500).json({ 
+      message: 'Internal server error',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
 };
 

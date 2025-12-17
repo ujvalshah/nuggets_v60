@@ -79,12 +79,27 @@ export async function ensureBookmarkInGeneralFolder(bookmarkId: string, userId: 
     // No links exist - add to General
     const generalFolderId = await getGeneralFolderId(userId);
     
-    await BookmarkFolderLink.create({
-      userId,
-      bookmarkId,
-      folderId: generalFolderId,
-      createdAt: new Date().toISOString()
-    });
+    // Check if link already exists (idempotent)
+    const existingLink = await BookmarkFolderLink.findOne({ bookmarkId, folderId: generalFolderId });
+    if (existingLink) {
+      return; // Already linked to General
+    }
+    
+    try {
+      await BookmarkFolderLink.create({
+        userId,
+        bookmarkId,
+        folderId: generalFolderId,
+        createdAt: new Date().toISOString()
+      });
+    } catch (error: any) {
+      // Ignore duplicate key errors (race condition - link created by another request)
+      if (error.code === 11000) {
+        return;
+      }
+      // Re-throw other errors
+      throw error;
+    }
   }
 }
 
