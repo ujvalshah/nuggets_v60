@@ -6,6 +6,20 @@ import { storageService } from '@/services/storageService';
 import { Avatar } from '../shared/Avatar';
 import { adminConfigService } from '@/admin/services/adminConfigService';
 
+// Format join date as "Jan 2024"
+const formatJoinDate = (isoString: string): string => {
+  if (!isoString) return '';
+  try {
+    const date = new Date(isoString);
+    if (isNaN(date.getTime())) return '';
+    const month = date.toLocaleString('en-US', { month: 'short' });
+    const year = date.getFullYear();
+    return `${month} ${year}`;
+  } catch (e) {
+    return '';
+  }
+};
+
 interface ProfileCardProps {
   user: User;
   isOwner: boolean;
@@ -62,18 +76,18 @@ export const ProfileCard: React.FC<ProfileCardProps> = ({ user, isOwner, nuggetC
   const handleSave = async () => {
     setIsSaving(true);
     try {
-      // Update all profile fields - using flat fields for backward compatibility
+      // Update all profile fields - backend supports flat fields (title, company, twitter, linkedin)
       const updatedUser = await storageService.updateUser(user.id, { 
         name: formData.name,
         avatarUrl: formData.avatarUrl,
         bio: formData.bio,
         location: formData.location,
         website: formData.website,
-        title: formData.title,
-        company: formData.company,
-        twitter: formData.twitter,
-        linkedin: formData.linkedin,
-      });
+        ...(formData.title && { title: formData.title }),
+        ...(formData.company && { company: formData.company }),
+        ...(formData.twitter && { twitter: formData.twitter }),
+        ...(formData.linkedin && { linkedin: formData.linkedin }),
+      } as Partial<User>);
       
       if (updatedUser) {
         onUpdate(updatedUser);
@@ -109,7 +123,7 @@ export const ProfileCard: React.FC<ProfileCardProps> = ({ user, isOwner, nuggetC
       {/* 1. Avatar Section - Centered */}
       <div className="relative w-24 h-24 mx-auto">
         <div className="w-full h-full rounded-full bg-slate-100 dark:bg-slate-800 border-4 border-white dark:border-slate-900 shadow-lg flex items-center justify-center overflow-hidden">
-            <Avatar name={formData.name} src={formData.avatarUrl} size="xl" className="w-full h-full text-3xl" />
+            <Avatar name={formData.name} src={formData.avatarUrl || undefined} size="xl" className="w-full h-full text-3xl" />
         </div>
         {isEditing && allowUpload && (
             <>
@@ -191,14 +205,18 @@ export const ProfileCard: React.FC<ProfileCardProps> = ({ user, isOwner, nuggetC
                 </p>
                 
                 <div className="flex flex-wrap gap-4 text-xs text-slate-500 dark:text-slate-400">
-                    <div className="flex items-center gap-1.5">
-                        <MapPin size={14} />
-                        <span>{formData.location}</span>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                        <Calendar size={14} />
-                        <span>Joined {new Date(user.joinedAt).getFullYear()}</span>
-                    </div>
+                    {formData.location && (
+                        <div className="flex items-center gap-1.5">
+                            <MapPin size={14} />
+                            <span>{formData.location}</span>
+                        </div>
+                    )}
+                    {user.joinedAt && (
+                        <div className="flex items-center gap-1.5">
+                            <Calendar size={14} />
+                            <span>Joined {formatJoinDate(user.joinedAt)}</span>
+                        </div>
+                    )}
                 </div>
             </div>
         )}
@@ -268,9 +286,9 @@ export const ProfileCard: React.FC<ProfileCardProps> = ({ user, isOwner, nuggetC
             ) : (
                 <button 
                     onClick={() => setIsEditing(true)}
-                    className="w-full py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all flex items-center justify-center gap-2 group"
+                    className="w-full py-2.5 px-4 rounded-xl border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 hover:border-slate-300 dark:hover:border-slate-600 transition-all flex items-center justify-center gap-2 group shadow-sm"
                 >
-                    <Edit3 size={16} className="text-slate-400 group-hover:text-primary-500 transition-colors" />
+                    <Edit3 size={16} className="text-slate-500 group-hover:text-primary-500 transition-colors" />
                     Edit Profile
                 </button>
             )}

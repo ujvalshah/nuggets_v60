@@ -168,9 +168,15 @@ export const CollectionCard: React.FC<CollectionCardProps> = ({
 
             <div className={`flex items-center justify-between mt-auto pt-3 border-t border-slate-100 dark:border-slate-800 ${selectionMode ? 'opacity-50' : ''}`}>
                 <div className="flex gap-4 text-xs font-medium text-slate-500 dark:text-slate-400">
-                    <span className="flex items-center gap-1.5" title="Items"><Folder size={14} className="text-slate-400 dark:text-slate-500" /> {collection.entries.length}</span>
+                    <span className="flex items-center gap-1.5" title="Items">
+                        <Folder size={14} className="text-slate-400 dark:text-slate-500" /> 
+                        {collection.validEntriesCount ?? collection.entries?.length ?? 0}
+                    </span>
                     {!isPrivate && (
-                        <span className="flex items-center gap-1.5" title="Followers"><Users size={14} className="text-slate-400 dark:text-slate-500" /> {collection.followersCount}</span>
+                        <span className="flex items-center gap-1.5" title="Followers">
+                            <Users size={14} className="text-slate-400 dark:text-slate-500" /> 
+                            {collection.followersCount ?? 0}
+                        </span>
                     )}
                 </div>
                 

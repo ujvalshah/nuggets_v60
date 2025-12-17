@@ -35,16 +35,16 @@ export const CollectionPopover: React.FC<CollectionPopoverProps> = ({
   }, [isOpen, mode]);
 
   const handleCloseInternal = async () => {
-      // Fallback: If in private mode (collections), ensure the nugget is at least in "General Bookmarks" collection
-      // if it's not in any other private collection.
+      // Fallback: If in private mode (collections), ensure the nugget is at least in a "General" collection
+      // if it's not in any other private collection. This ensures users don't lose their saved items.
       if (mode === 'private' && collections.length > 0) {
           const inAny = collections.some(c => c.entries.some(e => e.articleId === articleId));
           if (!inAny) {
-              const general = collections.find(c => c.name === 'General Bookmarks');
+              const general = collections.find(c => c.name === 'General' || c.name === 'General Bookmarks');
               if (general) {
                   try {
                       await storageService.addArticleToCollection(general.id, articleId, currentUserId);
-                      toast.success("Saved to General Bookmarks");
+                      toast.success(`Saved to ${general.name}`);
                   } catch (e) {
                       console.error("Auto-save failed", e);
                   }

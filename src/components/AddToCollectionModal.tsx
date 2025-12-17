@@ -239,9 +239,9 @@ export const AddToCollectionModal: React.FC<AddToCollectionModalProps> = ({
                           </p>
                         )}
                       </div>
-                      {col.entries.length > 0 && (
+                      {(col.validEntriesCount ?? col.entries?.length ?? 0) > 0 && (
                         <span className="text-xs text-slate-400 dark:text-slate-500 shrink-0">
-                          {col.entries.length}
+                          {col.validEntriesCount ?? col.entries?.length ?? 0}
                         </span>
                       )}
                     </button>
@@ -259,7 +259,7 @@ export const AddToCollectionModal: React.FC<AddToCollectionModalProps> = ({
                 <input 
                   autoFocus
                   className="flex-1 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 dark:text-white placeholder-slate-400"
-                  placeholder={`${entityName} name...`}
+                  placeholder="Collection name..."
                   value={newCollectionName}
                   onChange={(e) => setNewCollectionName(e.target.value)}
                   onKeyDown={(e) => {
@@ -306,7 +306,7 @@ export const AddToCollectionModal: React.FC<AddToCollectionModalProps> = ({
                 className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg border border-dashed border-slate-300 dark:border-slate-700 transition-colors"
               >
                 <Plus size={16} /> 
-                <span>Create New {entityName}</span>
+                <span>Create New Collection</span>
               </button>
             )}
           </div>

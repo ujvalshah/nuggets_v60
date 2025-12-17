@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Article } from '@/types';
-import { X, Clock, ExternalLink, Sparkles, Loader2, Bookmark, FolderPlus, Heart, Eye } from 'lucide-react';
+import { X, Clock, ExternalLink, Sparkles, Loader2, FolderPlus, Heart, Eye } from 'lucide-react';
 import { formatDate } from '@/utils/formatters';
 import { Avatar } from './shared/Avatar';
 import { useToast } from '@/hooks/useToast';
