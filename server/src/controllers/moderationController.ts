@@ -57,14 +57,6 @@ export const getReports = async (req: Request, res: Response) => {
     // Normalize reports - ensure all fields are properly converted
     const normalizedReports = normalizeDocs(reports);
     
-    // Debug logging (remove in production if not needed)
-    if (process.env.NODE_ENV === 'development') {
-      console.log(`[Moderation] Found ${reports.length} reports (total: ${total}) with query:`, query);
-      if (reports.length > 0) {
-        console.log(`[Moderation] First report status:`, reports[0]?.status);
-      }
-    }
-    
     res.json({
       data: normalizedReports,
       total,
@@ -104,17 +96,6 @@ export const createReport = async (req: Request, res: Response) => {
       ...reportData,
       status: 'open'
     });
-    
-    // Debug logging (remove in production if not needed)
-    if (process.env.NODE_ENV === 'development') {
-      console.log(`[Moderation] Created report:`, {
-        id: newReport._id?.toString(),
-        targetId: newReport.targetId,
-        targetType: newReport.targetType,
-        status: newReport.status,
-        reason: newReport.reason
-      });
-    }
     
     res.status(201).json(normalizeDoc(newReport));
   } catch (error: any) {

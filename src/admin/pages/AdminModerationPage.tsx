@@ -10,8 +10,6 @@ import { useAdminHeader } from '../layout/AdminLayout';
 import { useSearchParams } from 'react-router-dom';
 import { ReportContentPreview } from '../components/ReportContentPreview';
 
-console.log('[AdminModerationPage] module evaluated');
-
 export const AdminModerationPage: React.FC = () => {
   const { setPageHeader } = useAdminHeader();
   const [reports, setReports] = useState<AdminReport[]>([]);
