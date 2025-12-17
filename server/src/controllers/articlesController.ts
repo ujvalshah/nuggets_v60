@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { Article } from '../models/Article.js';
 import { normalizeDoc, normalizeDocs } from '../utils/db.js';
 import { createArticleSchema, updateArticleSchema } from '../utils/validation.js';
+import { cleanupCollectionEntries } from '../utils/collectionHelpers.js';
 
 export const getArticles = async (req: Request, res: Response) => {
   try {
@@ -195,8 +196,19 @@ export const updateArticle = async (req: Request, res: Response) => {
 
 export const deleteArticle = async (req: Request, res: Response) => {
   try {
-    const article = await Article.findByIdAndDelete(req.params.id);
+    const articleId = req.params.id;
+    
+    // Delete the article first
+    const article = await Article.findByIdAndDelete(articleId);
     if (!article) return res.status(404).json({ message: 'Article not found' });
+    
+    // Cascade cleanup: Remove article references from all collections
+    // This maintains referential integrity
+    const collectionsUpdated = await cleanupCollectionEntries(articleId);
+    if (collectionsUpdated > 0) {
+      console.log(`[Articles] Cleaned up article ${articleId} from ${collectionsUpdated} collection(s)`);
+    }
+    
     res.status(204).send();
   } catch (error: any) {
     console.error('[Articles] Delete article error:', error);

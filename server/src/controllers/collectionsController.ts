@@ -1,12 +1,47 @@
 import { Request, Response } from 'express';
 import { Collection } from '../models/Collection.js';
+import { Article } from '../models/Article.js';
 import { normalizeDoc, normalizeDocs } from '../utils/db.js';
 import { createCollectionSchema, updateCollectionSchema, addEntrySchema, flagEntrySchema } from '../utils/validation.js';
 
 export const getCollections = async (req: Request, res: Response) => {
   try {
     const collections = await Collection.find().sort({ createdAt: -1 });
-    res.json(normalizeDocs(collections));
+    
+    // Validate entries against existing articles and set validEntriesCount
+    // This ensures counts are accurate even if entries contain stale references
+    const allArticleIds = new Set(
+      (await Article.find({}, { _id: 1 })).map(a => a._id.toString())
+    );
+    
+    // Process collections to validate entries and set validEntriesCount
+    const validatedCollections = await Promise.all(
+      collections.map(async (collection) => {
+        // Filter out entries referencing non-existent articles
+        const validEntries = collection.entries.filter(entry => 
+          allArticleIds.has(entry.articleId)
+        );
+        
+        const validCount = validEntries.length;
+        
+        // If entries were filtered or validEntriesCount is missing/incorrect, update
+        if (validEntries.length !== collection.entries.length || 
+            collection.validEntriesCount === undefined || 
+            collection.validEntriesCount === null ||
+            collection.validEntriesCount !== validCount) {
+          
+          // Update collection with validated entries and count
+          collection.entries = validEntries;
+          collection.validEntriesCount = validCount;
+          collection.updatedAt = new Date().toISOString();
+          await collection.save();
+        }
+        
+        return collection;
+      })
+    );
+    
+    res.json(normalizeDocs(validatedCollections));
   } catch (error: any) {
     console.error('[Collections] Get collections error:', error);
     res.status(500).json({ message: 'Internal server error' });
@@ -17,6 +52,32 @@ export const getCollectionById = async (req: Request, res: Response) => {
   try {
     const collection = await Collection.findById(req.params.id);
     if (!collection) return res.status(404).json({ message: 'Collection not found' });
+    
+    // Validate entries against existing articles and set validEntriesCount
+    const allArticleIds = new Set(
+      (await Article.find({}, { _id: 1 })).map(a => a._id.toString())
+    );
+    
+    // Filter out entries referencing non-existent articles
+    const validEntries = collection.entries.filter(entry => 
+      allArticleIds.has(entry.articleId)
+    );
+    
+    const validCount = validEntries.length;
+    
+    // If entries were filtered or validEntriesCount is missing/incorrect, update
+    if (validEntries.length !== collection.entries.length || 
+        collection.validEntriesCount === undefined || 
+        collection.validEntriesCount === null ||
+        collection.validEntriesCount !== validCount) {
+      
+      // Update collection with validated entries and count
+      collection.entries = validEntries;
+      collection.validEntriesCount = validCount;
+      collection.updatedAt = new Date().toISOString();
+      await collection.save();
+    }
+    
     res.json(normalizeDoc(collection));
   } catch (error: any) {
     console.error('[Collections] Get collection by ID error:', error);
@@ -137,7 +198,10 @@ export const addEntry = async (req: Request, res: Response) => {
         },
         $set: {
           updatedAt: new Date().toISOString()
-        }
+        },
+        // Update validEntriesCount: increment if exists, otherwise set to entries length
+        $inc: { validEntriesCount: 1 },
+        $setOnInsert: { validEntriesCount: 1 } // Set if document is new (won't happen here, but safe)
       },
       { 
         new: true, // Return updated document
@@ -153,6 +217,19 @@ export const addEntry = async (req: Request, res: Response) => {
       }
       // Entry already exists, return the collection as-is
       return res.json(normalizeDoc(existingCollection));
+    }
+
+    // Ensure validEntriesCount is initialized and matches entries length
+    // This handles legacy collections that don't have validEntriesCount set
+    if (collection.validEntriesCount === undefined || collection.validEntriesCount === null) {
+      collection.validEntriesCount = collection.entries.length;
+      await collection.save();
+    } else {
+      // Ensure count matches actual entries length (safety check)
+      if (collection.validEntriesCount !== collection.entries.length) {
+        collection.validEntriesCount = collection.entries.length;
+        await collection.save();
+      }
     }
 
     res.json(normalizeDoc(collection));
@@ -173,7 +250,9 @@ export const removeEntry = async (req: Request, res: Response) => {
         },
         $set: {
           updatedAt: new Date().toISOString()
-        }
+        },
+        // Decrement validEntriesCount (entry is being removed)
+        $inc: { validEntriesCount: -1 }
       },
       { 
         new: true, // Return updated document
@@ -183,6 +262,21 @@ export const removeEntry = async (req: Request, res: Response) => {
     
     if (!collection) {
       return res.status(404).json({ message: 'Collection not found' });
+    }
+
+    // Ensure validEntriesCount doesn't go negative and matches entries length
+    if (collection.validEntriesCount === undefined || collection.validEntriesCount === null) {
+      collection.validEntriesCount = collection.entries.length;
+      await collection.save();
+    } else if (collection.validEntriesCount < 0) {
+      collection.validEntriesCount = Math.max(0, collection.entries.length);
+      await collection.save();
+    } else {
+      // Ensure count matches actual entries length (safety check)
+      if (collection.validEntriesCount !== collection.entries.length) {
+        collection.validEntriesCount = collection.entries.length;
+        await collection.save();
+      }
     }
 
     res.json(normalizeDoc(collection));

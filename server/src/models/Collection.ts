@@ -16,6 +16,7 @@ export interface ICollection extends Document {
   followersCount: number;
   followers: string[]; // Array of userIds who follow this collection
   entries: ICollectionEntry[];
+  validEntriesCount?: number; // Validated count of entries (computed, may be undefined for legacy data)
   type: 'private' | 'public';
 }
 
@@ -35,6 +36,7 @@ const CollectionSchema = new Schema<ICollection>({
   followersCount: { type: Number, default: 0 },
   followers: { type: [String], default: [] }, // Array of userIds
   entries: { type: [CollectionEntrySchema], default: [] },
+  validEntriesCount: { type: Number }, // Optional validated count (computed field)
   type: { type: String, enum: ['private', 'public'], default: 'public' }
 }, {
   timestamps: false
