@@ -87,7 +87,7 @@ export function mapCollectionToAdminCollection(collection: Collection): AdminCol
       name: '' // Will need to fetch user name separately if needed
     },
     type: collection.type,
-    itemCount: collection.entries?.length || 0,
+    itemCount: collection.validEntriesCount ?? collection.entries?.length ?? 0,
     followerCount: collection.followersCount || 0,
     status: 'active', // Backend doesn't have status field
     createdAt: collection.createdAt,
@@ -180,3 +180,4 @@ export function mapFeedbackToAdminFeedback(feedback: RawFeedback): AdminFeedback
     createdAt: feedback.createdAt
   };
 }
+

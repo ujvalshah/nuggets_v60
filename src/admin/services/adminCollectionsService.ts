@@ -40,7 +40,7 @@ class AdminCollectionsService {
     
     return {
       totalCommunity: publicCols.length,
-      totalNuggetsInCommunity: publicCols.reduce((acc, c) => acc + (c.entries?.length || 0), 0)
+      totalNuggetsInCommunity: publicCols.reduce((acc, c) => acc + (c.validEntriesCount ?? c.entries?.length ?? 0), 0)
     };
   }
 

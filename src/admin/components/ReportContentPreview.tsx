@@ -123,7 +123,7 @@ export const ReportContentPreview: React.FC<ReportContentPreviewProps> = ({ targ
           </p>
         )}
         <div className="flex items-center gap-3 text-xs text-slate-500">
-          <span>{content.entries?.length || 0} items</span>
+          <span>{(content.validEntriesCount ?? content.entries?.length) || 0} items</span>
           {content.createdAt && (
             <span>{formatDate(content.createdAt, true)}</span>
           )}
