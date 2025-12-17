@@ -37,7 +37,7 @@ interface CardTagsProps {
   onCategoryClick: (category: string) => void;
   showTagPopover?: boolean;
   onToggleTagPopover?: (e: React.MouseEvent) => void;
-  tagPopoverRef?: React.RefObject<HTMLDivElement>;
+  tagPopoverRef?: React.RefObject<HTMLDivElement | null>;
   className?: string;
 }
 

@@ -14,8 +14,8 @@ interface GridVariantProps {
   logic: NewsCardLogic;
   showTagPopover: boolean;
   showMenu: boolean;
-  menuRef: React.RefObject<HTMLDivElement>;
-  tagPopoverRef: React.RefObject<HTMLDivElement>;
+  menuRef: React.RefObject<HTMLDivElement | null>;
+  tagPopoverRef: React.RefObject<HTMLDivElement | null>;
   isOwner: boolean;
   isAdmin: boolean;
   isPreview?: boolean;

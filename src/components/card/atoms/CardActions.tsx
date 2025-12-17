@@ -18,7 +18,7 @@ interface CardActionsProps {
   onToggleVisibility?: () => void;
   showMenu: boolean;
   onToggleMenu: (e: React.MouseEvent) => void;
-  menuRef: React.RefObject<HTMLDivElement>;
+  menuRef: React.RefObject<HTMLDivElement | null>;
   className?: string;
   isPreview?: boolean; // Add preview flag to hide ShareMenu
 }

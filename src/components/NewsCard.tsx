@@ -1,4 +1,4 @@
-import React, { forwardRef } from 'react';
+import { forwardRef } from 'react';
 import { Article } from '@/types';
 import { useNewsCard } from '@/hooks/useNewsCard';
 import { GridVariant } from './card/variants/GridVariant';
