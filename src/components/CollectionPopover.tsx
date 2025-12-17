@@ -35,8 +35,8 @@ export const CollectionPopover: React.FC<CollectionPopoverProps> = ({
   }, [isOpen, mode]);
 
   const handleCloseInternal = async () => {
-      // Fallback: If in private mode (folders), ensure the nugget is at least in "General Bookmarks"
-      // if it's not in any other folder.
+      // Fallback: If in private mode (collections), ensure the nugget is at least in "General Bookmarks" collection
+      // if it's not in any other private collection.
       if (mode === 'private' && collections.length > 0) {
           const inAny = collections.some(c => c.entries.some(e => e.articleId === articleId));
           if (!inAny) {
@@ -149,8 +149,8 @@ export const CollectionPopover: React.FC<CollectionPopoverProps> = ({
   }
 
   // Dynamic naming based on mode
-  const headerText = mode === 'private' ? 'Save to Folder' : 'Add to Collection';
-  const entityName = mode === 'private' ? 'folder' : 'collection';
+  const headerText = mode === 'private' ? 'Save to Collection' : 'Add to Collection';
+  const entityName = 'collection';
 
   return createPortal(
     <div 

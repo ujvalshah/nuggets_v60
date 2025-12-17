@@ -97,6 +97,9 @@ class ApiClient {
           error.errors = errorInfo.errors;
         }
         
+        // Attach response data for debugging
+        error.response = { status: response.status, data: errorInfo };
+        
         if (response.status === 404) {
           throw new Error('The requested resource was not found.');
         }
@@ -118,7 +121,13 @@ class ApiClient {
           throw new Error('Too many attempts. Please wait a moment and try again.');
         }
         if (response.status === 500) {
-          throw new Error('Something went wrong on our end. Please try again in a moment.');
+          // Preserve backend error message if available, otherwise use generic message
+          const backendMessage = errorInfo.message && errorInfo.message !== 'Internal server error' 
+            ? errorInfo.message 
+            : 'Something went wrong on our end. Please try again in a moment.';
+          const serverError: any = new Error(backendMessage);
+          serverError.response = error.response;
+          throw serverError;
         }
         
         // For other errors (like 400 validation errors), throw with errors array attached

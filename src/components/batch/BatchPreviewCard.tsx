@@ -89,11 +89,6 @@ export const BatchPreviewCard: React.FC<BatchPreviewCardProps> = ({
     window.open(row.url, '_blank', 'noopener,noreferrer');
   };
   
-  // Handle bookmark toggle (no-op for batch preview)
-  const handleToggleBookmark = () => {
-    // No-op: bookmarks not applicable during batch upload
-  };
-  
   // Handle category click (no-op for batch preview)
   const handleCategoryClick = () => {
     // No-op: category navigation not applicable during batch upload
@@ -168,8 +163,6 @@ export const BatchPreviewCard: React.FC<BatchPreviewCardProps> = ({
           <NewsCard
             article={previewArticle}
             viewMode="utility"
-            isBookmarked={false}
-            onToggleBookmark={handleToggleBookmark}
             onCategoryClick={handleCategoryClick}
             onClick={handleCardClick}
             currentUserId={currentUserId}

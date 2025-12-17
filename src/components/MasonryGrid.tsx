@@ -8,8 +8,6 @@ interface MasonryGridProps {
   articles: Article[];
   isLoading: boolean;
   onArticleClick: (article: Article) => void;
-  isBookmarked: (id: string) => boolean;
-  onToggleBookmark: (id: string) => void;
   onCategoryClick: (category: string) => void;
   currentUserId?: string;
   onTagClick?: (tag: string) => void;
@@ -38,8 +36,6 @@ export const MasonryGrid: React.FC<MasonryGridProps> = ({
   articles,
   isLoading,
   onArticleClick,
-  isBookmarked,
-  onToggleBookmark,
   onCategoryClick,
   currentUserId,
   onTagClick,
@@ -83,8 +79,6 @@ export const MasonryGrid: React.FC<MasonryGridProps> = ({
               ref={(el) => registerCard(article.id, el)}
               article={article}
               viewMode="masonry"
-              isBookmarked={isBookmarked(article.id)}
-              onToggleBookmark={onToggleBookmark}
               onCategoryClick={onCategoryClick}
               onClick={onArticleClick}
               currentUserId={currentUserId}

@@ -4,7 +4,6 @@ import { Collection, Article, Contributor } from '@/types';
 import { storageService } from '@/services/storageService';
 import { ArrowLeft, Folder, Users, Layers, Plus, Info } from 'lucide-react';
 import { ArticleGrid } from '@/components/ArticleGrid';
-import { useBookmarks } from '@/hooks/useBookmarks';
 import { useToast } from '@/hooks/useToast';
 import { ArticleModal } from '@/components/ArticleModal';
 import { getCollectionTheme } from '@/constants/theme';
@@ -17,7 +16,6 @@ export const CollectionDetailPage: React.FC = () => {
   const { collectionId } = useParams<{ collectionId: string }>();
   const navigate = useNavigate();
   const toast = useToast();
-  const { isBookmarked, toggleBookmark } = useBookmarks();
   const { currentUserId } = useAuth();
 
   const [collection, setCollection] = useState<Collection | null>(null);
@@ -192,8 +190,6 @@ export const CollectionDetailPage: React.FC = () => {
             viewMode="grid"
             isLoading={false}
             onArticleClick={setSelectedArticle}
-            isBookmarked={isBookmarked}
-            onToggleBookmark={toggleBookmark}
             onCategoryClick={() => {}}
             emptyTitle="Empty Collection"
             emptyMessage="This collection has no nuggets yet. Be the first to add one!"

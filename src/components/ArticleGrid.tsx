@@ -13,8 +13,6 @@ interface ArticleGridProps {
   viewMode: 'grid' | 'feed' | 'masonry' | 'utility';
   isLoading: boolean;
   onArticleClick: (article: Article) => void;
-  isBookmarked: (id: string) => boolean;
-  onToggleBookmark: (id: string) => void;
   onCategoryClick: (category: string) => void;
   emptyTitle?: string;
   emptyMessage?: string;
@@ -31,8 +29,6 @@ export const ArticleGrid: React.FC<ArticleGridProps> = ({
   viewMode,
   isLoading,
   onArticleClick,
-  isBookmarked,
-  onToggleBookmark,
   onCategoryClick,
   emptyTitle = "No nuggets found",
   emptyMessage = "Try adjusting your search or filters.",
@@ -80,8 +76,6 @@ export const ArticleGrid: React.FC<ArticleGridProps> = ({
         articles={articles}
         isLoading={isLoading}
         onArticleClick={onArticleClick}
-        isBookmarked={isBookmarked}
-        onToggleBookmark={onToggleBookmark}
         onCategoryClick={onCategoryClick}
         currentUserId={currentUserId}
         onTagClick={onTagClick}
@@ -117,8 +111,6 @@ export const ArticleGrid: React.FC<ArticleGridProps> = ({
               ref={(el) => registerCard(sanitized.id, el)}
               article={sanitized}
               viewMode={viewMode}
-              isBookmarked={isBookmarked(sanitized.id)}
-              onToggleBookmark={onToggleBookmark}
               onCategoryClick={onCategoryClick}
               onClick={onArticleClick}
               currentUserId={currentUserId}

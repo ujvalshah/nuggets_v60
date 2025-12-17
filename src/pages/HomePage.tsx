@@ -1,7 +1,6 @@
 
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { Article, SortOrder, Collection } from '@/types';
-import { useBookmarks } from '@/hooks/useBookmarks';
 import { useArticles } from '@/hooks/useArticles';
 import { Loader2, AlertCircle, TrendingUp, Folder, Hash } from 'lucide-react';
 import { ArticleModal } from '@/components/ArticleModal';
@@ -34,7 +33,6 @@ export const HomePage: React.FC<HomePageProps> = ({
   sortOrder
 }) => {
   const [selectedArticle, setSelectedArticle] = useState<Article | null>(null);
-  const { toggleBookmark, isBookmarked } = useBookmarks();
   const [pullY, setPullY] = useState(0);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const touchStartRef = useRef(0);
@@ -262,8 +260,6 @@ export const HomePage: React.FC<HomePageProps> = ({
                         searchQuery={searchQuery}
                         sortOrder={sortOrder}
                         onArticleClick={setSelectedArticle}
-                        isBookmarked={isBookmarked}
-                        onToggleBookmark={toggleBookmark}
                         onCategoryClick={toggleCategory}
                         onTagClick={(t) => setSelectedTag(t)}
                         currentUserId={currentUserId}
@@ -306,8 +302,6 @@ export const HomePage: React.FC<HomePageProps> = ({
                     viewMode={viewMode}
                     isLoading={query.isLoading}
                     onArticleClick={setSelectedArticle}
-                    isBookmarked={isBookmarked}
-                    onToggleBookmark={toggleBookmark}
                     onTagClick={(t) => setSelectedTag(t)}
                     onCategoryClick={(c) => toggleCategory(c)}
                     currentUserId={currentUserId}

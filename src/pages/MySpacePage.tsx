@@ -9,12 +9,10 @@ import { CollectionsGrid } from '@/components/profile/CollectionsGrid';
 import { Loader2, Layers, CheckSquare, X, Trash2, Lock, Globe, FolderPlus, ChevronDown, Info, Folder, Plus, Edit2 } from 'lucide-react';
 import { ArticleModal } from '@/components/ArticleModal';
 import { AddToCollectionModal } from '@/components/AddToCollectionModal';
-import { useBookmarks } from '@/hooks/useBookmarks';
 import { useToast } from '@/hooks/useToast';
 import { ConfirmActionModal } from '@/components/settings/ConfirmActionModal';
 import { Tooltip } from '@/components/UI/Tooltip';
 import { queryClient } from '@/queryClient';
-import { getBookmarkFolders, getBookmarksByFolder, deleteBookmarkFolder, type BookmarkFolder } from '@/services/bookmarkFoldersService';
 
 interface MySpacePageProps {
   currentUserId: string;
@@ -24,7 +22,6 @@ interface MySpacePageProps {
 const getDescription = (tab: string, visibility: 'public' | 'private') => {
   if (tab === 'collections') return "Thematic lists you have curated for the community.";
   if (tab === 'folders') return "Your private folders for organizing nuggets. Visible only to you.";
-  if (tab === 'bookmarks') return "Your saved nuggets organized by folder.";
   if (tab === 'nuggets') {
       return visibility === 'public' 
         ? "Your nuggets that you've shared with the community."
@@ -41,15 +38,7 @@ export const MySpacePage: React.FC<MySpacePageProps> = ({ currentUserId }) => {
   // Data State
   const [profileUser, setProfileUser] = useState<User | null>(null);
   const [articles, setArticles] = useState<Article[]>([]);
-  const [bookmarkedArticles, setBookmarkedArticles] = useState<Article[]>([]);
   const [collections, setCollections] = useState<Collection[]>([]);
-  
-  // Bookmark Folders State
-  const [bookmarkFolders, setBookmarkFolders] = useState<BookmarkFolder[]>([]);
-  const [activeFolderId, setActiveFolderId] = useState<string | null>(null);
-  const [isLoadingBookmarkFolders, setIsLoadingBookmarkFolders] = useState(false);
-  const [editingFolderId, setEditingFolderId] = useState<string | null>(null);
-  const [editingFolderName, setEditingFolderName] = useState('');
   
   // UI State
   const [activeTab, setActiveTab] = useState('nuggets');
@@ -68,9 +57,6 @@ export const MySpacePage: React.FC<MySpacePageProps> = ({ currentUserId }) => {
   const [isActionMenuOpen, setIsActionMenuOpen] = useState(false);
   const actionMenuRef = useRef<HTMLDivElement>(null);
   const [isUpdatingVisibility, setIsUpdatingVisibility] = useState(false);
-
-  // Hooks
-  const { isBookmarked, toggleBookmark, bookmarks } = useBookmarks();
   
   // Context
   const targetUserId = userId || currentUserId;
@@ -90,35 +76,8 @@ export const MySpacePage: React.FC<MySpacePageProps> = ({ currentUserId }) => {
     return () => {
       isMounted.current = false;
     };
-  }, [targetUserId, bookmarks]);
+  }, [targetUserId]);
 
-  // Load bookmark folders when bookmarks tab is active
-  useEffect(() => {
-    if (activeTab === 'bookmarks' && isOwner && currentUserId) {
-      loadBookmarkFolders();
-    } else if (activeTab !== 'bookmarks') {
-      // Reset active folder when leaving bookmarks tab
-      setActiveFolderId(null);
-    }
-  }, [activeTab, isOwner, currentUserId]);
-
-  // Set default folder when folders are loaded
-  useEffect(() => {
-    if (bookmarkFolders.length > 0 && activeFolderId === null && activeTab === 'bookmarks') {
-      const generalFolder = bookmarkFolders.find(f => f.isDefault);
-      if (generalFolder) {
-        setActiveFolderId(generalFolder.id);
-        loadBookmarksForFolder(generalFolder.id);
-      }
-    }
-  }, [bookmarkFolders, activeTab]);
-
-  // Load bookmarks when folder selection changes or bookmarks array changes
-  useEffect(() => {
-    if (activeFolderId && activeTab === 'bookmarks' && isOwner) {
-      loadBookmarksForFolder(activeFolderId);
-    }
-  }, [activeFolderId, activeTab, isOwner, bookmarks.length]);
 
   // Clear selection when tab changes
   useEffect(() => {
@@ -161,8 +120,6 @@ export const MySpacePage: React.FC<MySpacePageProps> = ({ currentUserId }) => {
       setArticles(safeUserArticles);
       setCollections(safeAllCollections.filter(c => c.creatorId === targetUserId));
       
-      const userBookmarks = safeAllArticles.filter(a => bookmarks.includes(a.id));
-      setBookmarkedArticles(userBookmarks);
 
     } catch (e: any) {
       // Ignore cancellation errors - they're expected when component unmounts or new requests start
@@ -174,7 +131,6 @@ export const MySpacePage: React.FC<MySpacePageProps> = ({ currentUserId }) => {
       if (isMounted.current) {
         setArticles([]);
         setCollections([]);
-        setBookmarkedArticles([]);
       }
     } finally {
       if (isMounted.current) {
@@ -200,11 +156,6 @@ export const MySpacePage: React.FC<MySpacePageProps> = ({ currentUserId }) => {
         id: 'nuggets', 
         label: 'My Nuggets', 
         count: isOwner ? (publicNuggets.length + privateNuggets.length) : publicNuggets.length 
-    },
-    { 
-        id: 'bookmarks', 
-        label: 'Bookmarks', 
-        count: bookmarkedArticles.length 
     },
     { 
         id: 'collections', 
@@ -234,21 +185,10 @@ export const MySpacePage: React.FC<MySpacePageProps> = ({ currentUserId }) => {
           }
           toast.success(`Deleted ${selectedIds.length} ${activeTab === 'folders' ? 'folders' : 'collections'}`);
       } else {
-          if (activeTab === 'bookmarks') {
-              for (const id of selectedIds) {
-                  toggleBookmark(id);
-              }
-              toast.success(`Removed ${selectedIds.length} bookmarks`);
-              // Refresh bookmark list for current folder
-              if (activeFolderId) {
-                  await loadBookmarksForFolder(activeFolderId);
-              }
-          } else {
-              for (const id of selectedIds) {
-                  await storageService.deleteArticle(id);
-              }
-              toast.success(`Deleted ${selectedIds.length} nuggets`);
+          for (const id of selectedIds) {
+              await storageService.deleteArticle(id);
           }
+          toast.success(`Deleted ${selectedIds.length} nuggets`);
       }
       
       setShowDeleteConfirm(false);
@@ -262,8 +202,16 @@ export const MySpacePage: React.FC<MySpacePageProps> = ({ currentUserId }) => {
       
       setIsUpdatingVisibility(true);
       
+      // Compute current list based on active tab and visibility
+      let currentListForUpdate: Article[] = [];
+      if (nuggetVisibility === 'public') {
+          currentListForUpdate = publicNuggets;
+      } else {
+          currentListForUpdate = privateNuggets;
+      }
+      
       // Filter out nuggets already in target state
-      const nuggetsToUpdate = currentList.filter((item: Article) => 
+      const nuggetsToUpdate = currentListForUpdate.filter((item: Article) => 
           selectedIds.includes(item.id) && getVisibility(item) !== visibility
       );
       
@@ -504,101 +452,14 @@ export const MySpacePage: React.FC<MySpacePageProps> = ({ currentUserId }) => {
       ));
   };
 
-  // Bookmark Folders Functions
-  const loadBookmarkFolders = async () => {
-    if (!isOwner || !currentUserId) return;
-    
-    setIsLoadingBookmarkFolders(true);
-    try {
-      const folders = await getBookmarkFolders();
-      const sortedFolders = folders.sort((a, b) => a.order - b.order);
-      setBookmarkFolders(sortedFolders);
-    } catch (error: any) {
-      console.error('Failed to load bookmark folders:', error);
-      toast.error('Failed to load bookmark folders');
-    } finally {
-      setIsLoadingBookmarkFolders(false);
-    }
-  };
-
-  const loadBookmarksForFolder = async (folderId: string) => {
-    if (!isOwner || !currentUserId) return;
-
-    try {
-      const response = await getBookmarksByFolder(folderId);
-      const nuggetIds = response.nuggetIds || [];
-
-      // Fetch articles for these nugget IDs
-      const articlePromises = nuggetIds.map(id => storageService.getArticleById(id));
-      const articleResults = await Promise.all(articlePromises);
-      const validArticles = articleResults.filter((article): article is Article => article !== undefined);
-
-      setBookmarkedArticles(validArticles);
-    } catch (error: any) {
-      // Ignore cancellation errors - they're expected when switching folders quickly or component unmounts
-      if (error?.name === 'AbortError' || error?.message === 'Request cancelled') {
-        return; // expected, ignore silently
-      }
-
-      console.error('Failed to load bookmarks for folder:', error);
-      toast.error('Failed to load bookmarks');
-      setBookmarkedArticles([]);
-    }
-  };
-
-  const handleFolderDelete = async (folderId: string) => {
-    if (!isOwner || !currentUserId) return;
-
-    const folder = bookmarkFolders.find(f => f.id === folderId);
-    if (!folder || folder.isDefault) {
-      toast.error('Cannot delete the default folder');
-      return;
-    }
-
-    const wasActiveFolder = activeFolderId === folderId;
-
-    try {
-      await deleteBookmarkFolder(folderId);
-      toast.success('Folder deleted');
-      
-      // Refresh folders
-      const updatedFolders = await getBookmarkFolders();
-      const sortedFolders = updatedFolders.sort((a, b) => a.order - b.order);
-      setBookmarkFolders(sortedFolders);
-      
-      // Switch to General folder if deleted folder was active
-      if (wasActiveFolder) {
-        const generalFolder = sortedFolders.find(f => f.isDefault);
-        if (generalFolder) {
-          setActiveFolderId(generalFolder.id);
-          await loadBookmarksForFolder(generalFolder.id);
-        }
-      }
-    } catch (error: any) {
-      console.error('Failed to delete folder:', error);
-      toast.error('Failed to delete folder');
-    }
-  };
-
-  const handleFolderRenameStart = (folder: BookmarkFolder) => {
-    setEditingFolderId(folder.id);
-    setEditingFolderName(folder.name);
-  };
-
-  const handleFolderRenameCancel = () => {
-    setEditingFolderId(null);
-    setEditingFolderName('');
-  };
-
-  const handleFolderRenameSave = async (folderId: string) => {
-    // Note: Backend doesn't have update endpoint yet, so this is a placeholder
-    // The UI will be ready but won't work until backend is added
-    toast.error('Rename functionality requires backend support');
-    handleFolderRenameCancel();
-  };
-
-  if (loading) return <div className="min-h-screen flex items-center justify-center bg-slate-50"><Loader2 className="animate-spin text-slate-400" /></div>;
-  if (!profileUser) return <div className="p-12 text-center text-slate-500">User not found</div>;
+  // Early returns for loading and error states
+  if (loading) {
+    return <div className="min-h-screen flex items-center justify-center bg-slate-50"><Loader2 className="animate-spin text-slate-400" /></div>;
+  }
+  
+  if (!profileUser) {
+    return <div className="p-12 text-center text-slate-500">User not found</div>;
+  }
 
   // --- HIERARCHY LOGIC ---
   // Determine what list to show based on Tab + Sub-Filter
@@ -611,8 +472,6 @@ export const MySpacePage: React.FC<MySpacePageProps> = ({ currentUserId }) => {
       currentList = publicCollections;
   } else if (activeTab === 'folders') {
       currentList = privateFolders;
-  } else if (activeTab === 'bookmarks') {
-      currentList = bookmarkedArticles;
   }
 
   // Determine current description
@@ -708,14 +567,6 @@ export const MySpacePage: React.FC<MySpacePageProps> = ({ currentUserId }) => {
                                                     </>
                                                 )}
                                                 
-                                                {activeTab === 'bookmarks' && (
-                                                    <>
-                                                        <button onClick={() => { setShowAddToCollection(true); setIsActionMenuOpen(false); }} className="w-full flex items-center gap-2 px-4 py-2.5 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
-                                                            <FolderPlus size={14} className="text-indigo-500" /> Organize to Folder
-                                                        </button>
-                                                        <div className="h-px bg-slate-100 dark:bg-slate-800 my-1" />
-                                                    </>
-                                                )}
 
                                                 {activeTab === 'collections' && (
                                                     <>
@@ -734,7 +585,7 @@ export const MySpacePage: React.FC<MySpacePageProps> = ({ currentUserId }) => {
                                                     onClick={() => { setShowDeleteConfirm(true); setIsActionMenuOpen(false); }} 
                                                     className="w-full flex items-center gap-2 px-4 py-2.5 text-xs font-bold text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
                                                 >
-                                                    <Trash2 size={14} /> {activeTab === 'bookmarks' ? 'Remove Bookmarks' : 'Delete Items'}
+                                                    <Trash2 size={14} /> Delete Items
                                                 </button>
                                             </div>
                                         )}
@@ -804,136 +655,6 @@ export const MySpacePage: React.FC<MySpacePageProps> = ({ currentUserId }) => {
             </div>
 
             {/* Content Grid */}
-            {activeTab === 'bookmarks' && isOwner ? (
-              // Bookmarks Tab: Two-column layout (Folders | Nuggets)
-              <div className="flex flex-col lg:flex-row gap-6">
-                {/* Left Column: Folder List */}
-                <div className="w-full lg:w-64 flex-shrink-0">
-                  <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-4">
-                    <div className="flex items-center justify-between mb-4">
-                      <h3 className="text-sm font-bold text-slate-900 dark:text-white">Folders</h3>
-                    </div>
-                    
-                    {isLoadingBookmarkFolders ? (
-                      <div className="flex items-center justify-center py-8">
-                        <Loader2 className="animate-spin text-slate-400" size={20} />
-                      </div>
-                    ) : bookmarkFolders.length === 0 ? (
-                      <div className="py-8 text-center text-slate-400 text-sm">
-                        No folders found
-                      </div>
-                    ) : (
-                      <div className="space-y-1">
-                        {bookmarkFolders.map((folder) => (
-                          <div
-                            key={folder.id}
-                            className={`group flex items-center justify-between p-2 rounded-lg transition-colors ${
-                              activeFolderId === folder.id
-                                ? 'bg-primary-100 dark:bg-primary-900/20 text-primary-900 dark:text-primary-100'
-                                : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300'
-                            }`}
-                          >
-                            {editingFolderId === folder.id ? (
-                              <div className="flex-1 flex items-center gap-2">
-                                <input
-                                  type="text"
-                                  value={editingFolderName}
-                                  onChange={(e) => setEditingFolderName(e.target.value)}
-                                  onBlur={() => handleFolderRenameSave(folder.id)}
-                                  onKeyDown={(e) => {
-                                    if (e.key === 'Enter') {
-                                      handleFolderRenameSave(folder.id);
-                                    } else if (e.key === 'Escape') {
-                                      handleFolderRenameCancel();
-                                    }
-                                  }}
-                                  autoFocus
-                                  className="flex-1 px-2 py-1 text-sm bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded"
-                                />
-                              </div>
-                            ) : (
-                              <>
-                                <button
-                                  onClick={() => {
-                                    setActiveFolderId(folder.id);
-                                    setSelectionMode(false);
-                                    setSelectedIds([]);
-                                  }}
-                                  className="flex-1 text-left text-sm font-medium"
-                                >
-                                  {folder.name}
-                                  {folder.isDefault && (
-                                    <span className="ml-2 text-xs text-slate-500">(Default)</span>
-                                  )}
-                                </button>
-                                {!folder.isDefault && (
-                                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                    <button
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleFolderRenameStart(folder);
-                                      }}
-                                      className="p-1 hover:bg-slate-200 dark:hover:bg-slate-700 rounded"
-                                      title="Rename folder"
-                                    >
-                                      <Edit2 size={14} className="text-slate-500" />
-                                    </button>
-                                    <button
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        if (confirm(`Delete folder "${folder.name}"? Bookmarks in this folder will not be deleted.`)) {
-                                          handleFolderDelete(folder.id);
-                                        }
-                                      }}
-                                      className="p-1 hover:bg-red-100 dark:hover:bg-red-900/20 rounded"
-                                      title="Delete folder"
-                                    >
-                                      <Trash2 size={14} className="text-red-500" />
-                                    </button>
-                                  </div>
-                                )}
-                              </>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Right Column: Nuggets Grid */}
-                <div className="flex-1 min-w-0">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {currentList.map(item => (
-                      <NewsCard 
-                        key={item.id} 
-                        article={item as Article}
-                        viewMode="grid"
-                        isBookmarked={isBookmarked(item.id)}
-                        onToggleBookmark={toggleBookmark}
-                        onTagClick={() => {}}
-                        onCategoryClick={() => {}}
-                        onClick={() => setSelectedArticle(item as Article)}
-                        currentUserId={currentUserId}
-                        selectionMode={selectionMode}
-                        isSelected={selectedIds.includes(item.id)}
-                        onSelect={handleSelect}
-                      />
-                    ))}
-
-                    {currentList.length === 0 && (
-                      <div className="col-span-full py-16 text-center border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-2xl">
-                        <div className="flex flex-col items-center">
-                          <Folder className="w-12 h-12 text-slate-300 mb-2" />
-                          <p className="text-slate-400 text-sm">No bookmarks yet in this folder.</p>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            ) : (
-              // Other tabs: Standard grid layout
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                 {activeTab === 'collections' || activeTab === 'folders' ? (
                     <div className="col-span-full">
@@ -952,8 +673,6 @@ export const MySpacePage: React.FC<MySpacePageProps> = ({ currentUserId }) => {
                         key={item.id} 
                         article={item as Article}
                         viewMode="grid"
-                        isBookmarked={isBookmarked(item.id)}
-                        onToggleBookmark={toggleBookmark}
                         onTagClick={() => {}}
                         onCategoryClick={() => {}}
                         onClick={() => setSelectedArticle(item as Article)}
@@ -970,7 +689,7 @@ export const MySpacePage: React.FC<MySpacePageProps> = ({ currentUserId }) => {
                     {activeTab === 'folders' ? (
                         <div className="flex flex-col items-center">
                             <Folder className="w-12 h-12 text-slate-300 mb-2" />
-                            <p className="text-slate-400 text-sm">No folders yet. Save a bookmark to create one.</p>
+                            <p className="text-slate-400 text-sm">No folders yet.</p>
                         </div>
                     ) : (
                         <p className="text-slate-400 text-sm">Nothing to see here yet.</p>
@@ -978,7 +697,6 @@ export const MySpacePage: React.FC<MySpacePageProps> = ({ currentUserId }) => {
                   </div>
                 )}
               </div>
-            )}
 
           </div>
         </div>
@@ -996,7 +714,7 @@ export const MySpacePage: React.FC<MySpacePageProps> = ({ currentUserId }) => {
         isOpen={showDeleteConfirm}
         onClose={() => setShowDeleteConfirm(false)}
         onConfirm={handleBulkDelete}
-        title={activeTab === 'bookmarks' ? "Remove Bookmarks?" : activeTab === 'folders' ? "Delete Folders?" : "Delete Items?"}
+        title={activeTab === 'folders' ? "Delete Folders?" : "Delete Items?"}
         description={`Are you sure you want to delete ${selectedIds.length} items? This cannot be undone.`}
         actionLabel="Delete"
         isDestructive
@@ -1004,9 +722,11 @@ export const MySpacePage: React.FC<MySpacePageProps> = ({ currentUserId }) => {
 
       <AddToCollectionModal 
         isOpen={showAddToCollection}
-        onClose={() => setShowAddToCollection(false)}
+        onClose={() => {
+          setShowAddToCollection(false);
+        }}
         articleIds={selectedIds}
-        mode={activeTab === 'bookmarks' ? 'private' : 'public'} 
+        mode="public" 
       />
     </div>
   );

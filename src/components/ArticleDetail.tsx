@@ -3,7 +3,6 @@ import { Article } from '@/types';
 import { X, Clock, ExternalLink, Sparkles, Loader2, Bookmark, FolderPlus, Heart, Eye } from 'lucide-react';
 import { formatDate } from '@/utils/formatters';
 import { Avatar } from './shared/Avatar';
-import { useBookmarks } from '@/hooks/useBookmarks';
 import { useToast } from '@/hooks/useToast';
 import { AddToCollectionModal } from './AddToCollectionModal';
 import { ShareMenu } from './shared/ShareMenu';
@@ -19,7 +18,6 @@ interface ArticleDetailProps {
 }
 
 export const ArticleDetail: React.FC<ArticleDetailProps> = ({ article, onClose, isModal = false }) => {
-  const { isBookmarked, toggleBookmark } = useBookmarks();
   const [isCollectionModalOpen, setIsCollectionModalOpen] = useState(false);
   const [collectionMode, setCollectionMode] = useState<'public' | 'private'>('public');
   const [aiSummary, setAiSummary] = useState<string | null>(null);
@@ -38,15 +36,6 @@ export const ArticleDetail: React.FC<ArticleDetailProps> = ({ article, onClose, 
     } finally {
         setIsAiLoading(false);
     }
-  };
-
-  const handleBookmark = () => {
-      toggleBookmark(article.id);
-      if (!isBookmarked(article.id)) {
-          toast.success("Saved to bookmarks");
-      } else {
-          toast.info("Removed from bookmarks");
-      }
   };
 
   const handleAddToCollection = (mode: 'public' | 'private') => {
@@ -157,10 +146,6 @@ export const ArticleDetail: React.FC<ArticleDetailProps> = ({ article, onClose, 
                {/* Engagement Footer */}
                <div className="flex items-center justify-between pt-6 border-t border-slate-100 dark:border-slate-800">
                    <div className="flex gap-4">
-                       <button onClick={withAuth(handleBookmark, 'guestBookmarks')} className={`flex items-center gap-1.5 text-sm font-bold transition-colors ${isBookmarked(article.id) ? 'text-primary-600' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}>
-                           <Bookmark size={18} fill={isBookmarked(article.id) ? "currentColor" : "none"} />
-                           {isBookmarked(article.id) ? 'Saved' : 'Save'}
-                       </button>
                        <button onClick={withAuth(() => handleAddToCollection('public'))} className="flex items-center gap-1.5 text-sm font-bold text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition-colors">
                            <FolderPlus size={18} />
                            Add to Collection

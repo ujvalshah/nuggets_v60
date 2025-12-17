@@ -13,8 +13,6 @@ interface FeedProps {
   searchQuery?: string;
   sortOrder?: 'latest' | 'oldest'; // Sort order from Header UI
   onArticleClick: (article: Article) => void;
-  isBookmarked: (id: string) => boolean;
-  onToggleBookmark: (id: string) => void;
   onCategoryClick: (category: string) => void;
   onTagClick?: (tag: string) => void;
   currentUserId?: string;
@@ -94,8 +92,6 @@ export const Feed: React.FC<FeedProps> = ({
   searchQuery = '',
   sortOrder = 'latest',
   onArticleClick,
-  isBookmarked,
-  onToggleBookmark,
   onCategoryClick,
   onTagClick,
   currentUserId,
@@ -172,8 +168,6 @@ export const Feed: React.FC<FeedProps> = ({
           key={article.id}
           article={article}
           viewMode="feed"
-          isBookmarked={isBookmarked(article.id)}
-          onToggleBookmark={onToggleBookmark}
           onCategoryClick={onCategoryClick}
           onClick={onArticleClick}
           currentUserId={currentUserId}
