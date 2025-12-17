@@ -135,6 +135,7 @@ export interface Collection {
   followersCount: number;
   followers?: string[]; // Array of userIds who follow this collection
   entries: CollectionEntry[];
+  validEntriesCount?: number; // Backend-validated count (preferred over entries.length)
   type: 'public' | 'private';
   
   // Display
