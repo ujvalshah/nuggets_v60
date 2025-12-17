@@ -42,7 +42,7 @@ export const MasonryGrid: React.FC<MasonryGridProps> = ({
   onToggleBookmark,
   onCategoryClick,
   currentUserId,
-  onTagClick
+  onTagClick,
 }) => {
   const { registerCard } = useRowExpansion();
   
@@ -96,3 +96,4 @@ export const MasonryGrid: React.FC<MasonryGridProps> = ({
     </div>
   );
 };
+

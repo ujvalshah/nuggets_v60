@@ -1,5 +1,5 @@
 
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { Article, SortOrder, Collection } from '@/types';
 import { useBookmarks } from '@/hooks/useBookmarks';
 import { useArticles } from '@/hooks/useArticles';

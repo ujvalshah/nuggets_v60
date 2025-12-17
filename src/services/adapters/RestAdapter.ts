@@ -32,7 +32,13 @@ export class RestAdapter implements IAdapter {
   }
 
   getArticlesByAuthor(authorId: string): Promise<Article[]> {
-    return apiClient.get(`/articles?authorId=${authorId}`);
+    return apiClient.get<PaginatedArticlesResponse>(`/articles?authorId=${authorId}`)
+      .then(response => {
+        if (!Array.isArray(response.data)) {
+          throw new Error('Expected Article[] from getArticlesByAuthor, but received non-array data');
+        }
+        return response.data;
+      });
   }
 
   createArticle(article: Omit<Article, 'id' | 'publishedAt'>): Promise<Article> {

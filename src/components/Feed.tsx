@@ -2,7 +2,7 @@
 // This component now uses useInfiniteArticles hook for unified React Query pattern.
 // Eliminates split-brain data fetching model (useArticles vs Feed.tsx).
 
-import React, { useRef } from 'react';
+import React, { useRef, useEffect } from 'react';
 import { Article } from '@/types';
 import { NewsCard } from './NewsCard';
 import { Loader2 } from 'lucide-react';

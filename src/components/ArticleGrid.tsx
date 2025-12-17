@@ -40,7 +40,7 @@ export const ArticleGrid: React.FC<ArticleGridProps> = ({
   selectionMode = false,
   selectedIds = [],
   onSelect,
-  onTagClick
+  onTagClick,
 }) => {
   const { expandedId, toggleExpansion, registerCard } = useRowExpansion();
 
