@@ -1,5 +1,5 @@
 import React from 'react';
-import { Bookmark, FolderPlus, MoreVertical, Flag, Trash2, Edit2, Globe, Lock } from 'lucide-react';
+import { FolderPlus, MoreVertical, Flag, Trash2, Edit2, Globe, Lock } from 'lucide-react';
 import { ShareMenu } from '@/components/shared/ShareMenu';
 import { twMerge } from 'tailwind-merge';
 
@@ -8,11 +8,9 @@ interface CardActionsProps {
   articleTitle: string;
   articleExcerpt: string;
   authorName: string;
-  isSaved: boolean;
   isOwner: boolean;
   isAdmin: boolean;
   visibility?: 'public' | 'private';
-  onSave?: () => void; // Made optional for preview mode
   onAddToCollection?: () => void;
   onReport?: () => void;
   onEdit?: () => void;
@@ -21,7 +19,6 @@ interface CardActionsProps {
   showMenu: boolean;
   onToggleMenu: (e: React.MouseEvent) => void;
   menuRef: React.RefObject<HTMLDivElement>;
-  bookmarkButtonRef: React.RefObject<HTMLButtonElement>;
   className?: string;
   isPreview?: boolean; // Add preview flag to hide ShareMenu
 }
@@ -31,11 +28,9 @@ export const CardActions: React.FC<CardActionsProps> = ({
   articleTitle,
   articleExcerpt,
   authorName,
-  isSaved,
   isOwner,
   isAdmin,
   visibility,
-  onSave,
   onAddToCollection,
   onReport,
   onEdit,
@@ -44,7 +39,6 @@ export const CardActions: React.FC<CardActionsProps> = ({
   showMenu,
   onToggleMenu,
   menuRef,
-  bookmarkButtonRef,
   className,
   isPreview = false,
 }) => {
@@ -77,23 +71,6 @@ export const CardActions: React.FC<CardActionsProps> = ({
           title="Add to Collection"
         >
           <FolderPlus size={18} />
-        </button>
-      )}
-
-      {/* Only show bookmark button if onSave handler exists */}
-      {onSave && (
-        <button
-          ref={bookmarkButtonRef}
-          onClick={(e) => {
-            e.stopPropagation();
-            onSave();
-          }}
-          className={`w-10 h-10 -mr-1 flex items-center justify-center rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-all hover:scale-105 active:scale-95 ${
-            isSaved ? 'text-primary-600 hover:text-primary-700' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'
-          }`}
-          title="Bookmark"
-        >
-          <Bookmark size={18} fill={isSaved ? 'currentColor' : 'none'} />
         </button>
       )}
 

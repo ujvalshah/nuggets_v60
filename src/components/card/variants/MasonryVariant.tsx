@@ -15,7 +15,6 @@ interface MasonryVariantProps {
   showMenu: boolean;
   menuRef: React.RefObject<HTMLDivElement>;
   tagPopoverRef: React.RefObject<HTMLDivElement>;
-  bookmarkButtonRef: React.RefObject<HTMLButtonElement>;
   isOwner: boolean;
   isAdmin: boolean;
   isPreview?: boolean;
@@ -27,12 +26,11 @@ export const MasonryVariant: React.FC<MasonryVariantProps> = ({
   showMenu,
   menuRef,
   tagPopoverRef,
-  bookmarkButtonRef,
   isOwner,
   isAdmin,
   isPreview = false,
 }) => {
-  const { data, flags, handlers } = logic;
+  const { data, handlers } = logic;
 
   return (
     <div
@@ -100,11 +98,9 @@ export const MasonryVariant: React.FC<MasonryVariantProps> = ({
             articleTitle={data.title}
             articleExcerpt={data.excerpt}
             authorName={data.authorName}
-            isSaved={flags.isSaved}
             isOwner={isOwner}
             isAdmin={isAdmin}
             visibility={data.visibility}
-            onSave={handlers.onSave}
             onAddToCollection={handlers.onAddToCollection}
             onReport={handlers.onReport}
             onEdit={handlers.onEdit}
@@ -113,7 +109,6 @@ export const MasonryVariant: React.FC<MasonryVariantProps> = ({
             showMenu={showMenu}
             onToggleMenu={handlers.onToggleMenu}
             menuRef={menuRef}
-            bookmarkButtonRef={bookmarkButtonRef}
             isPreview={isPreview}
           />
       </div>

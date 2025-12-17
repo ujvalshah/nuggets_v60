@@ -4,7 +4,6 @@ import { Article } from '@/types';
 import { useToast } from './useToast';
 import { useAuth } from './useAuth';
 import { useRequireAuth } from './useRequireAuth';
-import { useBookmarks } from './useBookmarks';
 import { storageService } from '@/services/storageService';
 import { queryClient } from '@/queryClient';
 import { sanitizeArticle, hasValidAuthor, logError } from '@/utils/errorHandler';
@@ -41,13 +40,11 @@ export interface NewsCardData {
 
 export interface NewsCardFlags {
   isLiked: boolean;
-  isSaved: boolean;
   isRead: boolean;
 }
 
 export interface NewsCardHandlers {
   onLike: (() => void) | undefined;
-  onSave: (() => void) | undefined;
   onShare: (() => void) | undefined;
   onClick: (() => void) | undefined;
   onMediaClick: (e: React.MouseEvent, imageIndex?: number) => void;
@@ -73,8 +70,6 @@ export interface NewsCardLogic {
 interface UseNewsCardProps {
   article: Article;
   currentUserId?: string;
-  isBookmarkedState?: boolean; // Accept bookmark state from parent (boolean)
-  onToggleBookmark?: (id: string) => void;
   onCategoryClick?: (category: string) => void;
   onTagClick?: (tag: string) => void;
   onClick?: (article: Article) => void;
@@ -84,8 +79,6 @@ interface UseNewsCardProps {
 export const useNewsCard = ({
   article,
   currentUserId,
-  isBookmarkedState,
-  onToggleBookmark,
   onCategoryClick,
   onTagClick,
   onClick,
@@ -95,9 +88,6 @@ export const useNewsCard = ({
   const toast = useToast();
   const { isAdmin = false } = useAuth(); // Phase 3: Default to false to ensure boolean type
   const { withAuth } = useRequireAuth();
-  
-  // Use parent's bookmark state if provided, otherwise fallback to local hook
-  const { isBookmarked: isBookmarkedLocal, toggleBookmark } = useBookmarks();
 
   // ────────────────────────────────────────
   // STATE
@@ -114,7 +104,6 @@ export const useNewsCard = ({
 
   const menuRef = useRef<HTMLDivElement>(null);
   const tagPopoverRef = useRef<HTMLDivElement>(null);
-  const bookmarkButtonRef = useRef<HTMLButtonElement>(null);
 
   // ────────────────────────────────────────
   // CLICK OUTSIDE HANDLER
@@ -230,42 +219,14 @@ export const useNewsCard = ({
   // ────────────────────────────────────────
   // FLAGS
   // ────────────────────────────────────────
-  // Use parent's bookmark state if provided, otherwise use local hook
   const flags: NewsCardFlags = {
     isLiked: false, // TODO: Implement like functionality if needed
-    isSaved: isBookmarkedState !== undefined ? isBookmarkedState : isBookmarkedLocal(article.id),
     isRead: false, // TODO: Implement read tracking if needed
   };
 
   // ────────────────────────────────────────
   // HANDLERS
   // ────────────────────────────────────────
-  const handleSave = () => {
-    const wasBookmarked = flags.isSaved;
-
-    if (onToggleBookmark) {
-      onToggleBookmark(article.id);
-    } else {
-      toggleBookmark(article.id);
-    }
-
-    if (!wasBookmarked) {
-      toast.success('Saved to General');
-    } else {
-      toast.info('Removed from Bookmarks', {
-        actionLabel: 'Undo',
-        onAction: () => {
-          if (onToggleBookmark) {
-            onToggleBookmark(article.id);
-          } else {
-            toggleBookmark(article.id);
-          }
-        },
-        duration: 3000,
-      });
-      setShowCollection(false);
-    }
-  };
 
   const handleShare = () => {
     // Share logic can be added here if needed
@@ -349,7 +310,7 @@ export const useNewsCard = ({
   };
 
   const handleAddToCollection = () => {
-    setCollectionAnchor(bookmarkButtonRef.current?.getBoundingClientRect() || null);
+    setCollectionAnchor(null);
     setCollectionMode('public');
     setShowCollection(true);
   };
@@ -474,7 +435,6 @@ export const useNewsCard = ({
   const handlers: NewsCardHandlers = isPreview
     ? {
         onLike: undefined,
-        onSave: undefined,
         onShare: undefined,
         onClick: undefined,
         onMediaClick: (e: React.MouseEvent) => handleMediaClick(e), // Allow media click for preview (opens URL)
@@ -494,7 +454,6 @@ export const useNewsCard = ({
         onLike: () => {
           // TODO: Implement like functionality
         },
-        onSave: withAuth(handleSave, 'guestBookmarks'),
         onShare: handleShare,
         onClick: handleClick,
         onMediaClick: handleMediaClick,
@@ -547,7 +506,6 @@ export const useNewsCard = ({
     refs: {
       menuRef,
       tagPopoverRef,
-      bookmarkButtonRef,
     },
     article, // Original article for modals
     isOwner,

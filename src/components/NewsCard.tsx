@@ -18,8 +18,6 @@ import { useAuth } from '@/hooks/useAuth';
 interface NewsCardProps {
   article: Article;
   viewMode: 'grid' | 'feed' | 'masonry' | 'utility';
-  isBookmarked: boolean;
-  onToggleBookmark: (id: string) => void;
   onTagClick?: (tag: string) => void;
   onCategoryClick: (category: string) => void;
   onClick: (article: Article) => void;
@@ -38,8 +36,6 @@ export const NewsCard = forwardRef<HTMLDivElement, NewsCardProps>(
     {
       article,
       viewMode,
-      isBookmarked,
-      onToggleBookmark,
       onCategoryClick,
       onClick,
       currentUserId,
@@ -54,12 +50,10 @@ export const NewsCard = forwardRef<HTMLDivElement, NewsCardProps>(
     const toast = useToast();
     const { currentUser } = useAuth();
 
-    // Call the logic hook - pass isBookmarked state from parent
+    // Call the logic hook
     const hookResult = useNewsCard({
       article,
       currentUserId,
-      isBookmarkedState: isBookmarked, // Pass the boolean bookmark state from parent
-      onToggleBookmark,
       onCategoryClick,
       onTagClick,
       onClick,
@@ -84,7 +78,6 @@ export const NewsCard = forwardRef<HTMLDivElement, NewsCardProps>(
             showMenu={modals.showMenu}
             menuRef={refs.menuRef}
             tagPopoverRef={refs.tagPopoverRef}
-            bookmarkButtonRef={refs.bookmarkButtonRef}
             isOwner={isOwner}
             isAdmin={isAdmin}
             isPreview={isPreview}
@@ -102,7 +95,6 @@ export const NewsCard = forwardRef<HTMLDivElement, NewsCardProps>(
             showMenu={modals.showMenu}
             menuRef={refs.menuRef}
             tagPopoverRef={refs.tagPopoverRef}
-            bookmarkButtonRef={refs.bookmarkButtonRef}
             isOwner={isOwner}
             isAdmin={isAdmin}
             isPreview={isPreview}
@@ -117,7 +109,6 @@ export const NewsCard = forwardRef<HTMLDivElement, NewsCardProps>(
             showMenu={modals.showMenu}
             menuRef={refs.menuRef}
             tagPopoverRef={refs.tagPopoverRef}
-            bookmarkButtonRef={refs.bookmarkButtonRef}
             isOwner={isOwner}
             isAdmin={isAdmin}
             isPreview={isPreview}
@@ -132,7 +123,6 @@ export const NewsCard = forwardRef<HTMLDivElement, NewsCardProps>(
             showMenu={modals.showMenu}
             menuRef={refs.menuRef}
             tagPopoverRef={refs.tagPopoverRef}
-            bookmarkButtonRef={refs.bookmarkButtonRef}
             isOwner={isOwner}
             isAdmin={isAdmin}
             isPreview={isPreview}
@@ -147,7 +137,6 @@ export const NewsCard = forwardRef<HTMLDivElement, NewsCardProps>(
             showMenu={modals.showMenu}
             menuRef={refs.menuRef}
             tagPopoverRef={refs.tagPopoverRef}
-            bookmarkButtonRef={refs.bookmarkButtonRef}
             isOwner={isOwner}
             isAdmin={isAdmin}
             isPreview={isPreview}

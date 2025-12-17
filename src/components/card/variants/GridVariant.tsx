@@ -16,7 +16,6 @@ interface GridVariantProps {
   showMenu: boolean;
   menuRef: React.RefObject<HTMLDivElement>;
   tagPopoverRef: React.RefObject<HTMLDivElement>;
-  bookmarkButtonRef: React.RefObject<HTMLButtonElement>;
   isOwner: boolean;
   isAdmin: boolean;
   isPreview?: boolean;
@@ -31,7 +30,6 @@ export const GridVariant: React.FC<GridVariantProps> = ({
   showMenu,
   menuRef,
   tagPopoverRef,
-  bookmarkButtonRef,
   isOwner,
   isAdmin,
   isPreview = false,
@@ -39,7 +37,7 @@ export const GridVariant: React.FC<GridVariantProps> = ({
   isSelected = false,
   onSelect,
 }) => {
-  const { data, flags, handlers } = logic;
+  const { data, handlers } = logic;
 
   const handleCardClick = (e: React.MouseEvent) => {
     if (selectionMode && onSelect) {
@@ -149,11 +147,9 @@ export const GridVariant: React.FC<GridVariantProps> = ({
             articleTitle={data.title}
             articleExcerpt={data.excerpt}
             authorName={data.authorName}
-            isSaved={flags.isSaved}
             isOwner={isOwner}
             isAdmin={isAdmin}
             visibility={data.visibility}
-            onSave={handlers.onSave}
             onAddToCollection={handlers.onAddToCollection}
             onReport={handlers.onReport}
             onEdit={handlers.onEdit}
@@ -162,7 +158,6 @@ export const GridVariant: React.FC<GridVariantProps> = ({
             showMenu={showMenu}
             onToggleMenu={handlers.onToggleMenu}
             menuRef={menuRef}
-            bookmarkButtonRef={bookmarkButtonRef}
             isPreview={isPreview}
           />
       </div>
