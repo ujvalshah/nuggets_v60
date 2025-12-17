@@ -1,4 +1,5 @@
 import React from 'react';
+import { Check } from 'lucide-react';
 import { NewsCardLogic } from '@/hooks/useNewsCard';
 import { CardMedia } from '../atoms/CardMedia';
 import { CardTitle } from '../atoms/CardTitle';
@@ -19,6 +20,9 @@ interface GridVariantProps {
   isOwner: boolean;
   isAdmin: boolean;
   isPreview?: boolean;
+  selectionMode?: boolean;
+  isSelected?: boolean;
+  onSelect?: () => void;
 }
 
 export const GridVariant: React.FC<GridVariantProps> = ({
@@ -31,17 +35,56 @@ export const GridVariant: React.FC<GridVariantProps> = ({
   isOwner,
   isAdmin,
   isPreview = false,
+  selectionMode = false,
+  isSelected = false,
+  onSelect,
 }) => {
   const { data, flags, handlers } = logic;
 
+  const handleCardClick = (e: React.MouseEvent) => {
+    if (selectionMode && onSelect) {
+      e.stopPropagation();
+      onSelect();
+    } else if (handlers.onClick) {
+      handlers.onClick();
+    }
+  };
+
   return (
     <div
-      className="group relative flex flex-col bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm hover:shadow-lg hover:border-slate-300 dark:hover:border-slate-700 transition-all duration-300 h-full p-4 gap-3"
+      className={`group relative flex flex-col bg-white dark:bg-slate-900 border rounded-2xl shadow-sm hover:shadow-lg transition-all duration-300 h-full p-4 gap-3 ${
+        selectionMode 
+          ? isSelected 
+            ? 'border-primary-500 ring-1 ring-primary-500' 
+            : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
+          : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
+      }`}
     >
+      {/* Selection Checkbox Overlay */}
+      {selectionMode && (
+        <div 
+          className="absolute top-4 right-4 z-20"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div 
+            className={`
+              w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all duration-200 shadow-sm cursor-pointer
+              ${isSelected 
+                ? 'bg-primary-500 border-primary-500 text-white' 
+                : 'bg-white/80 dark:bg-slate-900/80 border-slate-300 dark:border-slate-600 hover:border-primary-400'
+              }
+            `}
+            onClick={onSelect}
+          >
+            {isSelected && <Check size={14} strokeWidth={3} />}
+          </div>
+        </div>
+      )}
+
       {/* Card Body - Clickable area for opening drawer */}
       <div 
-        className="flex flex-col flex-1 min-w-0 cursor-pointer"
-        onClick={handlers.onClick}
+        className={`flex flex-col flex-1 min-w-0 ${selectionMode ? 'cursor-pointer' : 'cursor-pointer'}`}
+        onClick={handleCardClick}
       >
         {data.hasMedia && (
           <div className="relative">
@@ -90,7 +133,7 @@ export const GridVariant: React.FC<GridVariantProps> = ({
 
       {/* Footer - Actions only, must NOT open drawer */}
       <div 
-        className="mt-auto pt-1 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between shrink-0"
+        className={`mt-auto pt-1 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between shrink-0 ${selectionMode ? 'opacity-50' : ''}`}
         onClick={(e) => e.stopPropagation()}
       >
           <CardMeta
@@ -109,11 +152,13 @@ export const GridVariant: React.FC<GridVariantProps> = ({
             isSaved={flags.isSaved}
             isOwner={isOwner}
             isAdmin={isAdmin}
+            visibility={data.visibility}
             onSave={handlers.onSave}
             onAddToCollection={handlers.onAddToCollection}
             onReport={handlers.onReport}
             onEdit={handlers.onEdit}
             onDelete={handlers.onDelete}
+            onToggleVisibility={handlers.onToggleVisibility}
             showMenu={showMenu}
             onToggleMenu={handlers.onToggleMenu}
             menuRef={menuRef}

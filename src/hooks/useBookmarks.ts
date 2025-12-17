@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from './useAuth';
 import { storageService } from '@/services/storageService';
+import { createBookmark, deleteBookmark } from '@/services/bookmarkFoldersService';
 
 export const useBookmarks = () => {
   const [bookmarks, setBookmarks] = useState<string[]>([]);
@@ -38,7 +39,21 @@ export const useBookmarks = () => {
       return newBookmarks;
     });
 
-    // Background Sync with "General Bookmarks" Collection
+    // Background Sync with backend Bookmark model (new system)
+    if (currentUserId) {
+      try {
+        if (isAdding) {
+          await createBookmark(articleId);
+        } else {
+          await deleteBookmark(articleId);
+        }
+      } catch (error) {
+        console.error("Failed to sync bookmark with backend:", error);
+        // Don't rollback - localStorage is the source of truth for UI
+      }
+    }
+
+    // Background Sync with "General Bookmarks" Collection (legacy system - keep for backward compatibility)
     if (currentUserId) {
         try {
             const collections = await storageService.getCollections();

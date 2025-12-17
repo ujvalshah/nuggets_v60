@@ -27,6 +27,10 @@ interface NewsCardProps {
   onToggleExpand?: () => void;
   currentUserId?: string;
   isPreview?: boolean;
+  // Selection Props
+  selectionMode?: boolean;
+  isSelected?: boolean;
+  onSelect?: (id: string) => void;
 }
 
 export const NewsCard = forwardRef<HTMLDivElement, NewsCardProps>(
@@ -41,6 +45,9 @@ export const NewsCard = forwardRef<HTMLDivElement, NewsCardProps>(
       currentUserId,
       onTagClick,
       isPreview = false,
+      selectionMode = false,
+      isSelected = false,
+      onSelect,
     },
     ref
   ) => {
@@ -81,6 +88,9 @@ export const NewsCard = forwardRef<HTMLDivElement, NewsCardProps>(
             isOwner={isOwner}
             isAdmin={isAdmin}
             isPreview={isPreview}
+            selectionMode={selectionMode}
+            isSelected={isSelected}
+            onSelect={onSelect ? () => onSelect(article.id) : undefined}
           />
         );
         break;

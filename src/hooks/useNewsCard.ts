@@ -57,6 +57,7 @@ export interface NewsCardHandlers {
   onEdit?: () => void;
   onReport?: () => void;
   onAddToCollection?: () => void;
+  onToggleVisibility?: () => void;
   onAuthorClick: ((authorId: string) => void) | undefined;
   onToggleMenu: (e: React.MouseEvent) => void;
   onToggleTagPopover: (e: React.MouseEvent) => void;
@@ -249,17 +250,7 @@ export const useNewsCard = ({
     }
 
     if (!wasBookmarked) {
-      toast.success('Saved to General Bookmarks', {
-        actionLabel: 'Change',
-        onAction: () => {
-          setCollectionMode('private');
-          if (bookmarkButtonRef.current) {
-            setCollectionAnchor(bookmarkButtonRef.current.getBoundingClientRect());
-          }
-          setShowCollection(true);
-        },
-        duration: 4000,
-      });
+      toast.success('Saved to General');
     } else {
       toast.info('Removed from Bookmarks', {
         actionLabel: 'Undo',
@@ -367,6 +358,108 @@ export const useNewsCard = ({
     navigate(`/profile/${authorId}`);
   };
 
+  const handleToggleVisibility = async () => {
+    if (isPreview) return;
+    
+    const newVisibility: 'public' | 'private' = article.visibility === 'private' ? 'public' : 'private';
+    
+    // Snapshot previous state for rollback
+    const previousArticle = { ...article };
+    
+    // Optimistic update: update local article immediately
+    const optimisticArticle = { ...article, visibility: newVisibility };
+    
+    // Update query cache optimistically
+    queryClient.setQueryData(['articles'], (oldData: any) => {
+      if (!oldData) return oldData;
+      
+      // Handle paginated response
+      if (oldData.data && Array.isArray(oldData.data)) {
+        return {
+          ...oldData,
+          data: oldData.data.map((a: Article) => 
+            a.id === article.id ? optimisticArticle : a
+          )
+        };
+      }
+      
+      // Handle array response
+      if (Array.isArray(oldData)) {
+        return oldData.map((a: Article) => 
+          a.id === article.id ? optimisticArticle : a
+        );
+      }
+      
+      return oldData;
+    });
+    
+    try {
+      const updatedArticle = await storageService.updateArticle(article.id, { visibility: newVisibility });
+      
+      if (!updatedArticle) {
+        throw new Error('Failed to update visibility');
+      }
+      
+      // Update cache with server response
+      queryClient.setQueryData(['articles'], (oldData: any) => {
+        if (!oldData) return oldData;
+        
+        if (oldData.data && Array.isArray(oldData.data)) {
+          return {
+            ...oldData,
+            data: oldData.data.map((a: Article) => 
+              a.id === article.id ? updatedArticle : a
+            )
+          };
+        }
+        
+        if (Array.isArray(oldData)) {
+          return oldData.map((a: Article) => 
+            a.id === article.id ? updatedArticle : a
+          );
+        }
+        
+        return oldData;
+      });
+      
+      // Invalidate to ensure consistency across all queries
+      await queryClient.invalidateQueries({ queryKey: ['articles'] });
+      
+      toast.success(`Nugget is now ${newVisibility}`);
+      setShowMenu(false);
+    } catch (error: any) {
+      // Rollback on error
+      queryClient.setQueryData(['articles'], (oldData: any) => {
+        if (!oldData) return oldData;
+        
+        if (oldData.data && Array.isArray(oldData.data)) {
+          return {
+            ...oldData,
+            data: oldData.data.map((a: Article) => 
+              a.id === article.id ? previousArticle : a
+            )
+          };
+        }
+        
+        if (Array.isArray(oldData)) {
+          return oldData.map((a: Article) => 
+            a.id === article.id ? previousArticle : a
+          );
+        }
+        
+        return oldData;
+      });
+      
+      const errorMessage = error?.response?.status === 403
+        ? 'You can only edit your own nuggets'
+        : error?.response?.status === 404
+        ? 'Nugget not found'
+        : 'Failed to update visibility';
+      
+      toast.error(errorMessage);
+    }
+  };
+
   const handleToggleMenu = (e: React.MouseEvent) => {
     e.stopPropagation();
     setShowMenu(!showMenu);
@@ -391,6 +484,7 @@ export const useNewsCard = ({
         onEdit: undefined,
         onReport: undefined,
         onAddToCollection: undefined,
+        onToggleVisibility: undefined,
         onAuthorClick: undefined,
         onToggleMenu: handleToggleMenu, // Allow menu toggle (UI only)
         onToggleTagPopover: handleToggleTagPopover, // Allow tag popover (UI only)
@@ -410,6 +504,7 @@ export const useNewsCard = ({
         onEdit: (isOwner || isAdmin) ? handleEdit : undefined,
         onReport: withAuth(handleReport, 'guestReports'),
         onAddToCollection: withAuth(handleAddToCollection),
+        onToggleVisibility: isOwner ? handleToggleVisibility : undefined,
         onAuthorClick: handleAuthorClick,
         onToggleMenu: handleToggleMenu,
         onToggleTagPopover: handleToggleTagPopover,

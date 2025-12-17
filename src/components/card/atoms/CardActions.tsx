@@ -1,5 +1,5 @@
 import React from 'react';
-import { Bookmark, FolderPlus, MoreVertical, Flag, Trash2, Edit2 } from 'lucide-react';
+import { Bookmark, FolderPlus, MoreVertical, Flag, Trash2, Edit2, Globe, Lock } from 'lucide-react';
 import { ShareMenu } from '@/components/shared/ShareMenu';
 import { twMerge } from 'tailwind-merge';
 
@@ -11,11 +11,13 @@ interface CardActionsProps {
   isSaved: boolean;
   isOwner: boolean;
   isAdmin: boolean;
+  visibility?: 'public' | 'private';
   onSave?: () => void; // Made optional for preview mode
   onAddToCollection?: () => void;
   onReport?: () => void;
   onEdit?: () => void;
   onDelete?: () => void;
+  onToggleVisibility?: () => void;
   showMenu: boolean;
   onToggleMenu: (e: React.MouseEvent) => void;
   menuRef: React.RefObject<HTMLDivElement>;
@@ -32,11 +34,13 @@ export const CardActions: React.FC<CardActionsProps> = ({
   isSaved,
   isOwner,
   isAdmin,
+  visibility,
   onSave,
   onAddToCollection,
   onReport,
   onEdit,
   onDelete,
+  onToggleVisibility,
   showMenu,
   onToggleMenu,
   menuRef,
@@ -105,7 +109,7 @@ export const CardActions: React.FC<CardActionsProps> = ({
           <MoreVertical size={18} />
         </button>
         {showMenu && (
-          <div className="absolute right-0 bottom-full mb-1 w-32 bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-200 dark:border-slate-700 py-1 z-20 overflow-hidden">
+          <div className="absolute right-0 bottom-full mb-1 w-40 bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-200 dark:border-slate-700 py-1 z-20 overflow-hidden">
             {isOwner || isAdmin ? (
               onEdit && (
                 <button
@@ -113,12 +117,32 @@ export const CardActions: React.FC<CardActionsProps> = ({
                     e.stopPropagation();
                     onEdit();
                   }}
-                  className="w-full text-left px-3 py-2 text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-50 flex items-center gap-2"
+                  className="w-full text-left px-3 py-2 text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-2"
                 >
                   <Edit2 size={12} /> Edit
                 </button>
               )
             ) : null}
+
+            {isOwner && onToggleVisibility && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onToggleVisibility();
+                }}
+                className="w-full text-left px-3 py-2 text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-2"
+              >
+                {visibility === 'private' ? (
+                  <>
+                    <Globe size={12} className="text-blue-500" /> Make Public
+                  </>
+                ) : (
+                  <>
+                    <Lock size={12} className="text-amber-500" /> Make Private
+                  </>
+                )}
+              </button>
+            )}
 
             {onReport && (
               <button
@@ -126,7 +150,7 @@ export const CardActions: React.FC<CardActionsProps> = ({
                   e.stopPropagation();
                   onReport();
                 }}
-                className="w-full text-left px-3 py-2 text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-50 flex items-center gap-2"
+                className="w-full text-left px-3 py-2 text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-2"
               >
                 <Flag size={12} /> Report
               </button>
@@ -138,7 +162,7 @@ export const CardActions: React.FC<CardActionsProps> = ({
                   e.stopPropagation();
                   onDelete();
                 }}
-                className="w-full text-left px-3 py-2 text-xs font-medium text-red-600 hover:bg-red-50 flex items-center gap-2"
+                className="w-full text-left px-3 py-2 text-xs font-medium text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center gap-2"
               >
                 <Trash2 size={12} /> Delete
               </button>
