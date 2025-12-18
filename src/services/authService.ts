@@ -97,27 +97,32 @@ class AuthService {
   }
 
   async loginWithProvider(provider: AuthProvider): Promise<{ user: ModularUser; token: string }> {
+    // Deferred feature — backend support pending
     // TODO: Implement social login when backend endpoints are ready
     // For now, throw an error indicating it's not implemented
     throw new Error(`Social login with ${provider} is not yet implemented`);
   }
 
   async requestPasswordReset(email: string): Promise<void> {
+    // Deferred feature — backend support pending
     // TODO: Implement when backend endpoint is ready
     throw new Error('Password reset is not yet implemented');
   }
 
   async resetPassword(token: string, newPassword: string): Promise<void> {
+    // Deferred feature — backend support pending
     // TODO: Implement when backend endpoint is ready
     throw new Error('Password reset is not yet implemented');
   }
 
   async changePassword(current: string, next: string): Promise<void> {
+    // Deferred feature — backend support pending
     // TODO: Implement when backend endpoint is ready
     throw new Error('Change password is not yet implemented');
   }
 
   async verifyEmail(token: string): Promise<void> {
+    // Deferred feature — backend support pending
     // TODO: Implement when backend endpoint is ready
     throw new Error('Email verification is not yet implemented');
   }

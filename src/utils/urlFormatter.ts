@@ -50,3 +50,4 @@ export function isPrimarilyUrl(text: string): boolean {
          (trimmed.length > 20 && /https?:\/\//i.test(trimmed) && trimmed.split(/\s+/).length <= 2);
 }
 
+

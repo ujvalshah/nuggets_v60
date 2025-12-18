@@ -24,6 +24,34 @@ class ApiClient {
   // Track active AbortControllers by request key to cancel previous requests
   private activeControllers = new Map<string, AbortController>();
 
+  /**
+   * Check if endpoint is a public auth endpoint (login/signup)
+   * These endpoints return 401 for invalid credentials, NOT expired tokens
+   * CRITICAL: Never logout on 401 from these endpoints
+   */
+  private isPublicAuthEndpoint(endpoint: string): boolean {
+    return endpoint === '/auth/login' || endpoint === '/auth/signup';
+  }
+
+  /**
+   * Check if we have an authenticated session (token exists in storage)
+   * Used to determine if 401 means "expired session" vs "not authenticated"
+   */
+  private hasAuthenticatedSession(): boolean {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        const stored = localStorage.getItem(AUTH_STORAGE_KEY);
+        if (stored) {
+          const { token } = JSON.parse(stored);
+          return !!token;
+        }
+      }
+    } catch (e) {
+      // Ignore parsing errors
+    }
+    return false;
+  }
+
   private getAuthHeader(): Record<string, string> {
     try {
       if (typeof window !== 'undefined' && window.localStorage) {
@@ -104,18 +132,52 @@ class ApiClient {
           throw new Error('The requested resource was not found.');
         }
         if (response.status === 401) {
-          // Redirect to login on unauthorized
-          if (typeof window !== 'undefined') {
-            // Clear auth data
-            try {
-              localStorage.removeItem(AUTH_STORAGE_KEY);
-            } catch (e) {
-              // Ignore storage errors
-            }
-            // Redirect to login
-            window.location.href = '/login';
+          const isPublicAuth = this.isPublicAuthEndpoint(endpoint);
+          const hasSession = this.hasAuthenticatedSession();
+          const authHeader = this.getAuthHeader();
+          const tokenWasSent = !!authHeader['Authorization'];
+
+          // CRITICAL: Never logout on 401 for public auth endpoints (login/signup)
+          // These return 401 for invalid credentials, not expired tokens
+          if (isPublicAuth) {
+            // Public auth endpoint - just throw error with backend message, never logout
+            throw error;
           }
-          throw new Error('Your session has expired. Please sign in again.');
+
+          // For all other endpoints: logout only if we have an authenticated session
+          // AND token was sent (meaning token is expired/invalid)
+          // This handles:
+          // - Expired tokens on protected endpoints → logout ✅
+          // - Invalid tokens on protected endpoints → logout ✅
+          // - Missing tokens (no session) → don't logout (user not logged in) ✅
+          if (hasSession && tokenWasSent) {
+            // Authenticated session with expired/invalid token → logout
+            if (typeof window !== 'undefined') {
+              // Clear auth data
+              try {
+                localStorage.removeItem(AUTH_STORAGE_KEY);
+              } catch (e) {
+                // Ignore storage errors
+              }
+              // Only redirect if we're not already on login page
+              if (!window.location.pathname.includes('/login')) {
+                window.location.href = '/login';
+              }
+            }
+            // Check backend message to provide specific error
+            const isExpired = errorInfo.message?.toLowerCase().includes('expired') || 
+                            errorInfo.message?.toLowerCase().includes('token expired');
+            throw new Error(isExpired 
+              ? 'Your session has expired. Please sign in again.'
+              : 'Your session is invalid. Please sign in again.'
+            );
+          }
+
+          // No authenticated session OR token wasn't sent → just throw error without logging out
+          // This handles cases where:
+          // - User tries to access protected endpoint without being logged in
+          // - Public endpoint returns 401 for other reasons
+          throw error;
         }
         if (response.status === 429) {
           throw new Error('Too many attempts. Please wait a moment and try again.');

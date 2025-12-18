@@ -220,7 +220,9 @@ export const useNewsCard = ({
   // FLAGS
   // ────────────────────────────────────────
   const flags: NewsCardFlags = {
+    // Deferred feature — backend support pending
     isLiked: false, // TODO: Implement like functionality if needed
+    // Deferred feature — backend support pending
     isRead: false, // TODO: Implement read tracking if needed
   };
 
@@ -451,6 +453,7 @@ export const useNewsCard = ({
         onReadMore: () => setShowFullModal(true), // Allow read more (modal only)
       }
     : {
+        // Deferred feature — backend support pending
         onLike: () => {
           // TODO: Implement like functionality
         },

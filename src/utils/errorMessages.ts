@@ -40,6 +40,15 @@ export function mapAuthError(error: any, context: 'login' | 'signup' | 'general'
     }
     
     if (status === 409) {
+      // Check for error code first (most reliable)
+      const errorCode = error?.response?.data?.code || error?.code;
+      if (errorCode === 'EMAIL_ALREADY_EXISTS') {
+        return "This email is already registered. Please sign in or use a different email.";
+      }
+      if (errorCode === 'USERNAME_ALREADY_EXISTS') {
+        return "This username is already taken. Please choose a different username.";
+      }
+      // Fallback to message parsing
       if (message.toLowerCase().includes('email already')) {
         return "This email is already registered. Please sign in or use a different email.";
       }
@@ -75,6 +84,15 @@ export function mapAuthError(error: any, context: 'login' | 'signup' | 'general'
   
   // Signup-specific messages
   if (context === 'signup') {
+    // Check for error code first
+    const errorCode = error?.response?.data?.code || error?.code;
+    if (errorCode === 'EMAIL_ALREADY_EXISTS') {
+      return "This email is already registered. Please sign in or use a different email.";
+    }
+    if (errorCode === 'USERNAME_ALREADY_EXISTS') {
+      return "This username is already taken. Please choose a different username.";
+    }
+    // Fallback to message parsing
     if (lowerMessage.includes('email already registered') || lowerMessage.includes('email already')) {
       return "This email is already registered. Please sign in or use a different email.";
     }
