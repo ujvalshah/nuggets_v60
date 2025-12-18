@@ -289,3 +289,4 @@ All responses follow consistent shape:
 **Key Principle**: Frontend should never know or care whether data comes from MongoDB or in-memory. The abstraction is complete.
 
 
+

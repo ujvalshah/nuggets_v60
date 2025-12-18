@@ -87,3 +87,4 @@ If your password doesn't meet these requirements, you'll receive a clear error m
 - Check that you're in the project root directory
 - Verify TypeScript is installed: `npm install`
 
+

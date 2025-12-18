@@ -270,3 +270,4 @@ npm run dev    # ✅ Works (pure frontend, no server required)
 **Status**: ✅ Baseline Confirmed Clean
 
 
+

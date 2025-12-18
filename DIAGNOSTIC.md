@@ -126,3 +126,4 @@ npm run dev
 4. Verify data is loading (Network tab in DevTools)
 
 
+
