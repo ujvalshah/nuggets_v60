@@ -131,6 +131,12 @@ export const login = async (req: Request, res: Response) => {
  * Create new user account
  */
 export const signup = async (req: Request, res: Response) => {
+  // Declare variables outside try block for error handler access
+  let normalizedEmail: string = '';
+  let normalizedUsername: string = '';
+  let existingUser: any = null;
+  let existingUsername: any = null;
+  
   try {
     // Validate input
     const validationResult = signupSchema.safeParse(req.body);
@@ -145,10 +151,38 @@ export const signup = async (req: Request, res: Response) => {
     const data = validationResult.data;
     const now = new Date().toISOString();
 
-    // Check if email already exists (exclude soft-deleted users if any)
-    const existingUser = await User.findOne({ 
-      'auth.email': data.email.toLowerCase() 
+    // Normalize email and username for checking
+    normalizedEmail = data.email.toLowerCase().trim();
+    normalizedUsername = data.username.toLowerCase().trim();
+    
+    // Check if email already exists
+    // Try exact match first, then case-insensitive regex as fallback
+    existingUser = await User.findOne({ 
+      'auth.email': normalizedEmail
     });
+    
+    // If not found with exact match, try case-insensitive search (handles edge cases)
+    if (!existingUser) {
+      existingUser = await User.findOne({
+        $expr: {
+          $eq: [
+            { $toLower: { $trim: { input: '$auth.email' } } },
+            normalizedEmail
+          ]
+        }
+      });
+    }
+    
+    // Log for debugging
+    if (existingUser) {
+      console.log('[Signup] Email conflict - Found existing user:', {
+        id: existingUser._id.toString(),
+        email: existingUser.auth?.email,
+        username: existingUser.profile?.username,
+        requestedEmail: normalizedEmail
+      });
+    }
+    
     if (existingUser) {
       return res.status(409).json({ 
         message: 'Email already registered',
@@ -157,12 +191,18 @@ export const signup = async (req: Request, res: Response) => {
     }
 
     // Check if username already exists (case-insensitive)
-    // Username is normalized by schema transform, but we normalize here for consistency
-    const normalizedUsername = data.username.toLowerCase().trim();
-    const existingUsername = await User.findOne({ 
+    existingUsername = await User.findOne({ 
       'profile.username': normalizedUsername
     });
+    
     if (existingUsername) {
+      console.log('[Signup] Username conflict - Found existing user:', {
+        id: existingUsername._id.toString(),
+        email: existingUsername.auth?.email,
+        username: existingUsername.profile?.username,
+        requestedUsername: normalizedUsername
+      });
+      
       return res.status(409).json({ 
         message: 'Username already taken',
         code: 'USERNAME_ALREADY_EXISTS'
@@ -229,9 +269,23 @@ export const signup = async (req: Request, res: Response) => {
     console.error('[Auth] Signup error:', error);
     
     // Handle duplicate key error (MongoDB unique constraint)
-    // This catches race conditions where another request created the user between our checks
+    // This catches:
+    // 1. Race conditions where another request created the user between our checks
+    // 2. Stale index entries from deleted users (index not cleaned up)
     if (error.code === 11000) {
       const keyPattern = error.keyPattern || {};
+      const keyValue = error.keyValue || {};
+      
+      // Enhanced logging for debugging stale index issues
+      console.log('[Auth] MongoDB duplicate key error (11000):', {
+        keyPattern,
+        keyValue,
+        attemptedEmail: normalizedEmail,
+        attemptedUsername: normalizedUsername,
+        findOneFoundUser: !!existingUser,
+        findOneFoundUsername: !!existingUsername
+      });
+      
       let field: 'email' | 'username' = 'email';
       let code = 'EMAIL_ALREADY_EXISTS';
       let message = 'Email already registered';
@@ -241,12 +295,27 @@ export const signup = async (req: Request, res: Response) => {
         field = 'email';
         code = 'EMAIL_ALREADY_EXISTS';
         message = 'Email already registered';
+        
+        // If findOne didn't find user but index says duplicate, it's a stale index
+        if (!existingUser) {
+          console.warn('[Auth] STALE INDEX DETECTED: MongoDB index blocks email but no user found in database.');
+          console.warn('[Auth] Email in index:', keyValue['auth.email']);
+          console.warn('[Auth] This indicates a stale index entry. Run: npm run fix-indexes');
+          // Still return error - user can't signup until index is fixed
+        }
       } 
       // Check for username duplicate (correct key pattern)
       else if (keyPattern['profile.username']) {
         field = 'username';
         code = 'USERNAME_ALREADY_EXISTS';
         message = 'Username already taken';
+        
+        // If findOne didn't find username but index says duplicate, it's a stale index
+        if (!existingUsername) {
+          console.warn('[Auth] STALE INDEX DETECTED: MongoDB index blocks username but no user found in database.');
+          console.warn('[Auth] Username in index:', keyValue['profile.username']);
+          console.warn('[Auth] This indicates a stale index entry. Run: npm run fix-indexes');
+        }
       }
       
       return res.status(409).json({ 
@@ -255,7 +324,20 @@ export const signup = async (req: Request, res: Response) => {
       });
     }
     
-    res.status(500).json({ message: 'Internal server error' });
+    // Generic error handler - log full error for debugging
+    console.error('[Auth] Signup error details:', {
+      error: error.message,
+      stack: error.stack,
+      attemptedEmail: normalizedEmail || 'unknown',
+      attemptedUsername: normalizedUsername || 'unknown',
+      errorCode: error.code,
+      errorName: error.name
+    });
+    
+    return res.status(500).json({ 
+      message: 'Something went wrong on our end. Please try again in a moment.',
+      code: 'INTERNAL_SERVER_ERROR'
+    });
   }
 };
 
