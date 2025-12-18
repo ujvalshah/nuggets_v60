@@ -44,3 +44,4 @@ export const authenticateToken = (req: AuthRequest, res: Response, next: NextFun
     return res.status(401).json({ message: 'Authentication failed' });
   }
 };
+

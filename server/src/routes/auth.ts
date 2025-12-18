@@ -13,3 +13,4 @@ router.post('/signup', signupLimiter, authController.signup);
 router.get('/me', authenticateToken, authController.getMe);
 
 export default router;
+

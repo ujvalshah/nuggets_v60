@@ -145,19 +145,28 @@ export const signup = async (req: Request, res: Response) => {
     const data = validationResult.data;
     const now = new Date().toISOString();
 
-    // Check if email already exists
-    const existingUser = await User.findOne({ 'auth.email': data.email.toLowerCase() });
+    // Check if email already exists (exclude soft-deleted users if any)
+    const existingUser = await User.findOne({ 
+      'auth.email': data.email.toLowerCase() 
+    });
     if (existingUser) {
-      return res.status(409).json({ message: 'Email already registered' });
+      return res.status(409).json({ 
+        message: 'Email already registered',
+        code: 'EMAIL_ALREADY_EXISTS'
+      });
     }
 
     // Check if username already exists (case-insensitive)
-    if (data.username) {
-      const normalizedUsername = data.username.toLowerCase().trim();
-      const existingUsername = await User.findOne({ 'profile.username': normalizedUsername });
-      if (existingUsername) {
-        return res.status(409).json({ message: 'Username already taken' });
-      }
+    // Username is normalized by schema transform, but we normalize here for consistency
+    const normalizedUsername = data.username.toLowerCase().trim();
+    const existingUsername = await User.findOne({ 
+      'profile.username': normalizedUsername
+    });
+    if (existingUsername) {
+      return res.status(409).json({ 
+        message: 'Username already taken',
+        code: 'USERNAME_ALREADY_EXISTS'
+      });
     }
 
     // Hash password if provided
@@ -179,7 +188,7 @@ export const signup = async (req: Request, res: Response) => {
       },
       profile: {
         displayName: data.fullName,
-        username: data.username ? data.username.toLowerCase().trim() : data.username,
+        username: normalizedUsername, // Already normalized above
         avatarColor: 'blue',
         phoneNumber: data.phoneNumber,
         pincode: data.pincode,
@@ -220,10 +229,29 @@ export const signup = async (req: Request, res: Response) => {
     console.error('[Auth] Signup error:', error);
     
     // Handle duplicate key error (MongoDB unique constraint)
+    // This catches race conditions where another request created the user between our checks
     if (error.code === 11000) {
-      const field = error.keyPattern?.['auth.email'] ? 'email' : 'username';
+      const keyPattern = error.keyPattern || {};
+      let field: 'email' | 'username' = 'email';
+      let code = 'EMAIL_ALREADY_EXISTS';
+      let message = 'Email already registered';
+      
+      // Check for email duplicate
+      if (keyPattern['auth.email']) {
+        field = 'email';
+        code = 'EMAIL_ALREADY_EXISTS';
+        message = 'Email already registered';
+      } 
+      // Check for username duplicate (correct key pattern)
+      else if (keyPattern['profile.username']) {
+        field = 'username';
+        code = 'USERNAME_ALREADY_EXISTS';
+        message = 'Username already taken';
+      }
+      
       return res.status(409).json({ 
-        message: field === 'email' ? 'Email already registered' : 'Username already taken' 
+        message,
+        code
       });
     }
     
