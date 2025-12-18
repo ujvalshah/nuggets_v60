@@ -56,7 +56,7 @@ export interface DisplayAuthor {
 
 export interface Article {
   id: string;
-  title: string;
+  title?: string;
   excerpt: string;
   content: string;
   author: {

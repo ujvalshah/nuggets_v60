@@ -11,7 +11,7 @@ export interface Nugget {
   url: string;
   domain: string;
   contentType: 'article' | 'video' | 'social' | 'image' | 'document';
-  title: string;
+  title?: string;
   description?: string;
 
   media?: {

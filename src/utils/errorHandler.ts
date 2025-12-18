@@ -135,13 +135,13 @@ export function hasValidAuthor(article: any): article is { author: { id: string;
  */
 export function isValidArticle(article: any): article is {
   id: string;
-  title: string;
+  title?: string;
   author: { id: string; name: string };
 } {
   return (
     article &&
     typeof article.id === 'string' &&
-    typeof article.title === 'string' &&
+    (article.title === undefined || typeof article.title === 'string') &&
     hasValidAuthor(article)
   );
 }
@@ -157,7 +157,7 @@ export function sanitizeArticle(article: any): any {
   return {
     ...article,
     id: article.id || article._id?.toString() || '',
-    title: article.title || 'Untitled',
+    title: article.title || undefined, // Preserve empty titles (no fallback)
     content: article.content || '',
     excerpt: article.excerpt || '',
     author: {
