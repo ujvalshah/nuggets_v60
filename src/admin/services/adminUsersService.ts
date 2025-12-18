@@ -22,7 +22,7 @@ class AdminUsersService {
     return mapUserToAdminUser(user);
   }
 
-  async getStats(): Promise<{ total: number; active: number; newToday: number; admins: number; bookmarks: number }> {
+  async getStats(): Promise<{ total: number; active: number; newToday: number; admins: number }> {
     const response = await apiClient.get<{ data: User[]; total?: number } | User[]>('/users', undefined, 'adminUsersService.getStats');
     
     // Handle paginated response format { data: [...], total, ... } or direct array
@@ -31,7 +31,7 @@ class AdminUsersService {
     // Ensure users is an array
     if (!Array.isArray(users)) {
       console.error('Expected users array but got:', typeof users, users);
-      return { total: 0, active: 0, newToday: 0, admins: 0, bookmarks: 0 };
+      return { total: 0, active: 0, newToday: 0, admins: 0 };
     }
     
     const now = new Date();
@@ -48,11 +48,7 @@ class AdminUsersService {
     }).length;
     const admins = users.filter(u => u.role === 'admin').length;
     
-    // Bookmarks count - would need separate endpoint or compute from collections
-    // For now, estimate based on collections
-    const bookmarks = 0; // TODO: Compute from collections if needed
-    
-    return { total, active, newToday, admins, bookmarks };
+    return { total, active, newToday, admins };
   }
 
   async updateUserStatus(id: string, status: AdminUserStatus): Promise<void> {

@@ -9,7 +9,6 @@ import { useToast } from '@/hooks/useToast';
 import { AdminDrawer } from '../components/AdminDrawer';
 import { ConfirmActionModal } from '@/components/settings/ConfirmActionModal';
 import { useAdminPermissions } from '../hooks/useAdminPermissions';
-import { formatDate } from '@/utils/formatters';
 import { useAdminHeader } from '../layout/AdminLayout';
 import { useSearchParams } from 'react-router-dom';
 
@@ -308,8 +307,26 @@ export const AdminCollectionsPage: React.FC = () => {
         onSearch={(q) => loadData(q)} 
         virtualized
         placeholder="Search collections..."
-        
-        // Add date filter to toolbar
+        emptyState={
+          <div className="flex flex-col items-center justify-center text-slate-500 space-y-2">
+            <p className="text-sm font-semibold">No collections match the current filters.</p>
+            <p className="text-xs text-slate-400">Try clearing search or date filters.</p>
+            <div className="flex gap-2 mt-2">
+              <button
+                onClick={() => { setSearchQuery(''); setDateFilter(''); loadData(); }}
+                className="px-3 py-1 text-xs font-bold rounded-md bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
+              >
+                Clear filters
+              </button>
+              <button
+                onClick={() => loadData(searchQuery)}
+                className="px-3 py-1 text-xs font-bold rounded-md bg-primary-50 text-primary-700 hover:bg-primary-100 transition-colors"
+              >
+                Retry
+              </button>
+            </div>
+          </div>
+        }
         filters={
             <input 
                 type="date" 

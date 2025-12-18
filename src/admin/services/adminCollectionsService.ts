@@ -44,7 +44,7 @@ class AdminCollectionsService {
     };
   }
 
-  async updateCollectionStatus(id: string, status: 'active' | 'hidden'): Promise<void> {
+  async updateCollectionStatus(_id: string, _status: 'active' | 'hidden'): Promise<void> {
     // Backend doesn't have status field for collections
     // This would need backend support
     throw new Error('Collection status update not supported by backend');

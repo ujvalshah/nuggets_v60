@@ -57,7 +57,7 @@ interface AdminTableProps<T> {
   virtualHeight?: number; // px
 }
 
-export function AdminTable<T extends { id: string }>({ 
+function AdminTableComponent<T extends { id: string }>({ 
   columns, 
   data, 
   isLoading, 
@@ -78,7 +78,7 @@ export function AdminTable<T extends { id: string }>({
   virtualHeight = 480
 }: AdminTableProps<T>) {
 
-  const tableBodyRef = useRef<HTMLTableSectionElement | null>(null);
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
 
   const handleHeaderClick = (col: Column<T>) => {
     if (!col.sortable || !onSortChange) return;
@@ -142,7 +142,7 @@ export function AdminTable<T extends { id: string }>({
 
   const virtual = useVirtualizer({
     count: data.length,
-    getScrollElement: () => tableBodyRef.current,
+    getScrollElement: () => scrollContainerRef.current,
     estimateSize: () => rowHeight,
     overscan: 5
   });
@@ -165,7 +165,6 @@ export function AdminTable<T extends { id: string }>({
     return (
       <>
         <tr 
-          key={row.id} 
           onClick={() => onRowClick?.(row)}
           onKeyDown={(e) => {
             if (!onRowClick) return;
@@ -257,7 +256,7 @@ export function AdminTable<T extends { id: string }>({
           </div>
         )}
 
-        <div className="overflow-x-auto custom-scrollbar">
+        <div ref={scrollContainerRef} className="overflow-x-auto custom-scrollbar" style={{ maxHeight: virtualized ? virtualHeight : 'none', overflowY: virtualized ? 'auto' : 'visible' }}>
           <table className="w-full text-left border-collapse">
             <thead className="bg-slate-50 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-800">
               <tr>
@@ -276,7 +275,7 @@ export function AdminTable<T extends { id: string }>({
 
                 {columns.map((col, idx) => (
                   <th 
-                    key={col.key || idx} 
+                    key={col.key || `col-${idx}`} 
                     onClick={() => handleHeaderClick(col)}
                     onKeyDown={(e) => handleHeaderKey(e, col)}
                     style={{ minWidth: col.minWidth }}
@@ -316,56 +315,12 @@ export function AdminTable<T extends { id: string }>({
               </tr>
             </thead>
             {virtualized && !isLoading && data.length > 0 ? (
-              <tbody
-                ref={tableBodyRef}
-                style={{ display: 'block', position: 'relative', height: virtualHeight, overflowY: 'auto' }}
-                className="divide-y divide-slate-100 dark:divide-slate-800"
-              >
-                <tr style={{ height: virtual.getTotalSize(), position: 'relative', display: 'block' }}>
-                  <td style={{ padding: 0, margin: 0, border: 0, display: 'block', height: '100%', position: 'relative' }} colSpan={columns.length + (selection?.enabled ? 1 : 0)}>
-                    {virtual.getVirtualItems().map((item) => {
-                      const row = data[item.index];
-                      const isExpanded = expandedRowId === row.id;
-                      const rowElements = renderRow(row, item.index);
-                      const rows = React.Children.toArray(rowElements);
-                      const mainRow = rows[0] as React.ReactElement<React.HTMLAttributes<HTMLTableRowElement>>;
-                      const expandedRow = rows[1] as React.ReactElement<React.HTMLAttributes<HTMLTableRowElement>> | undefined;
-                      
-                      // Calculate height - expanded row needs more space
-                      const rowHeight = isExpanded && expandedRow ? item.size * 3 : item.size;
-                      
-                      return (
-                        <div
-                          key={row.id}
-                          style={{
-                            position: 'absolute',
-                            top: item.start,
-                            left: 0,
-                            width: '100%',
-                            height: rowHeight,
-                            display: 'table',
-                            tableLayout: 'fixed'
-                          }}
-                        >
-                          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                            <tbody>
-                              {mainRow && (
-                                <tr {...(mainRow.props || {})}>
-                                  {React.Children.toArray(mainRow.props.children)}
-                                </tr>
-                              )}
-                              {isExpanded && expandedRow && (
-                                <tr {...(expandedRow.props || {})}>
-                                  {React.Children.toArray(expandedRow.props.children)}
-                                </tr>
-                              )}
-                            </tbody>
-                          </table>
-                        </div>
-                      );
-                    })}
-                  </td>
-                </tr>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                {virtual.getVirtualItems().map((item) => {
+                  const row = data[item.index];
+                  if (!row) return null;
+                  return <React.Fragment key={row.id}>{renderRow(row, item.index)}</React.Fragment>;
+                })}
               </tbody>
             ) : (
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -389,7 +344,7 @@ export function AdminTable<T extends { id: string }>({
                     </tr>
                   )
                 ) : (
-                  data.map((row, index) => renderRow(row, index))
+                  data.map((row, index) => <React.Fragment key={row.id}>{renderRow(row, index)}</React.Fragment>)
                 )}
               </tbody>
             )}
@@ -424,3 +379,5 @@ export function AdminTable<T extends { id: string }>({
     </div>
   );
 }
+
+export const AdminTable = AdminTableComponent;

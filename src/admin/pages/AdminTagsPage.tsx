@@ -268,7 +268,7 @@ export const AdminTagsPage: React.FC = () => {
       render: (t) => (
         <div className="flex items-center gap-2 group/name">
             <span className="text-slate-400 font-bold">#</span>
-            <span className="font-bold text-slate-900 dark:text-white">{t.name}</span>
+            <span className="font-bold text-slate-900 dark:text-white">{t.name || 'Unnamed Tag'}</span>
             <button 
                 onClick={(e) => { e.stopPropagation(); setRenameTarget(t); }}
                 className="opacity-0 group-hover/name:opacity-100 p-1 text-slate-400 hover:text-primary-600 transition-all"
@@ -430,6 +430,26 @@ export const AdminTagsPage: React.FC = () => {
         placeholder="Search tags..."
         actions={BulkActions}
         virtualized
+        emptyState={
+          <div className="flex flex-col items-center justify-center text-slate-500 space-y-2">
+            <p className="text-sm font-semibold">No tags match the current filters.</p>
+            <p className="text-xs text-slate-400">Try clearing search filters.</p>
+            <div className="flex gap-2 mt-2">
+              <button
+                onClick={() => { setSearchQuery(''); loadData(); }}
+                className="px-3 py-1 text-xs font-bold rounded-md bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
+              >
+                Clear filters
+              </button>
+              <button
+                onClick={loadData}
+                className="px-3 py-1 text-xs font-bold rounded-md bg-primary-50 text-primary-700 hover:bg-primary-100 transition-colors"
+              >
+                Retry
+              </button>
+            </div>
+          </div>
+        }
         
         sortKey={sortKey}
         sortDirection={sortDirection}

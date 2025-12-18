@@ -198,7 +198,6 @@ export const AdminActivityLogPage: React.FC = () => {
         sortDirection={sortDirection}
         onSortChange={(k, d) => { setSortKey(k); setSortDirection(d); }}
         
-        pagination={{ page: 1, totalPages: 1, onPageChange: () => {} }}
       />
     </div>
   );

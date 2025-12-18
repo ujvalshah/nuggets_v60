@@ -1,7 +1,7 @@
 
 import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Users, FileText, Layers, Flag, MessageSquare, Globe, Lock, Hash, Bookmark } from 'lucide-react';
+import { Users, FileText, Layers, Flag, MessageSquare, Globe, Lock, Hash } from 'lucide-react';
 import { adminUsersService } from '../services/adminUsersService';
 import { adminNuggetsService } from '../services/adminNuggetsService';
 import { adminCollectionsService } from '../services/adminCollectionsService';
@@ -16,7 +16,6 @@ interface DashboardMetrics {
   collections: { community: number; nuggetsInCommunity: number };
   tags: { total: number };
   reports: { open: number };
-  bookmarks: { total: number };
   feedback: { total: number };
 }
 
@@ -73,7 +72,6 @@ export const AdminDashboardPage: React.FC = () => {
               collections: { community: cols.totalCommunity, nuggetsInCommunity: cols.totalNuggetsInCommunity },
               tags: { total: tags.totalTags },
               reports: { open: reports.open },
-              bookmarks: { total: users.bookmarks }, 
               feedback: { total: feed.total }
           });
           setErrorMessage(null);
@@ -136,33 +134,6 @@ export const AdminDashboardPage: React.FC = () => {
           </div>
         ))}
       </div>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 animate-pulse">
-          <div className="flex items-center justify-between mb-4">
-            <div className="h-4 w-32 bg-slate-200 dark:bg-slate-800 rounded"></div>
-            <div className="h-5 w-20 bg-slate-200 dark:bg-slate-800 rounded-full"></div>
-          </div>
-          <div className="space-y-3">
-            {Array.from({ length: 3 }).map((_, idx) => (
-              <div key={`health-skel-${idx}`} className="flex justify-between">
-                <div className="h-3 w-24 bg-slate-200 dark:bg-slate-800 rounded"></div>
-                <div className="h-3 w-16 bg-slate-200 dark:bg-slate-800 rounded"></div>
-              </div>
-            ))}
-          </div>
-        </div>
-        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 animate-pulse">
-          <div className="h-4 w-28 bg-slate-200 dark:bg-slate-800 rounded mb-4"></div>
-          <div className="grid grid-cols-2 gap-3">
-            {Array.from({ length: 4 }).map((_, idx) => (
-              <div key={`actions-skel-${idx}`} className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800">
-                <div className="h-3 w-16 bg-slate-200 dark:bg-slate-800 rounded mb-1"></div>
-                <div className="h-4 w-24 bg-slate-200 dark:bg-slate-800 rounded"></div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
     </div>
   );
 
@@ -206,13 +177,6 @@ export const AdminDashboardPage: React.FC = () => {
             onClick={() => navigate('/admin/collections')}
         />
         <MetricCard 
-            label="Total Bookmarks" 
-            value={metrics.bookmarks.total} 
-            icon={<Bookmark size={18} />} 
-            colorClass="bg-amber-50 text-amber-600"
-            onClick={() => navigate('/admin/users')}
-        />
-        <MetricCard 
             label="Total Tags" 
             value={metrics.tags.total} 
             icon={<Hash size={18} />} 
@@ -236,46 +200,6 @@ export const AdminDashboardPage: React.FC = () => {
         <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-xl border border-dashed border-slate-300 dark:border-slate-700 flex flex-col items-center justify-center text-center cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" onClick={() => navigate('/admin/downloads')}>
             <span className="text-xs font-bold text-slate-500">Download Data</span>
             <span className="text-[10px] text-slate-400 mt-1">Export Reports</span>
-        </div>
-      </div>
-
-      {/* Quick Status Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5">
-            <div className="flex items-center justify-between mb-4">
-                <h3 className="font-bold text-slate-900 dark:text-white">System Health</h3>
-                <span className="text-xs font-bold text-green-600 bg-green-50 px-2 py-1 rounded-full">Operational</span>
-            </div>
-            <div className="space-y-3">
-                <div className="flex justify-between text-sm">
-                    <span className="text-slate-500">Database</span>
-                    <span className="font-mono text-slate-700 dark:text-slate-300">Healthy</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                    <span className="text-slate-500">Storage</span>
-                    <span className="font-mono text-slate-700 dark:text-slate-300">24% Used</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                    <span className="text-slate-500">Last Backup</span>
-                    <span className="font-mono text-slate-700 dark:text-slate-300">2 hours ago</span>
-                </div>
-            </div>
-        </div>
-
-        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5">
-            <div className="flex items-center justify-between mb-4">
-                <h3 className="font-bold text-slate-900 dark:text-white">Admin Actions</h3>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-                <button onClick={() => navigate('/admin/users')} className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800 text-left hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors">
-                    <span className="block text-xs font-bold text-slate-500 mb-1">Users</span>
-                    <span className="text-sm font-bold text-slate-900 dark:text-white">Manage Access</span>
-                </button>
-                <button onClick={() => navigate('/admin/config')} className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800 text-left hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors">
-                    <span className="block text-xs font-bold text-slate-500 mb-1">Config</span>
-                    <span className="text-sm font-bold text-slate-900 dark:text-white">System Settings</span>
-                </button>
-            </div>
         </div>
       </div>
     </div>

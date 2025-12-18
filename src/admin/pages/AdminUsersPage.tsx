@@ -5,7 +5,7 @@ import { AdminTable, Column } from '../components/AdminTable';
 import { AdminSummaryBar } from '../components/AdminSummaryBar';
 import { AdminUser, AdminRole, AdminUserStatus } from '../types/admin';
 import { adminUsersService } from '../services/adminUsersService';
-import { Shield, Ban, CheckCircle, Edit, Users, UserPlus, Bookmark, BarChart3, ChevronDown, Layout } from 'lucide-react';
+import { Shield, Ban, CheckCircle, Edit, Users, UserPlus, BarChart3, ChevronDown, Layout } from 'lucide-react';
 import { useToast } from '@/hooks/useToast';
 import { useAdminPermissions } from '../hooks/useAdminPermissions';
 import { Avatar } from '@/components/shared/Avatar';
@@ -16,7 +16,7 @@ import { useAdminHeader } from '../layout/AdminLayout';
 export const AdminUsersPage: React.FC = () => {
   const { setPageHeader } = useAdminHeader();
   const [users, setUsers] = useState<AdminUser[]>([]);
-  const [stats, setStats] = useState({ total: 0, active: 0, newToday: 0, admins: 0, bookmarks: 0 });
+  const [stats, setStats] = useState({ total: 0, active: 0, newToday: 0, admins: 0 });
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   
@@ -218,15 +218,15 @@ export const AdminUsersPage: React.FC = () => {
             className="flex items-center gap-3 cursor-pointer group/user"
             onClick={(e) => { e.stopPropagation(); handleOpenUser(u); }}
         >
-          <Avatar name={u.name} size="sm" src={u.avatarUrl} className={u.status === 'suspended' ? 'opacity-50 grayscale' : ''} />
+          <Avatar name={u.name || u.email || 'User'} size="sm" src={u.avatarUrl} className={u.status === 'suspended' ? 'opacity-50 grayscale' : ''} />
           <div className="min-w-0">
             <div className="flex items-center gap-1.5">
                 <span className={`font-bold text-sm truncate group-hover/user:text-primary-600 group-hover/user:underline transition-colors ${u.status === 'suspended' ? 'text-slate-500 line-through' : 'text-slate-900 dark:text-white'}`}>
-                  {u.name}
+                  {u.name || u.email || 'Unknown User'}
                 </span>
                 {u.role === 'admin' && <Shield size={12} className="text-purple-500 fill-purple-100 dark:fill-purple-900/30" />}
             </div>
-            <div className="text-[10px] text-slate-500 truncate">@{u.username}</div>
+            <div className="text-[10px] text-slate-500 truncate">@{u.username || 'unknown'}</div>
           </div>
         </div>
       )
@@ -448,7 +448,6 @@ export const AdminUsersPage: React.FC = () => {
         items={[
           { label: 'Total Users', value: stats.total, icon: <Users size={18} /> },
           { label: 'Total Admins', value: stats.admins, icon: <Shield size={18} /> },
-          { label: 'Total Bookmarks', value: stats.bookmarks, icon: <Bookmark size={18} /> },
           { label: 'New Today', value: stats.newToday, icon: <UserPlus size={18} />, hint: 'Since midnight' },
         ]}
         isLoading={isLoading}
@@ -482,7 +481,6 @@ export const AdminUsersPage: React.FC = () => {
         actions={BulkActions}
         onSearch={setSearchQuery}
         virtualized
-        pagination={{ page: 1, totalPages: 1, onPageChange: () => {} }}
         
         sortKey={sortKey}
         sortDirection={sortDirection}

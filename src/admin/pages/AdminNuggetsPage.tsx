@@ -4,7 +4,7 @@ import { AdminTable, Column } from '../components/AdminTable';
 import { AdminSummaryBar } from '../components/AdminSummaryBar';
 import { AdminNugget } from '../types/admin';
 import { adminNuggetsService } from '../services/adminNuggetsService';
-import { AlertTriangle, Trash2, Eye, EyeOff, Globe, Lock, Video, Image as ImageIcon, Link as LinkIcon, StickyNote, CheckCircle2, FileText, PlusCircle, Edit2, Save, X, Filter, Layout } from 'lucide-react';
+import { AlertTriangle, Trash2, EyeOff, Globe, Lock, Video, Image as ImageIcon, Link as LinkIcon, StickyNote, CheckCircle2, FileText, PlusCircle, Edit2, Save, Layout } from 'lucide-react';
 import { useToast } from '@/hooks/useToast';
 import { useAdminPermissions } from '../hooks/useAdminPermissions';
 import { AdminDrawer } from '../components/AdminDrawer';
@@ -238,9 +238,9 @@ export const AdminNuggetsPage: React.FC = () => {
           </div>
           <div className="min-w-0 flex-1">
             <div className="font-bold text-xs text-indigo-600 dark:text-indigo-400 truncate group-hover:text-indigo-500 transition-colors">
-              {n.title}
+              {n.title || 'Untitled'}
             </div>
-            <p className="text-[10px] text-slate-500 truncate mt-0.5">{n.excerpt}</p>
+            <p className="text-[10px] text-slate-500 truncate mt-0.5">{n.excerpt || 'No description'}</p>
           </div>
         </div>
       )
@@ -458,7 +458,26 @@ export const AdminNuggetsPage: React.FC = () => {
         actions={BulkActions}
         onSearch={setSearchQuery} 
         virtualized
-        pagination={{ page: 1, totalPages: 1, onPageChange: () => {} }}
+        emptyState={
+          <div className="flex flex-col items-center justify-center text-slate-500 space-y-2">
+            <p className="text-sm font-semibold">No nuggets match the current filters.</p>
+            <p className="text-xs text-slate-400">Try clearing search, status, or date filters.</p>
+            <div className="flex gap-2 mt-2">
+              <button
+                onClick={() => { setSearchQuery(''); setStatusFilter('all'); setDateFilter(''); loadData(); }}
+                className="px-3 py-1 text-xs font-bold rounded-md bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
+              >
+                Clear filters
+              </button>
+              <button
+                onClick={loadData}
+                className="px-3 py-1 text-xs font-bold rounded-md bg-primary-50 text-primary-700 hover:bg-primary-100 transition-colors"
+              >
+                Retry
+              </button>
+            </div>
+          </div>
+        }
         
         sortKey={sortKey}
         sortDirection={sortDirection}

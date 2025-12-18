@@ -310,6 +310,7 @@ export const AdminModerationPage: React.FC = () => {
       key: 'actions',
       header: '',
       width: 'w-12',
+      align: 'right',
       render: (r) => (
         <div className="flex items-center justify-end">
           {expandedRowId === r.id ? (
@@ -344,6 +345,26 @@ export const AdminModerationPage: React.FC = () => {
         isLoading={isLoading} 
         virtualized
         placeholder="Search reports..."
+        emptyState={
+          <div className="flex flex-col items-center justify-center text-slate-500 space-y-2">
+            <p className="text-sm font-semibold">No reports match the current filters.</p>
+            <p className="text-xs text-slate-400">Try changing the status filter or date range.</p>
+            <div className="flex gap-2 mt-2">
+              <button
+                onClick={() => { setFilter('open'); setDateFilter(''); loadData(); }}
+                className="px-3 py-1 text-xs font-bold rounded-md bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
+              >
+                Clear filters
+              </button>
+              <button
+                onClick={loadData}
+                className="px-3 py-1 text-xs font-bold rounded-md bg-primary-50 text-primary-700 hover:bg-primary-100 transition-colors"
+              >
+                Retry
+              </button>
+            </div>
+          </div>
+        }
         onRowClick={handleRowClick}
         expandedRowId={expandedRowId}
         expandedRowContent={(report) => (
