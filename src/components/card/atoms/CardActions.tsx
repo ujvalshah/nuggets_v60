@@ -63,10 +63,7 @@ export const CardActions: React.FC<CardActionsProps> = ({
 
       {onAddToCollection && (
         <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onAddToCollection();
-          }}
+          onClick={onAddToCollection}
           className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-all hover:scale-105 active:scale-95"
           title="Add to Collection"
         >

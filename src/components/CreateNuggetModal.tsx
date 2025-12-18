@@ -670,8 +670,8 @@ export const CreateNuggetModal: React.FC<CreateNuggetModalProps> = ({ isOpen, on
     try {
         // CRITICAL: Do NOT derive titles from content for text-only nuggets
         // Auto-title generation is STRICTLY LIMITED to Social/Video content types
-        // Text-only nuggets must have user-provided titles or use "Untitled Nugget" fallback
-        const finalTitle = title.trim() || 'Untitled Nugget';
+        // Titles are optional - allow empty/null titles
+        const finalTitle = title.trim() || '';
         const wordCount = content.trim().split(/\s+/).length;
         const readTime = Math.max(1, Math.ceil(wordCount / 200));
 

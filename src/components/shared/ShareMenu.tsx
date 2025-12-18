@@ -4,7 +4,7 @@ import { Share2 } from 'lucide-react';
 interface ShareItemData {
   type: 'nugget' | 'collection';
   id: string;
-  title: string;
+  title?: string;
   shareUrl: string;
 }
 
@@ -27,7 +27,7 @@ export const ShareMenu: React.FC<ShareMenuProps> = ({
     if (navigator.share) {
       try {
         await navigator.share({
-          title: data.title,
+          title: data.title || '',
           url: data.shareUrl
         });
       } catch (e) {

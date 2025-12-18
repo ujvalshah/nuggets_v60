@@ -78,8 +78,13 @@ export const CollectionPopover: React.FC<CollectionPopoverProps> = ({
 
   const loadCollections = async () => {
     const cols = await storageService.getCollections();
-    // Filter by mode and user ownership
-    setCollections(cols.filter(c => c.creatorId === currentUserId && c.type === mode));
+    // For public collections, show all public collections (user can add to any)
+    // For private collections, show only user's own collections
+    if (mode === 'public') {
+      setCollections(cols.filter(c => c.type === 'public'));
+    } else {
+      setCollections(cols.filter(c => c.creatorId === currentUserId && c.type === mode));
+    }
   };
 
   const toggleCollection = async (collectionId: string, isInCollection: boolean, colName: string) => {
@@ -103,8 +108,10 @@ export const CollectionPopover: React.FC<CollectionPopoverProps> = ({
         await storageService.addArticleToCollection(collectionId, articleId, currentUserId);
         toast.success(`Added to "${colName}"`);
       }
-    } catch (e) {
-      toast.error("Failed to update");
+    } catch (e: any) {
+      console.error('Failed to update collection:', e);
+      const errorMessage = e?.response?.data?.message || e?.message || "Failed to update collection";
+      toast.error(errorMessage);
       loadCollections(); // Revert on error
     }
   };

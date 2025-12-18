@@ -83,7 +83,7 @@ export const ArticleDetail: React.FC<ArticleDetailProps> = ({ article, onClose, 
                        ))}
                    </div>
                    <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900 dark:text-white leading-tight mb-4">
-                       {article.title}
+                       {article.title || ''}
                    </h1>
                    <div className="flex items-center gap-4 text-xs font-medium text-slate-500 dark:text-slate-400">
                        <div className="flex items-center gap-1.5">

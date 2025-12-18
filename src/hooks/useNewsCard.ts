@@ -53,7 +53,7 @@ export interface NewsCardHandlers {
   onDelete?: () => void;
   onEdit?: () => void;
   onReport?: () => void;
-  onAddToCollection?: () => void;
+  onAddToCollection?: (e: React.MouseEvent) => void;
   onToggleVisibility?: () => void;
   onAuthorClick: ((authorId: string) => void) | undefined;
   onToggleMenu: (e: React.MouseEvent) => void;
@@ -311,8 +311,11 @@ export const useNewsCard = ({
     setShowMenu(false);
   };
 
-  const handleAddToCollection = () => {
-    setCollectionAnchor(null);
+  const handleAddToCollection = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    // Get the button's bounding rect for popover positioning
+    const buttonRect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    setCollectionAnchor(buttonRect);
     setCollectionMode('public');
     setShowCollection(true);
   };

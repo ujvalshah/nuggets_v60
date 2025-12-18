@@ -51,7 +51,7 @@ export const CategoryFilterBar: React.FC<CategoryFilterBarProps> = ({
 
   return (
     <div
-      className="sticky top-[64px] z-40 bg-white/95 backdrop-blur-sm py-3 px-4 border-b border-gray-100"
+      className="sticky top-[64px] left-0 right-0 z-40 bg-white/95 backdrop-blur-sm py-3 px-4 border-b border-gray-100"
       style={{
         maskImage: 'linear-gradient(to right, black 0%, black 95%, transparent 100%)',
         WebkitMaskImage: 'linear-gradient(to right, black 0%, black 95%, transparent 100%)',

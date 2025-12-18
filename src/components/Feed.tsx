@@ -12,6 +12,7 @@ interface FeedProps {
   activeCategory: string; // 'All', 'Today', or category name
   searchQuery?: string;
   sortOrder?: 'latest' | 'oldest'; // Sort order from Header UI
+  selectedTag?: string | null; // Tag filter (client-side, backend doesn't support tag filtering)
   onArticleClick: (article: Article) => void;
   onCategoryClick: (category: string) => void;
   onTagClick?: (tag: string) => void;
@@ -91,6 +92,7 @@ export const Feed: React.FC<FeedProps> = ({
   activeCategory,
   searchQuery = '',
   sortOrder = 'latest',
+  selectedTag = null,
   onArticleClick,
   onCategoryClick,
   onTagClick,
@@ -103,7 +105,7 @@ export const Feed: React.FC<FeedProps> = ({
   // - Caching
   // - Race condition protection
   const {
-    articles: nuggets,
+    articles: allNuggets,
     isLoading,
     isFetchingNextPage,
     hasNextPage,
@@ -116,6 +118,17 @@ export const Feed: React.FC<FeedProps> = ({
     sortOrder, // Connected to Header sort dropdown
     limit: 25,
   });
+
+  // Apply tag filtering client-side (backend doesn't support tag filtering)
+  // Tags are mandatory - filter for nuggets containing the selected tag
+  const nuggets = React.useMemo(() => {
+    if (!selectedTag) return allNuggets;
+    
+    return allNuggets.filter(article => {
+      const tags = article.tags || [];
+      return tags.includes(selectedTag);
+    });
+  }, [allNuggets, selectedTag]);
 
   // Infinite Scroll Handler
   const handleLoadMore = () => {

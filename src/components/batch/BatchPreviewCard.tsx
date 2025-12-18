@@ -42,7 +42,7 @@ function createFallbackArticle(row: BatchRow, currentUserId: string, authorName:
   
   return {
     id: row.id,
-    title: row.title || 'Untitled Nugget',
+    title: row.title || undefined, // Preserve empty titles (display layer handles fallbacks)
     excerpt,
     content,
     author: {
