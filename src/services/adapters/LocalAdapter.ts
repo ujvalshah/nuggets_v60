@@ -296,20 +296,35 @@ export class LocalAdapter implements IAdapter {
     }
   }
 
-  async getCollections(): Promise<Collection[]> {
+  async getCollections(params?: { type?: 'public' | 'private'; includeCount?: boolean }): Promise<Collection[] | { data: Collection[]; count: number }> {
     this.initStorage();
     try {
       const data = localStorage.getItem(COLLECTIONS_KEY);
       const parsed: Collection[] = data ? JSON.parse(data) : [];
-      return parsed.map(c => ({ 
+      let collections = parsed.map(c => ({ 
           ...c, 
           entries: c.entries || [],
           type: c.type || 'public',
           updatedAt: c.updatedAt || c.createdAt
       }));
+      
+      // Apply type filter if specified
+      if (params?.type) {
+        collections = collections.filter(c => c.type === params.type);
+      }
+      
+      // Return with count if requested
+      if (params?.includeCount) {
+        return {
+          data: collections,
+          count: collections.length
+        };
+      }
+      
+      return collections;
     } catch (e) {
       console.warn('Failed to get collections from storage:', e);
-      return [];
+      return params?.includeCount ? { data: [], count: 0 } : [];
     }
   }
 

@@ -26,20 +26,35 @@ class AdminCollectionsService {
   }
 
   async getStats(): Promise<{ totalCommunity: number; totalNuggetsInCommunity: number }> {
-    const response = await apiClient.get<Collection[]>('/collections', undefined, 'adminCollectionsService.getStats');
+    // Use backend count for community collections (public only)
+    // This ensures consistency with Community Collections page
+    const response = await apiClient.get<{ data: Collection[]; count: number } | Collection[]>(
+      '/collections?type=public&includeCount=true', 
+      undefined, 
+      'adminCollectionsService.getStats'
+    );
     
-    // Collections endpoint returns array directly (not paginated)
-    const collections = Array.isArray(response) ? response : [];
+    let collections: Collection[] = [];
+    let totalCommunity = 0;
     
-    if (!Array.isArray(collections)) {
-      console.error('Expected collections array but got:', typeof collections);
+    // Handle both array response (legacy) and object response (with count)
+    if (Array.isArray(response)) {
+      collections = response;
+      totalCommunity = collections.filter(c => c.type === 'public').length;
+    } else if (response && typeof response === 'object' && 'data' in response) {
+      collections = response.data || [];
+      // Use backend-provided count for consistency
+      totalCommunity = response.count || collections.length;
+    } else {
+      console.error('Expected collections array or object but got:', typeof response);
       return { totalCommunity: 0, totalNuggetsInCommunity: 0 };
     }
     
+    // Filter to public collections for nugget count calculation
     const publicCols = collections.filter(c => c.type === 'public');
     
     return {
-      totalCommunity: publicCols.length,
+      totalCommunity: totalCommunity, // Use backend count
       totalNuggetsInCommunity: publicCols.reduce((acc, c) => acc + (c.validEntriesCount ?? c.entries?.length ?? 0), 0)
     };
   }

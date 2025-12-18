@@ -89,10 +89,8 @@ function nuggetToArticle(
       title = nuggetMedia.previewMetadata.title;
     }
   }
-  // Fallback to "Untitled Nugget" if no title is available
-  if (!title) {
-    title = 'Untitled Nugget';
-  }
+  // Titles are optional - allow empty/null titles (no fallback)
+  // Display layer will handle empty titles gracefully
   const description = nuggetMedia?.previewMetadata?.description || '';
   const content = customContent || description || url;
   const excerpt = content.substring(0, 150) + (content.length > 150 ? '...' : '');

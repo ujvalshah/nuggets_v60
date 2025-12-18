@@ -162,11 +162,24 @@ export class RestAdapter implements IAdapter {
   }
 
   // --- Collections ---
-  getCollections(): Promise<Collection[]> {
+  getCollections(params?: { type?: 'public' | 'private'; includeCount?: boolean }): Promise<Collection[] | { data: Collection[]; count: number }> {
     // Add cancelKey to prevent duplicate simultaneous requests
-    // Collections endpoint returns array directly (not paginated)
-    return apiClient.get<Collection[]>('/collections', undefined, 'restAdapter.getCollections')
-      .then(response => Array.isArray(response) ? response : []);
+    const queryParams = new URLSearchParams();
+    if (params?.type) queryParams.set('type', params.type);
+    if (params?.includeCount) queryParams.set('includeCount', 'true');
+    
+    const endpoint = queryParams.toString() ? `/collections?${queryParams}` : '/collections';
+    return apiClient.get<Collection[] | { data: Collection[]; count: number }>(endpoint, undefined, 'restAdapter.getCollections')
+      .then(response => {
+        // Handle both array response (legacy) and object response (with count)
+        if (Array.isArray(response)) {
+          return response;
+        }
+        if (response && typeof response === 'object' && 'data' in response) {
+          return response;
+        }
+        return [];
+      });
   }
 
   getCollectionById(id: string): Promise<Collection | undefined> {

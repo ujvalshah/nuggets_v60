@@ -35,7 +35,7 @@ export interface IAdapter {
   deleteCategory(category: string): Promise<void>;
 
   // Collections
-  getCollections(): Promise<Collection[]>;
+  getCollections(params?: { type?: 'public' | 'private'; includeCount?: boolean }): Promise<Collection[] | { data: Collection[]; count: number }>;
   getCollectionById(id: string): Promise<Collection | undefined>;
   createCollection(name: string, description: string, creatorId: string, type: 'public' | 'private'): Promise<Collection>;
   deleteCollection(id: string): Promise<void>;

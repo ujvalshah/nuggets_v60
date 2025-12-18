@@ -412,7 +412,7 @@ export const AdminNuggetsPage: React.FC = () => {
     <div className="space-y-4">
       {pendingDelete && (
         <div className="flex items-center justify-between rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-          <span>Deleted “{pendingDelete.nugget.title}”. Undo?</span>
+          <span>Deleted "{pendingDelete.nugget.title || 'nugget'}". Undo?</span>
           <div className="flex gap-2 items-center">
             <button
               onClick={() => {
@@ -527,7 +527,7 @@ export const AdminNuggetsPage: React.FC = () => {
                             />
                         </div>
                     ) : (
-                        <h2 className="text-xl font-bold text-slate-900 dark:text-white leading-tight mb-2">{selectedNugget.title}</h2>
+                        <h2 className="text-xl font-bold text-slate-900 dark:text-white leading-tight mb-2">{selectedNugget.title || ''}</h2>
                     )}
                     
                     <div className="flex items-center gap-2 text-xs text-slate-500">
