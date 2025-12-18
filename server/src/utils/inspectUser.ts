@@ -70,3 +70,4 @@ if (identifier) {
   console.error('Example: npx tsx server/src/utils/inspectUser.ts shahujval1@gmail.com');
   process.exit(1);
 }
+

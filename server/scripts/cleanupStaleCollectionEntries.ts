@@ -13,10 +13,19 @@
  * This is a ONE-TIME script - not part of runtime logic.
  */
 
+import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import mongoose from 'mongoose';
 import { Collection } from '../src/models/Collection.js';
 import { Article } from '../src/models/Article.js';
 import { connectDB } from '../src/utils/db.js';
+
+// Load environment variables
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const rootPath = path.resolve(__dirname, '../..');
+dotenv.config({ path: path.join(rootPath, '.env') });
 
 async function cleanupStaleEntries() {
   try {

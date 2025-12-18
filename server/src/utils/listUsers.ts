@@ -91,3 +91,4 @@ if (process.argv[1]?.includes('listUsers')) {
       process.exit(1);
     });
 }
+

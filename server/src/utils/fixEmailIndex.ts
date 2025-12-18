@@ -112,3 +112,4 @@ if (process.argv[1]?.includes('fixEmailIndex')) {
       process.exit(1);
     });
 }
+

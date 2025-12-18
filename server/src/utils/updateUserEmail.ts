@@ -74,3 +74,4 @@ if (oldEmail && newEmail) {
   console.error('Example: npx tsx server/src/utils/updateUserEmail.ts old@example.com new@example.com');
   process.exit(1);
 }
+

@@ -72,3 +72,4 @@ if (email) {
   console.error('Example: npm run promote-admin user@example.com');
   process.exit(1);
 }
+

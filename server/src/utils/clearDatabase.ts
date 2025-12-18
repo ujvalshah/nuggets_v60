@@ -36,3 +36,4 @@ export async function clearDatabase(): Promise<void> {
     throw error;
   }
 }
+

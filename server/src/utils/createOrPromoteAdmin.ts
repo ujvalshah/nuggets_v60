@@ -46,9 +46,9 @@ export async function createOrPromoteAdmin(
       // User doesn't exist - create as admin
       const now = new Date().toISOString();
       const defaultDisplayName = displayName || email.split('@')[0];
-      const defaultUsername = username || email.split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, '');
+      const defaultUsername = (username || email.split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, '')).toLowerCase().trim();
 
-      // Check if username is taken
+      // Check if username is taken (case-insensitive)
       const existingUsername = await User.findOne({ 'profile.username': defaultUsername });
       if (existingUsername) {
         throw new Error(`Username "${defaultUsername}" is already taken. Please provide a different username.`);
