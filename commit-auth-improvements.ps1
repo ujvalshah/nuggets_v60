@@ -132,3 +132,4 @@ Write-Host "3. Push to remote: git push origin $CURRENT_BRANCH"
 Write-Host ""
 Write-Host "⚠️  Remember: .env file should NOT be committed!" -ForegroundColor Yellow
 Write-Host "   Verify with: git status"
+

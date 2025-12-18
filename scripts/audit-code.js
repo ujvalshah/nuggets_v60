@@ -185,3 +185,4 @@ console.log('Scanning codebase...\n');
 scanDirectory(srcDir);
 printReport();
 
+

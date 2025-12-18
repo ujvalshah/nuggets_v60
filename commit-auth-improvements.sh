@@ -133,3 +133,4 @@ echo "3. Push to remote: git push origin $CURRENT_BRANCH"
 echo ""
 echo "⚠️  Remember: .env file should NOT be committed!"
 echo "   Verify with: git status"
+
