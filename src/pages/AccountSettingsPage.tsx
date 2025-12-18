@@ -185,10 +185,10 @@ export const AccountSettingsPage: React.FC<{ userId: string }> = ({ userId }) =>
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 pb-20">
+    <div className="bg-slate-50 dark:bg-slate-950 pb-20">
       
       {/* Page Header */}
-      <div className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 pt-8 pb-8 sticky top-[4.5rem] z-20">
+      <div className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 pt-8 pb-8 sticky top-16 z-20">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
           <h1 className="text-3xl font-bold text-slate-900 dark:text-white tracking-tight">Settings</h1>
           <p className="text-slate-500 dark:text-slate-400 mt-1">Manage your identity, security, and preferences.</p>

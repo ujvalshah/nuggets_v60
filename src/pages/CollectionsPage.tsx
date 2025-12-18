@@ -49,6 +49,7 @@ const CreateCollectionInstructionModal: React.FC<{ isOpen: boolean; onClose: () 
 
 export const CollectionsPage: React.FC = () => {
   const [collections, setCollections] = useState<Collection[]>([]);
+  const [totalCount, setTotalCount] = useState<number>(0); // Backend-provided count
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
@@ -83,26 +84,42 @@ export const CollectionsPage: React.FC = () => {
   const loadCollections = async () => {
     setIsLoading(true);
     try {
-      const [all, allUsersResponse] = await Promise.all([
-          storageService.getCollections(),
+      // Request collections with type=public filter and includeCount=true
+      // This ensures we get the backend count for public collections only
+      const [collectionsResponse, allUsersResponse] = await Promise.all([
+          storageService.getCollections({ type: 'public', includeCount: true }),
           storageService.getUsers()
       ]);
 
       // Ensure allUsers is an array
       const allUsers = Array.isArray(allUsersResponse) ? allUsersResponse : [];
 
-      const hydrated = all.map(col => ({
+      // Handle response: could be array (legacy) or object with data and count
+      let collectionsData: Collection[] = [];
+      let count = 0;
+      
+      if (Array.isArray(collectionsResponse)) {
+        collectionsData = collectionsResponse;
+        count = collectionsData.length; // Fallback to array length if count not provided
+      } else if (collectionsResponse && typeof collectionsResponse === 'object' && 'data' in collectionsResponse) {
+        collectionsData = collectionsResponse.data || [];
+        count = collectionsResponse.count || collectionsData.length;
+      }
+
+      const hydrated = collectionsData.map(col => ({
           ...col,
           creator: allUsers.find(u => u.id === col.creatorId)
       }));
 
-      setCollections(hydrated.filter(c => c.type === 'public'));
+      setCollections(hydrated);
+      setTotalCount(count); // Store backend-provided count
     } catch (error: any) {
       // Handle cancelled requests gracefully
       if (error?.message !== 'Request cancelled') {
         console.error('Error loading collections:', error);
       }
       setCollections([]);
+      setTotalCount(0);
     } finally {
       setIsLoading(false);
     }
@@ -193,8 +210,8 @@ export const CollectionsPage: React.FC = () => {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 pb-32">
-        <div className="sticky top-[4.5rem] z-30 bg-slate-900 border-b border-slate-800 shadow-sm">
+      <div className="bg-slate-50 dark:bg-slate-950 pb-32">
+        <div className="sticky top-16 z-30 bg-slate-900 border-b border-slate-800 shadow-sm">
           <div className="max-w-[1280px] mx-auto px-4 sm:px-6 lg:px-8 py-6">
             <div className="h-8 bg-slate-800 rounded w-64 animate-pulse" />
           </div>
@@ -219,8 +236,8 @@ export const CollectionsPage: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 pb-32">
-      <div className="sticky top-[4.5rem] z-30 bg-slate-900 border-b border-slate-800 shadow-sm transition-colors">
+    <div className="bg-slate-50 dark:bg-slate-950 pb-32">
+      <div className="sticky top-16 z-30 bg-slate-900 border-b border-slate-800 shadow-sm transition-colors">
           <div className="max-w-[1280px] mx-auto px-4 sm:px-6 lg:px-8 py-6">
             <div className="flex flex-col gap-6">
                 <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">

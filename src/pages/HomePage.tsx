@@ -113,6 +113,29 @@ export const HomePage: React.FC<HomePageProps> = ({
     }));
   }, [allArticles]);
 
+  // Calculate tag counts from articles
+  // NOTE: Tags are mandatory - all nuggets must have at least one tag
+  const tagsWithCounts = useMemo(() => {
+    const tagCountMap = new Map<string, number>();
+    
+    allArticles.forEach(article => {
+      const tags = article.tags || [];
+      // Count each tag (all nuggets should have tags since they're mandatory)
+      tags.forEach(tag => {
+        const count = tagCountMap.get(tag) || 0;
+        tagCountMap.set(tag, count + 1);
+      });
+    });
+
+    // Sort tags by count (descending) then alphabetically
+    return Array.from(tagCountMap.entries())
+      .sort((a, b) => {
+        if (b[1] !== a[1]) return b[1] - a[1]; // Count descending
+        return a[0].localeCompare(b[0]); // Alphabetical ascending
+      })
+      .map(([label, count]) => ({ label, count }));
+  }, [allArticles]);
+
   // Determine active category from selectedCategories
   const activeCategory = useMemo(() => {
     if (selectedCategories.length === 0) return 'All';
@@ -121,20 +144,34 @@ export const HomePage: React.FC<HomePageProps> = ({
   }, [selectedCategories]);
 
   // Handle "Today" filtering client-side
+  // Also handle tag filtering client-side (backend doesn't support tag filtering)
   const articles = useMemo(() => {
+    let filtered = allArticles;
+    
+    // Apply "Today" filter if active
     if (activeCategory === 'Today') {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       const todayEnd = new Date(today);
       todayEnd.setHours(23, 59, 59, 999);
       
-      return allArticles.filter(article => {
+      filtered = filtered.filter(article => {
         const publishedDate = new Date(article.publishedAt);
         return publishedDate >= today && publishedDate <= todayEnd;
       });
     }
-    return allArticles;
-  }, [allArticles, activeCategory]);
+    
+    // Apply tag filter if selected
+    // Tags are mandatory - filter for nuggets containing the selected tag
+    if (selectedTag) {
+      filtered = filtered.filter(article => {
+        const tags = article.tags || [];
+        return tags.includes(selectedTag);
+      });
+    }
+    
+    return filtered;
+  }, [allArticles, activeCategory, selectedTag]);
 
   // Handle category selection from CategoryFilterBar
   const handleCategorySelect = (categoryLabel: string) => {
@@ -198,7 +235,7 @@ export const HomePage: React.FC<HomePageProps> = ({
   }
 
   return (
-    <main className="w-full flex flex-col min-h-screen relative" onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd} ref={containerRef}>
+    <main className="w-full flex flex-col relative" onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd} ref={containerRef}>
       
       {/* Refresh Indicator */}
       <div className="absolute top-0 left-0 w-full flex justify-center pointer-events-none z-10" style={{ height: `${pullY}px`, opacity: pullY > 0 ? 1 : 0, transition: isRefreshing ? 'height 0.3s ease' : 'none' }}>
@@ -222,7 +259,8 @@ export const HomePage: React.FC<HomePageProps> = ({
                 
                 {/* Left Sidebar: Topics Widget */}
                 {/* Fixed height + Scrollable if too many topics */}
-                <div className="hidden md:block md:col-span-3 lg:col-span-3 sticky top-24 max-h-[calc(100vh-8rem)] overflow-y-auto custom-scrollbar pr-2 space-y-6">
+                {/* Offset: Header (64px) + CategoryFilterBar (~48px) = 112px = top-28 */}
+                <div className="hidden md:block md:col-span-3 lg:col-span-3 sticky top-28 max-h-[calc(100vh-7rem)] overflow-y-auto custom-scrollbar pr-2 space-y-6">
                     <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm">
                         <div className="flex items-center gap-2 mb-4 text-slate-900 dark:text-white">
                             <Hash size={16} className="text-primary-500" />
@@ -241,6 +279,38 @@ export const HomePage: React.FC<HomePageProps> = ({
                         </div>
                     </div>
 
+                    {/* Tags Widget - Including "General" virtual tag */}
+                    {tagsWithCounts.length > 0 && (
+                        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm">
+                            <div className="flex items-center gap-2 mb-4 text-slate-900 dark:text-white">
+                                <Hash size={16} className="text-primary-500" />
+                                <h3 className="text-sm font-bold uppercase tracking-wider">Tags</h3>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                                {tagsWithCounts.map(tag => (
+                                    <Badge 
+                                        key={tag.label} 
+                                        label={`${tag.label} (${tag.count})`}
+                                        variant={selectedTag === tag.label ? 'primary' : 'neutral'}
+                                        className="cursor-pointer text-[11px] py-1.5 px-3"
+                                        onClick={() => {
+                                            // Toggle tag selection: click again to deselect
+                                            setSelectedTag(selectedTag === tag.label ? null : tag.label);
+                                        }}
+                                    />
+                                ))}
+                            </div>
+                            {selectedTag && (
+                                <button
+                                    onClick={() => setSelectedTag(null)}
+                                    className="mt-3 text-xs text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition-colors"
+                                >
+                                    Clear tag filter
+                                </button>
+                            )}
+                        </div>
+                    )}
+
                     {/* Site Footer Links - Moved to Left for visibility on MD */}
                     <div className="px-2">
                         <div className="flex flex-wrap gap-x-4 gap-y-2 text-[11px] font-medium text-slate-400 dark:text-slate-500">
@@ -258,11 +328,13 @@ export const HomePage: React.FC<HomePageProps> = ({
 
                 {/* Center: Feed */}
                 {/* Phase 3 Complete: Feed uses unified useInfiniteArticles hook with React Query */}
+                {/* Note: Tag filtering is handled client-side in HomePage articles useMemo */}
                 <div className="md:col-span-9 lg:col-span-6 w-full mx-auto">
                     <Feed
                         activeCategory={activeCategory}
                         searchQuery={searchQuery}
                         sortOrder={sortOrder}
+                        selectedTag={selectedTag}
                         onArticleClick={setSelectedArticle}
                         onCategoryClick={toggleCategory}
                         onTagClick={(t) => setSelectedTag(t)}
@@ -272,7 +344,8 @@ export const HomePage: React.FC<HomePageProps> = ({
 
                 {/* Right Sidebar: Collections & Footer */}
                 {/* Fixed height + Scrollable */}
-                <div className="hidden lg:block lg:col-span-3 sticky top-24 max-h-[calc(100vh-8rem)] overflow-y-auto custom-scrollbar pl-2 space-y-6">
+                {/* Offset: Header (64px) + CategoryFilterBar (~48px) = 112px = top-28 */}
+                <div className="hidden lg:block lg:col-span-3 sticky top-28 max-h-[calc(100vh-7rem)] overflow-y-auto custom-scrollbar pl-2 space-y-6">
                     {/* Collections Widget */}
                     <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm">
                         <div className="flex items-center gap-2 mb-4 text-slate-900 dark:text-white">

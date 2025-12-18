@@ -134,13 +134,13 @@ export const CollectionDetailPage: React.FC = () => {
       });
   };
 
-  if (isLoading) return <div className="min-h-screen flex items-center justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500"></div></div>;
+  if (isLoading) return <div className="flex items-center justify-center py-32"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500"></div></div>;
   if (!collection) return null;
 
   const theme = getCollectionTheme(collection.id);
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 pb-20">
+    <div className="bg-slate-50 dark:bg-slate-950 pb-20">
       <div className="bg-slate-900 border-b border-slate-800">
         <div className="max-w-[1800px] mx-auto px-4 sm:px-6 lg:px-8 py-8">
             <button onClick={() => navigate('/collections')} className="flex items-center gap-2 text-sm font-bold text-slate-400 hover:text-white mb-6 transition-colors">

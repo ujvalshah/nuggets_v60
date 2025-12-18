@@ -140,11 +140,11 @@ export const Header: React.FC<HeaderProps> = ({
   return (
     <>
       {/* Desktop Header */}
-      <header className="hidden lg:block fixed top-0 z-50 w-full h-16 bg-white/80 backdrop-blur-sm border-b border-gray-200">
-        <div className="grid grid-cols-[1fr_minmax(auto,600px)_1fr] items-center px-4 h-full">
+      <header className="hidden lg:block fixed top-0 left-0 right-0 z-50 w-full h-16 bg-white/80 backdrop-blur-sm border-b border-gray-200 isolate">
+        <div className="grid grid-cols-[1fr_minmax(auto,600px)_1fr] items-center px-4 h-full max-w-full overflow-hidden">
         
         {/* Zone A: Left - Logo + Segmented Control */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 min-w-0 shrink-0">
           {/* Menu Button */}
           <button
             onClick={() => setSidebarOpen(true)}
@@ -163,7 +163,7 @@ export const Header: React.FC<HeaderProps> = ({
 
           {/* Segmented Control */}
           <nav 
-            className="bg-gray-100 rounded-lg p-1 flex gap-1 overflow-x-auto no-scrollbar-visual" 
+            className="bg-gray-100 rounded-lg p-1 flex gap-1 overflow-x-auto no-scrollbar-visual min-w-0 shrink-0" 
             role="navigation"
             aria-label="Main navigation"
           >
@@ -232,8 +232,8 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
 
         {/* Zone B: Center - Search Hero */}
-        <div className="flex items-center justify-center">
-          <div className="relative w-full max-w-2xl">
+        <div className="flex items-center justify-center min-w-0 shrink">
+          <div className="relative w-full max-w-2xl min-w-0">
             {/* Search Icon */}
             <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none">
               <Search size={16} />
@@ -370,7 +370,7 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
 
         {/* Zone C: Right - Profile & Utilities */}
-        <div className="flex items-center justify-end gap-2">
+        <div className="flex items-center justify-end gap-2 min-w-0 shrink-0">
           {/* Create Button */}
           <button
             onClick={withAuth(onCreateNugget)}
@@ -617,8 +617,8 @@ export const Header: React.FC<HeaderProps> = ({
       </header>
 
       {/* Mobile Header */}
-      <header className="lg:hidden fixed top-0 z-50 w-full h-14 bg-white/80 backdrop-blur-sm border-b border-gray-200">
-        <div className="flex items-center justify-between px-4 h-full">
+      <header className="lg:hidden fixed top-0 left-0 right-0 z-50 w-full h-14 bg-white/80 backdrop-blur-sm border-b border-gray-200 isolate">
+        <div className="flex items-center justify-between px-4 h-full max-w-full overflow-hidden">
           <div className="flex items-center gap-3">
             <button
               onClick={() => setSidebarOpen(true)}

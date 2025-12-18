@@ -51,7 +51,18 @@ const AppContent: React.FC = () => {
   }, [isDark]);
 
   return (
-    <MainLayout>
+    <>
+      {/* 
+        ARCHITECTURAL INVARIANT: Header Rendering
+        Header MUST be rendered OUTSIDE MainLayout to prevent layout instability.
+        Header is fixed positioned and must NOT be a child of flex/grid containers.
+        This ensures Header position is never affected by:
+        - Content loading states
+        - Empty states
+        - Filter changes
+        - Route transitions
+        - Flex/grid recalculations
+      */}
       <Header 
         isDark={isDark} 
         toggleTheme={() => setIsDark(!isDark)} 
@@ -71,8 +82,13 @@ const AppContent: React.FC = () => {
         currentUserId={currentUserId}
       />
 
-      <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><Loader2 className="animate-spin w-8 h-8 text-primary-500" /></div>}>
-        <Routes>
+      <MainLayout>
+        {/* 
+          Suspense fallback must NOT use min-h-screen to prevent layout shifts.
+          It should only provide visual feedback without affecting layout structure.
+        */}
+        <Suspense fallback={<div className="flex items-center justify-center py-32"><Loader2 className="animate-spin w-8 h-8 text-primary-500" /></div>}>
+          <Routes>
           <Route path="/" element={<HomePage searchQuery={searchQuery} viewMode={viewMode} setViewMode={setViewMode} selectedCategories={selectedCategories} setSelectedCategories={setSelectedCategories} selectedTag={selectedTag} setSelectedTag={setSelectedTag} sortOrder={sortOrder} />} />
           
           <Route path="/collections" element={<CollectionsPage />} />
@@ -121,15 +137,16 @@ const AppContent: React.FC = () => {
           <Route path="/reset-password" element={<ResetPasswordPage />} />
 
           <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </Suspense>
-      
-      <BackToTopButton />
-      <ToastContainer />
-      
-      <CreateNuggetModal isOpen={isCreateOpen} onClose={() => setIsCreateOpen(false)} />
-      <AuthModal />
-    </MainLayout>
+          </Routes>
+        </Suspense>
+        
+        <BackToTopButton />
+        <ToastContainer />
+        
+        <CreateNuggetModal isOpen={isCreateOpen} onClose={() => setIsCreateOpen(false)} />
+        <AuthModal />
+      </MainLayout>
+    </>
   );
 };
 

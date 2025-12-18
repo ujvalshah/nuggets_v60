@@ -453,7 +453,7 @@ export const MySpacePage: React.FC<MySpacePageProps> = ({ currentUserId }) => {
 
   // Early returns for loading and error states
   if (loading) {
-    return <div className="min-h-screen flex items-center justify-center bg-slate-50"><Loader2 className="animate-spin text-slate-400" /></div>;
+    return <div className="flex items-center justify-center py-32 bg-slate-50"><Loader2 className="animate-spin text-slate-400" /></div>;
   }
   
   if (!profileUser) {
@@ -475,7 +475,7 @@ export const MySpacePage: React.FC<MySpacePageProps> = ({ currentUserId }) => {
   const tabDescription = getDescription(activeTab, nuggetVisibility);
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 font-sans text-slate-900 dark:text-white pb-32">
+    <div className="bg-slate-50 dark:bg-slate-950 font-sans text-slate-900 dark:text-white pb-32">
       <div className="max-w-[1280px] mx-auto px-6 py-8">
         
         <div className="flex flex-col lg:flex-row items-start">
