@@ -50,3 +50,4 @@ FeedbackSchema.index({ status: 1, type: 1 });
 FeedbackSchema.index({ createdAt: -1 });
 
 export const Feedback = mongoose.model<IFeedback>('Feedback', FeedbackSchema);
+

@@ -76,7 +76,7 @@ const UserAuthSchema = new Schema<IUserAuth>({
 
 const UserProfileSchema = new Schema<IUserProfile>({
   displayName: { type: String, required: true },
-  username: { type: String, required: true, unique: true, sparse: true, lowercase: true },
+  username: { type: String, required: true, unique: true, lowercase: true },
   bio: { type: String },
   avatarUrl: { type: String },
   avatarColor: { 
@@ -151,4 +151,6 @@ const UserSchema = new Schema<IUser>({
 // on auth.email and profile.username fields above, so no explicit indexes needed here
 
 export const User = mongoose.model<IUser>('User', UserSchema);
+
+
 

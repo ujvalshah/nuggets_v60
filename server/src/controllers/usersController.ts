@@ -68,6 +68,40 @@ export const updateUser = async (req: Request, res: Response) => {
     // Don't allow password updates through this endpoint (use separate change password endpoint)
     const { password, ...updateData } = validationResult.data;
     
+    const userId = req.params.id;
+    
+    // Check for email uniqueness if email is being updated
+    if (updateData.email) {
+      const normalizedEmail = updateData.email.toLowerCase();
+      const existingUser = await User.findOne({ 
+        'auth.email': normalizedEmail,
+        _id: { $ne: userId } // Exclude current user
+      });
+      if (existingUser) {
+        return res.status(409).json({ 
+          message: 'Email already registered',
+          code: 'EMAIL_ALREADY_EXISTS'
+        });
+      }
+    }
+    
+    // Check for username uniqueness if username is being updated
+    if (updateData.profile?.username) {
+      const normalizedUsername = updateData.profile.username.toLowerCase().trim();
+      const existingUsername = await User.findOne({ 
+        'profile.username': normalizedUsername,
+        _id: { $ne: userId } // Exclude current user
+      });
+      if (existingUsername) {
+        return res.status(409).json({ 
+          message: 'Username already taken',
+          code: 'USERNAME_ALREADY_EXISTS'
+        });
+      }
+      // Normalize username in update data
+      updateData.profile.username = normalizedUsername;
+    }
+    
     // Build update object for nested structure
     const updateObj: any = {};
     
@@ -134,7 +168,7 @@ export const updateUser = async (req: Request, res: Response) => {
     }
     
     const user = await User.findByIdAndUpdate(
-      req.params.id,
+      userId,
       { $set: updateObj },
       { new: true, runValidators: true }
     ).select('-password');
@@ -143,6 +177,27 @@ export const updateUser = async (req: Request, res: Response) => {
     res.json(normalizeDoc(user));
   } catch (error: any) {
     console.error('[Users] Update user error:', error);
+    
+    // Handle duplicate key error (MongoDB unique constraint)
+    if (error.code === 11000) {
+      const keyPattern = error.keyPattern || {};
+      let code = 'EMAIL_ALREADY_EXISTS';
+      let message = 'Email already registered';
+      
+      if (keyPattern['auth.email']) {
+        code = 'EMAIL_ALREADY_EXISTS';
+        message = 'Email already registered';
+      } else if (keyPattern['profile.username']) {
+        code = 'USERNAME_ALREADY_EXISTS';
+        message = 'Username already taken';
+      }
+      
+      return res.status(409).json({ 
+        message,
+        code
+      });
+    }
+    
     res.status(500).json({ message: 'Internal server error' });
   }
 };
