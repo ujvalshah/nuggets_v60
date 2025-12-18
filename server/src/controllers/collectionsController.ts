@@ -3,10 +3,42 @@ import { Collection } from '../models/Collection.js';
 import { Article } from '../models/Article.js';
 import { normalizeDoc, normalizeDocs } from '../utils/db.js';
 import { createCollectionSchema, updateCollectionSchema, addEntrySchema, flagEntrySchema } from '../utils/validation.js';
+import { getCommunityCollections, getCommunityCollectionsCount, CollectionQueryFilters } from '../utils/collectionQueryHelpers.js';
 
 export const getCollections = async (req: Request, res: Response) => {
   try {
-    const collections = await Collection.find().sort({ createdAt: -1 });
+    // Parse query parameters
+    const type = req.query.type as 'public' | 'private' | undefined;
+    const searchQuery = req.query.q as string | undefined;
+    const creatorId = req.query.creatorId as string | undefined;
+    const includeCount = req.query.includeCount === 'true';
+    
+    // Build filters using shared query helper
+    const filters: CollectionQueryFilters = {};
+    if (type) filters.type = type;
+    if (searchQuery) filters.searchQuery = searchQuery;
+    if (creatorId) filters.creatorId = creatorId;
+    
+    // Get collections using shared query function
+    // If no type specified, default to all (for admin), otherwise use filters
+    let collections;
+    if (type) {
+      // Use shared query helper for filtered queries
+      collections = await getCommunityCollections(filters, { sort: { createdAt: -1 } });
+    } else {
+      // Admin view: get all collections, but still apply search if provided
+      if (searchQuery) {
+        const searchRegex = new RegExp(searchQuery, 'i');
+        collections = await Collection.find({
+          $or: [
+            { name: searchRegex },
+            { description: searchRegex }
+          ]
+        }).sort({ createdAt: -1 });
+      } else {
+        collections = await Collection.find().sort({ createdAt: -1 });
+      }
+    }
     
     // Validate entries against existing articles and set validEntriesCount
     // This ensures counts are accurate even if entries contain stale references
@@ -41,7 +73,20 @@ export const getCollections = async (req: Request, res: Response) => {
       })
     );
     
-    res.json(normalizeDocs(validatedCollections));
+    // If includeCount is requested, return count along with collections
+    if (includeCount) {
+      const count = type === 'public' 
+        ? await getCommunityCollectionsCount({ type: 'public' })
+        : await Collection.countDocuments();
+      
+      res.json({
+        data: normalizeDocs(validatedCollections),
+        count: count,
+        total: validatedCollections.length // Current filtered result count
+      });
+    } else {
+      res.json(normalizeDocs(validatedCollections));
+    }
   } catch (error: any) {
     console.error('[Collections] Get collections error:', error);
     res.status(500).json({ message: 'Internal server error' });
@@ -199,9 +244,9 @@ export const addEntry = async (req: Request, res: Response) => {
         $set: {
           updatedAt: new Date().toISOString()
         },
-        // Update validEntriesCount: increment if exists, otherwise set to entries length
-        $inc: { validEntriesCount: 1 },
-        $setOnInsert: { validEntriesCount: 1 } // Set if document is new (won't happen here, but safe)
+        // Update validEntriesCount: increment by 1
+        // $inc will create the field if it doesn't exist (initializing to 1)
+        $inc: { validEntriesCount: 1 }
       },
       { 
         new: true, // Return updated document

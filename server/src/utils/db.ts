@@ -105,7 +105,7 @@ function transformArticle(doc: any): any {
     // Build frontend-compatible article with safe defaults
     const article: any = {
       id,
-      title: rest.title || 'Untitled',
+      title: rest.title || undefined, // Preserve empty titles (display layer handles fallbacks)
       excerpt: rest.excerpt || (rest.content ? rest.content.substring(0, 150) + '...' : ''),
       content: rest.content || '',
       author: {

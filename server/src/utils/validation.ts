@@ -39,7 +39,7 @@ const documentSchema = z.object({
 
 // Base schema for article creation/updates (without refinement)
 const baseArticleSchema = z.object({
-  title: z.string().min(1, 'Title is required').max(200, 'Title too long'),
+  title: z.string().max(200, 'Title too long').optional(),
   excerpt: z.string().optional(),
   // Content is optional - only required if there's no media, images, or documents
   // This allows users to create nuggets with just URLs/images
@@ -65,6 +65,7 @@ const baseArticleSchema = z.object({
 });
 
 // Create schema with refinement: at least one of content/media/images/documents must be present
+// AND at least one tag must be present (tags are mandatory)
 export const createArticleSchema = baseArticleSchema.refine(
   (data) => {
     // At least one of: content, media, images, or documents must be present
@@ -78,6 +79,16 @@ export const createArticleSchema = baseArticleSchema.refine(
   {
     message: 'Please provide content, a URL, images, or documents',
     path: ['content'], // Error will appear on content field
+  }
+).refine(
+  (data) => {
+    // Tags are mandatory - at least one tag must be present
+    const tags = data.tags || [];
+    return tags.length > 0 && tags.every(tag => typeof tag === 'string' && tag.trim().length > 0);
+  },
+  {
+    message: 'At least one tag is required',
+    path: ['tags'], // Error will appear on tags field
   }
 );
 

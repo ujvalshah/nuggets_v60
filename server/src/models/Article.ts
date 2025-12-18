@@ -39,7 +39,7 @@ export interface IDocument {
 }
 
 export interface IArticle extends Document {
-  title: string;
+  title?: string;
   excerpt?: string; // Short summary/description
   content: string;
   authorId: string;
@@ -106,7 +106,7 @@ const DocumentSchema = new Schema<IDocument>({
 }, { _id: false });
 
 const ArticleSchema = new Schema<IArticle>({
-  title: { type: String, required: true },
+  title: { type: String, required: false },
   excerpt: { type: String }, // Optional excerpt
   content: { type: String, default: '' }, // Optional - validation handled by Zod schema
   authorId: { type: String, required: true },
