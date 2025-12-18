@@ -104,3 +104,4 @@ For immediate visibility:
 2. Verify all pages work
 3. Then switch back to `rest` and ensure backend is running
 
+

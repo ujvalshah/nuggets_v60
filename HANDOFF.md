@@ -389,3 +389,4 @@ React Query accumulates pages → Feed.tsx renders articles
 **Primary Focus:** Wire sort dropdown to Feed component  
 **Confidence Level:** High (well-documented codebase, clear next steps)
 
+

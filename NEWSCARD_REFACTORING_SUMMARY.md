@@ -100,3 +100,4 @@ The following file is no longer used but kept for reference:
 2. Implement read tracking in `useNewsCard` hook (currently TODO)
 3. Add masonry layout support to ArticleGrid container
 4. Add utility layout support where needed
+
