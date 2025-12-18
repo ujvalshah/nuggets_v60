@@ -134,3 +134,4 @@ echo ""
 echo "⚠️  Remember: .env file should NOT be committed!"
 echo "   Verify with: git status"
 
+

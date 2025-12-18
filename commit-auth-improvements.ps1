@@ -133,3 +133,4 @@ Write-Host ""
 Write-Host "⚠️  Remember: .env file should NOT be committed!" -ForegroundColor Yellow
 Write-Host "   Verify with: git status"
 
+
