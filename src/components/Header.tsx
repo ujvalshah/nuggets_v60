@@ -85,7 +85,13 @@ export const Header: React.FC<HeaderProps> = ({
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as Node;
-      if (userMenuRef.current && !userMenuRef.current.contains(target)) {
+      const targetElement = target as HTMLElement;
+      
+      // Check if click is on a logout button - don't close menu in that case
+      // Logout buttons have data-logout-button attribute and handle their own closing
+      const isLogoutButton = targetElement.closest('button[data-logout-button="true"]');
+      
+      if (userMenuRef.current && !userMenuRef.current.contains(target) && !isLogoutButton) {
         setIsUserMenuOpen(false);
       }
       if (sortRef.current && !sortRef.current.contains(target)) {
@@ -563,9 +569,26 @@ export const Header: React.FC<HeaderProps> = ({
                     {/* Logout */}
                     <div className="border-t border-gray-100 py-1">
                       <button
-                        onClick={() => {
-                          logout();
-                          setIsUserMenuOpen(false);
+                        data-logout-button="true"
+                        onMouseDown={(e) => {
+                          // Stop mousedown propagation to prevent click-outside handler from closing menu
+                          e.preventDefault();
+                          e.stopPropagation();
+                        }}
+                        onClick={async (e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          // Don't close menu immediately - let logout complete first
+                          // Menu will close naturally when isAuthenticated becomes false
+                          try {
+                            await logout();
+                            // Close menu after logout completes
+                            setIsUserMenuOpen(false);
+                          } catch (error) {
+                            console.error('Logout failed:', error);
+                            // Close menu even if logout fails
+                            setIsUserMenuOpen(false);
+                          }
                         }}
                         className="w-full flex items-center gap-3 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 transition-colors"
                       >
@@ -692,9 +715,26 @@ export const Header: React.FC<HeaderProps> = ({
                     </div>
                     <div className="border-t border-gray-100 py-1">
                       <button
-                        onClick={() => {
-                          logout();
-                          setIsUserMenuOpen(false);
+                        data-logout-button="true"
+                        onMouseDown={(e) => {
+                          // Stop mousedown propagation to prevent click-outside handler from closing menu
+                          e.preventDefault();
+                          e.stopPropagation();
+                        }}
+                        onClick={async (e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          // Don't close menu immediately - let logout complete first
+                          // Menu will close naturally when isAuthenticated becomes false
+                          try {
+                            await logout();
+                            // Close menu after logout completes
+                            setIsUserMenuOpen(false);
+                          } catch (error) {
+                            console.error('Logout failed:', error);
+                            // Close menu even if logout fails
+                            setIsUserMenuOpen(false);
+                          }
                         }}
                         className="w-full flex items-center gap-3 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 transition-colors"
                       >
@@ -925,7 +965,16 @@ const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
 
         <div className="p-4 border-t border-gray-100 bg-gray-50/50">
            {isAuthenticated ? (
-             <button onClick={() => { logout(); onClose(); }} className="flex items-center justify-center gap-2 w-full px-4 py-3 rounded-xl bg-white border border-gray-200 text-red-600 font-bold text-sm hover:bg-red-50 transition-colors shadow-sm">
+             <button onClick={async (e) => { 
+               e.preventDefault();
+               e.stopPropagation();
+               onClose(); 
+               try {
+                 await logout();
+               } catch (error) {
+                 console.error('Logout failed:', error);
+               }
+             }} className="flex items-center justify-center gap-2 w-full px-4 py-3 rounded-xl bg-white border border-gray-200 text-red-600 font-bold text-sm hover:bg-red-50 transition-colors shadow-sm">
                <LogOut size={18} /> Sign Out
              </button>
            ) : (

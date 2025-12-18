@@ -58,19 +58,19 @@ export function CollectionSelector({
     return !options.some(opt => opt.label.toLowerCase() === search.toLowerCase());
   };
 
-  const label = visibility === 'public' ? 'Community Collection' : 'Bookmarks';
+  const label = visibility === 'public' ? 'Community Collection' : 'Private Collection';
   const placeholder = visibility === 'public' 
     ? 'Find or create community collection...' 
-    : 'Find or create bookmark folder...';
+    : 'Find or create private collection...';
   const helperText = visibility === 'public'
     ? 'Create or Add your nugget to a Community Collection'
-    : 'Save this nugget to your private bookmark folder.';
+    : 'Save this nugget to your private collection.';
   const emptyPlaceholder = visibility === 'public'
     ? 'Add to community collection'
-    : 'Add to your bookmark folder';
+    : 'Add to your private collection';
   const createText = visibility === 'public'
     ? 'Create community collection'
-    : 'Create bookmark folder';
+    : 'Create private collection';
 
   return (
     <SelectableDropdown
