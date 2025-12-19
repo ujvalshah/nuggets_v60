@@ -217,3 +217,4 @@ If duplicates are cleaned but signup still fails:
 The most likely cause is **duplicate users in the database** that aren't showing in the admin panel due to pagination or filtering. Use the diagnostic and cleanup scripts to identify and fix the issue.
 
 
+
