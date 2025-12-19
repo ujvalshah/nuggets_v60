@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { X, Globe, Lock, Loader2 } from 'lucide-react';
 import { getInitials } from '@/utils/formatters';
 import { storageService } from '@/services/storageService';
-import { detectProviderFromUrl, shouldFetchMetadata, shouldAutoGenerateTitle } from '@/utils/urlUtils';
+import { detectProviderFromUrl, shouldFetchMetadata } from '@/utils/urlUtils';
 import { queryClient } from '@/queryClient';
 import { GenericLinkPreview } from './embeds/GenericLinkPreview';
 import { Collection } from '@/types';
@@ -38,6 +38,22 @@ interface CreateNuggetModalProps {
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB (before compression)
 const MAX_FILE_SIZE_AFTER_COMPRESSION = 500 * 1024; // 500KB (after compression)
 
+/**
+ * PHASE 2: TITLE GENERATION POLICY (NON-NEGOTIABLE)
+ * 
+ * Title field is OPTIONAL.
+ * The system must NEVER auto-add or auto-modify the title.
+ * Title generation must happen ONLY when the user explicitly clicks a "Generate title" button.
+ * 
+ * Metadata may SUGGEST a title (stored in suggestedTitle state) but must NEVER mutate title state automatically.
+ * 
+ * REGRESSION SAFEGUARD: 
+ * - isTitleUserEdited flag prevents metadata from overwriting user-edited titles
+ * - No useEffect may write to title state
+ * - Metadata title is stored in suggestedTitle, never directly in title
+ * - Title is only populated when user clicks "Generate title" button
+ */
+
 export const CreateNuggetModal: React.FC<CreateNuggetModalProps> = ({ isOpen, onClose, mode = 'create', initialData }) => {
   // Auth
   const { currentUser, currentUserId, isAdmin } = useAuth();
@@ -50,6 +66,8 @@ export const CreateNuggetModal: React.FC<CreateNuggetModalProps> = ({ isOpen, on
 
   // Content State
   const [title, setTitle] = useState('');
+  const [isTitleUserEdited, setIsTitleUserEdited] = useState(false); // PHASE 6: Safeguard flag
+  const [suggestedTitle, setSuggestedTitle] = useState<string | null>(null); // PHASE 3: Metadata suggests but never mutates
   const [content, setContent] = useState('');
   const [urls, setUrls] = useState<string[]>([]);
   const [urlInput, setUrlInput] = useState('');
@@ -112,6 +130,8 @@ export const CreateNuggetModal: React.FC<CreateNuggetModalProps> = ({ isOpen, on
       // Initialize form from initialData when in edit mode (only once per nugget)
       if (mode === 'edit' && initialData && initializedFromDataRef.current !== initialData.id) {
         setTitle(initialData.title || '');
+        setIsTitleUserEdited(!!initialData.title); // PHASE 6: Mark as edited if title exists
+        setSuggestedTitle(null); // PHASE 3: Clear suggestion in edit mode
         setContent(initialData.content || '');
         setCategories(initialData.categories || []);
         setVisibility(initialData.visibility || 'public');
@@ -222,6 +242,8 @@ export const CreateNuggetModal: React.FC<CreateNuggetModalProps> = ({ isOpen, on
 
   const resetForm = () => {
     setTitle('');
+    setIsTitleUserEdited(false);
+    setSuggestedTitle(null);
     setContent('');
     setUrls([]);
     setUrlInput('');
@@ -255,7 +277,7 @@ export const CreateNuggetModal: React.FC<CreateNuggetModalProps> = ({ isOpen, on
     onClose();
   };
 
-  // Fetch metadata when URL is added (only for social networks and video sites)
+  // Fetch metadata when URL is added (PHASE 2: NO auto-title mutation)
   useEffect(() => {
     if (urls.length > 0) {
       // Find first non-image URL that should have metadata fetched
@@ -273,36 +295,53 @@ export const CreateNuggetModal: React.FC<CreateNuggetModalProps> = ({ isOpen, on
             if (metadata) {
               setLinkMetadata(metadata);
               
-              // Auto-fill title from metadata ONLY for Social/Video content types
-              // CRITICAL: Never auto-generate titles for news sites, articles, blogs, etc.
-              setTitle(prevTitle => {
-                // Only proceed if title is empty AND content type allows auto-title generation
-                if (!prevTitle.trim() && metadata.previewMetadata?.title) {
-                  // Check if this URL allows auto-title generation (Social/Video only)
-                  const urlForCheck = firstLinkUrl || metadata.url || '';
-                  
-                  // Only auto-fill if it's a Social or Video platform
-                  if (shouldAutoGenerateTitle(urlForCheck)) {
-                    const metaTitle = metadata.previewMetadata.title.trim();
-                    // Skip if title is just a domain or URL pattern
-                    const isBadTitle = metaTitle.match(/^(https?:\/\/|www\.|Content from|content from)/i) ||
-                                      metaTitle.match(/^[a-z0-9-]+\.[a-z]{2,}$/i) || // Just domain
-                                      metaTitle.length < 3; // Too short
-                    if (!isBadTitle) {
-                      return metaTitle;
-                    }
-                  }
-                  // For non-Social/Video content types, leave title empty (user must provide)
+              // FIX: Completely disable auto-title suggestions for YouTube/social networks
+              // User explicitly requested no auto-title functionality for these platforms
+              // Check if this is a YouTube or social network URL
+              const isYouTubeOrSocial = firstLinkUrl && (
+                firstLinkUrl.includes('youtube.com') || 
+                firstLinkUrl.includes('youtu.be') ||
+                firstLinkUrl.includes('twitter.com') || 
+                firstLinkUrl.includes('x.com') ||
+                firstLinkUrl.includes('linkedin.com') ||
+                firstLinkUrl.includes('instagram.com') ||
+                firstLinkUrl.includes('tiktok.com') ||
+                firstLinkUrl.includes('facebook.com') ||
+                firstLinkUrl.includes('threads.net') ||
+                firstLinkUrl.includes('reddit.com')
+              );
+              
+              // Do NOT store suggestedTitle for YouTube/social networks
+              if (isYouTubeOrSocial) {
+                console.log('[CreateNuggetModal] YouTube/social network detected - skipping title suggestion');
+                setSuggestedTitle(null);
+              } else if (metadata.previewMetadata?.title) {
+                const metaTitle = metadata.previewMetadata.title.trim();
+                // Skip if title is just a domain or URL pattern
+                const isBadTitle = metaTitle.match(/^(https?:\/\/|www\.|Content from|content from)/i) ||
+                                  metaTitle.match(/^[a-z0-9-]+\.[a-z]{2,}$/i) || // Just domain
+                                  metaTitle.length < 3; // Too short
+                if (!isBadTitle) {
+                  console.log('[CreateNuggetModal] Metadata title found, storing as suggestion:', metaTitle);
+                  setSuggestedTitle(metaTitle);
+                  // CRITICAL: DO NOT call setTitle() here - title must remain empty until user clicks button
+                } else {
+                  console.log('[CreateNuggetModal] Metadata title rejected as bad title:', metaTitle);
+                  setSuggestedTitle(null);
                 }
-                return prevTitle;
-              });
+              } else {
+                console.log('[CreateNuggetModal] No metadata title found');
+                setSuggestedTitle(null);
+              }
             } else {
               setLinkMetadata(null);
+              setSuggestedTitle(null);
             }
           })
           .catch((error) => {
             console.error('Failed to fetch link metadata:', error);
             setLinkMetadata(null);
+            setSuggestedTitle(null);
           })
           .finally(() => {
             setIsLoadingMetadata(false);
@@ -311,12 +350,14 @@ export const CreateNuggetModal: React.FC<CreateNuggetModalProps> = ({ isOpen, on
         // No URLs that need metadata, clear link metadata
         setDetectedLink(null);
         setLinkMetadata(null);
+        setSuggestedTitle(null);
         setCustomDomain(null);
       }
     } else {
       if (detectedLink) {
         setDetectedLink(null);
         setLinkMetadata(null);
+        setSuggestedTitle(null);
         setCustomDomain(null);
       }
     }
@@ -813,6 +854,35 @@ export const CreateNuggetModal: React.FC<CreateNuggetModalProps> = ({ isOpen, on
         const excerptText = content.trim() || finalTitle || '';
         const excerpt = excerptText.length > 150 ? excerptText.substring(0, 150) + '...' : excerptText;
         
+        /**
+         * PHASE 4: Tag Data Contract
+         * 
+         * Tags are stored in the 'categories' state variable in the frontend.
+         * When submitting to the backend, we must send them as 'tags' (string[]).
+         * 
+         * Contract:
+         * - Frontend state: categories (string[])
+         * - Backend field: tags (string[])
+         * - Minimum requirement: >= 1 non-empty string
+         * - Validation: Frontend validates before submit, backend validates on receive
+         * 
+         * This normalization ensures:
+         * 1. Only valid string tags are sent (filters out null/undefined/empty)
+         * 2. Tags match categories (single source of truth)
+         * 3. Backend receives the expected format
+         */
+        const validTags = categories.filter((tag): tag is string => 
+            typeof tag === 'string' && tag.trim().length > 0
+        );
+        
+        // PHASE 5: Regression safeguard - defensive assertion
+        // This should never trigger if validation works correctly, but prevents silent failures
+        if (validTags.length === 0) {
+            setTagsError("Please add at least one tag. Tags enable smarter news discovery.");
+            setIsSubmitting(false);
+            return;
+        }
+        
         const newArticle = await storageService.createArticle({
             title: finalTitle,
             content: content.trim() || '', // Send empty string if no content (allowed when URLs/images exist)
@@ -820,7 +890,7 @@ export const CreateNuggetModal: React.FC<CreateNuggetModalProps> = ({ isOpen, on
             author: { id: currentUserId, name: authorName },
             displayAuthor: (postAs === 'alias' && finalAliasName.trim()) ? { name: finalAliasName.trim() } : undefined,
             categories,
-            tags: [], 
+            tags: validTags, // FIX: Use categories (tags) instead of empty array 
             readTime,
             images: uploadedImages,
             documents: uploadedDocs,
@@ -878,10 +948,21 @@ export const CreateNuggetModal: React.FC<CreateNuggetModalProps> = ({ isOpen, on
         console.error("Failed to create nugget", e);
         
         // Use unified error handling
-        logError('CreateNuggetModal', e, { title, attachmentsCount: attachments.length, urlsCount: urls.length });
+        logError('CreateNuggetModal', e, { title, attachmentsCount: attachments.length, urlsCount: urls.length, categoriesCount: categories.length });
         
         const apiError = formatApiError(e);
         const baseErrorMessage = getUserFriendlyMessage(apiError);
+        
+        // PHASE 5: Handle tag-specific validation errors from backend
+        // If backend returns a tag validation error, set it on the tags field
+        if (e?.errors && Array.isArray(e.errors)) {
+            const tagError = e.errors.find((err: any) => err.path === 'tags' || err.path?.includes('tags'));
+            if (tagError) {
+                setTagsError("Tags required to post the nugget");
+                setTagsTouched(true);
+                tagsComboboxRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
+        }
         
         // Handle multiple validation errors
         let finalErrorMessage = baseErrorMessage;
@@ -1044,27 +1125,32 @@ export const CreateNuggetModal: React.FC<CreateNuggetModalProps> = ({ isOpen, on
                 </div>
 
                 {/* Title Field */}
-                <TitleInput
-                    value={title}
-                    onChange={(value) => {
-                        setTitle(value);
-                        if (!contentTouched) setContentTouched(true);
-                        if (contentError) {
+                <div className="space-y-2">
+                    <TitleInput
+                        value={title}
+                        onChange={(value) => {
+                            setTitle(value);
+                            setIsTitleUserEdited(true); // PHASE 6: Mark as user-edited
+                            if (!contentTouched) setContentTouched(true);
+                            if (contentError) {
+                                const error = validateContent();
+                                setContentError(error);
+                            }
+                        }}
+                        onBlur={() => {
+                            if (!contentTouched) setContentTouched(true);
                             const error = validateContent();
                             setContentError(error);
-                        }
-                    }}
-                    onBlur={() => {
-                        if (!contentTouched) setContentTouched(true);
-                        const error = validateContent();
-                        setContentError(error);
-                    }}
-                    linkMetadataTitle={linkMetadata?.previewMetadata?.title}
-                    error={contentError}
-                    warning={contentTouched && !contentError && !content.trim() && !title.trim() && urls.length === 0 && attachments.length === 0 ? "Add some content, a URL, or an attachment before submitting." : undefined}
-                    onTouchedChange={setContentTouched}
-                    onErrorChange={setContentError}
-                />
+                        }}
+                        linkMetadataTitle={suggestedTitle || undefined}
+                        error={contentError}
+                        warning={contentTouched && !contentError && !content.trim() && !title.trim() && urls.length === 0 && attachments.length === 0 ? "Add some content, a URL, or an attachment before submitting." : undefined}
+                        onTouchedChange={setContentTouched}
+                        onErrorChange={setContentError}
+                    />
+                    {/* FIX: Removed "Generate title from source" button - auto-title disabled for YouTube/social networks */}
+                    {/* Title suggestions are completely disabled per user request */}
+                </div>
 
                 {/* URLs Field */}
                 <UrlInput
@@ -1306,7 +1392,11 @@ export const CreateNuggetModal: React.FC<CreateNuggetModalProps> = ({ isOpen, on
             onBulkCreate={() => { handleClose(); navigate('/bulk-create'); }}
             onSubmit={handleSubmit}
             isSubmitting={isSubmitting}
-            canSubmit={!!(content.trim() || title.trim() || urls.length > 0 || attachments.length > 0)}
+            canSubmit={
+                // PHASE 5: Regression safeguard - disable submit if tags are empty
+                categories.length > 0 && 
+                !!(content.trim() || title.trim() || urls.length > 0 || attachments.length > 0)
+            }
         />
 
       </div>

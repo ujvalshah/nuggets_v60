@@ -43,6 +43,28 @@ export class RestAdapter implements IAdapter {
 
   createArticle(article: Omit<Article, 'id' | 'publishedAt'>): Promise<Article> {
     // Transform frontend format to server API format
+    
+    /**
+     * PHASE 4: Tag Data Contract Enforcement
+     * 
+     * Backend validation requires:
+     * - tags: string[] (non-empty, all elements must be non-empty strings)
+     * 
+     * This adapter normalizes and validates tags before sending to backend:
+     * 1. Ensures tags is always an array
+     * 2. Filters out invalid entries (null, undefined, empty strings)
+     * 3. Rejects early if no valid tags remain (prevents backend validation error)
+     */
+    const tags = Array.isArray(article.tags) 
+      ? article.tags.filter((tag): tag is string => typeof tag === 'string' && tag.trim().length > 0)
+      : [];
+    
+    // PHASE 5: Defensive validation - reject early if tags are empty
+    // This prevents sending invalid payloads to backend and provides clearer error messages
+    if (tags.length === 0) {
+      return Promise.reject(new Error('At least one tag is required to create a nugget'));
+    }
+    
     const payload: any = {
       title: article.title,
       content: article.content,
@@ -54,7 +76,7 @@ export class RestAdapter implements IAdapter {
         ? article.categories[0] 
         : 'General',
       categories: article.categories || [],
-      tags: article.tags || [],
+      tags: tags, // Use validated tags array
       readTime: article.readTime,
       visibility: article.visibility || 'public',
       publishedAt: new Date().toISOString(), // Generate timestamp for new articles

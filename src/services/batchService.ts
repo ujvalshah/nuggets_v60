@@ -2,7 +2,7 @@ import { BatchRow } from '@/types/batch';
 import { storageService } from './storageService';
 import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
-import { detectProviderFromUrl, shouldAutoGenerateTitle } from '@/utils/urlUtils';
+import { detectProviderFromUrl } from '@/utils/urlUtils';
 import { normalizeCategoryLabel } from '@/utils/formatters';
 import { unfurlUrl } from './unfurlService';
 import type { Article } from '@/types';
@@ -70,6 +70,10 @@ function extractUrls(text: string): string[] {
 
 /**
  * Transform Nugget metadata to Article format for preview
+ * 
+ * PHASE 2: Title is OPTIONAL and user-controlled only.
+ * Metadata title is stored in media.previewMetadata.title for display/suggestion,
+ * but NEVER used to populate article.title automatically.
  */
 function nuggetToArticle(
   url: string,
@@ -80,15 +84,11 @@ function nuggetToArticle(
   customContent?: string,
   categories: string[] = []
 ): Article {
-  // CRITICAL: Only use metadata title for Social/Video content types
-  // For news sites, articles, blogs, etc., metadata title should be ignored
-  let title = customTitle;
-  if (!title && nuggetMedia?.previewMetadata?.title) {
-    // Only use metadata title if URL allows auto-title generation (Social/Video only)
-    if (shouldAutoGenerateTitle(url)) {
-      title = nuggetMedia.previewMetadata.title;
-    }
-  }
+  // PHASE 2: Title comes ONLY from user input (customTitle)
+  // Metadata title is NEVER used to auto-populate article.title
+  // It remains in media.previewMetadata.title for display/suggestion purposes only
+  const title = customTitle || undefined; // Explicitly undefined if not provided
+  
   // Titles are optional - allow empty/null titles (no fallback)
   // Display layer will handle empty titles gracefully
   const description = nuggetMedia?.previewMetadata?.description || '';
@@ -98,6 +98,9 @@ function nuggetToArticle(
   // Calculate read time (200 words per minute)
   const wordCount = content.trim().split(/\s+/).length;
   const readTime = Math.max(1, Math.ceil(wordCount / 200));
+  
+  // PHASE 4: Tags must match categories for consistency
+  const previewTags = categories.filter((cat): cat is string => typeof cat === 'string' && cat.trim().length > 0);
   
   return {
     id: `preview-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
@@ -110,7 +113,7 @@ function nuggetToArticle(
     },
     publishedAt: new Date().toISOString(),
     categories,
-    tags: [],
+    tags: previewTags, // FIX: Use categories as tags for consistency
     readTime,
     visibility: 'public',
     source_type: 'link',
@@ -427,30 +430,21 @@ export const batchService = {
           row.categories
         );
         
-        // Create the article using existing storage service
-        // Priority: User-provided title > Metadata title (ONLY for Social/Video) > Fallback
-        // CRITICAL: Metadata titles should ONLY be used for Social/Video content types
-        let resolvedTitle = row.title && row.title.trim() ? row.title : undefined;
+        // PHASE 2: Title comes ONLY from user input (row.title)
+        // Metadata title is NEVER used to auto-populate article.title
+        // It remains in media.previewMetadata.title for display/suggestion purposes only
+        const resolvedTitle = row.title && row.title.trim() ? row.title : undefined;
         
-        if (!resolvedTitle && articleData.media?.previewMetadata?.title) {
-          // Only use metadata title if URL allows auto-title generation (Social/Video only)
-          if (shouldAutoGenerateTitle(row.url)) {
-            resolvedTitle = articleData.media.previewMetadata.title.trim();
-          }
-        }
-        
-        // Final fallback
-        if (!resolvedTitle) {
-          resolvedTitle = articleData.title;
-        }
+        // PHASE 4: Tags must match categories - backend requires non-empty tags array
+        const batchTags = row.categories.map(c => normalizeCategoryLabel(c).replace('#', '')).filter(Boolean);
         
         await storageService.createArticle({
           title: resolvedTitle,
           content: row.content || articleData.content,
           excerpt: articleData.excerpt,
           author: { id: currentUserId, name: authorName },
-          categories: row.categories.map(c => normalizeCategoryLabel(c).replace('#', '')).filter(Boolean),
-          tags: [],
+          categories: batchTags,
+          tags: batchTags, // FIX: Use categories as tags (same as CreateNuggetModal)
           readTime: articleData.readTime,
           visibility: row.visibility || 'public', // Ensure public visibility by default
           source_type: 'link',
