@@ -87,6 +87,7 @@ export function getUserFriendlyMessage(error: AppError): string {
     'content': 'Content',
     'categories': 'Tags',
     'category': 'Tags',
+    'tags': 'Tags', // PHASE 4: Map 'tags' field to user-friendly name
     'authorId': 'Author',
     'authorName': 'Author',
     'author': 'Author',
@@ -98,6 +99,11 @@ export function getUserFriendlyMessage(error: AppError): string {
   };
   
   const fieldName = error.field ? fieldMapping[error.field] || error.field : '';
+  
+  // PHASE 4: Handle tag-specific error messages
+  if (error.field === 'tags' && error.message.includes('tag')) {
+    return 'Tags required to post the nugget';
+  }
   
   if (error.message.includes('required')) {
     return fieldName ? `${fieldName} is required.` : 'A required field is missing.';

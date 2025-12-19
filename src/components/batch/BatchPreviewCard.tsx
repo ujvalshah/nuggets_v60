@@ -51,7 +51,7 @@ function createFallbackArticle(row: BatchRow, currentUserId: string, authorName:
     },
     publishedAt: new Date().toISOString(),
     categories: row.categories,
-    tags: [],
+    tags: row.categories.filter((cat): cat is string => typeof cat === 'string' && cat.trim().length > 0), // PHASE 4: Tags must match categories
     readTime,
     visibility: row.visibility,
     source_type: 'link',
