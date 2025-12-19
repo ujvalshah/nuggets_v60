@@ -41,11 +41,7 @@ export function TitleInput({
         <label htmlFor="title-input" className="text-xs font-bold text-slate-800 dark:text-slate-200">
           Title (Optional)
         </label>
-        {linkMetadataTitle && value === linkMetadataTitle && (
-          <span className="text-[10px] text-slate-600 dark:text-slate-400 italic">
-            Auto-filled from URL metadata
-          </span>
-        )}
+        {/* PHASE 2: Removed auto-fill indicator - titles are never auto-filled */}
       </div>
       <input
         id="title-input"
