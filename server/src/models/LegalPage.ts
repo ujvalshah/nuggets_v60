@@ -23,3 +23,4 @@ const LegalPageSchema = new Schema<ILegalPage>({
 export const LegalPage = mongoose.model<ILegalPage>('LegalPage', LegalPageSchema);
 
 
+

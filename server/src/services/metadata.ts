@@ -9,6 +9,22 @@
  * - NO aggressive scraping
  * - Stability > richness
  * - UX consistency > perfect previews
+ * 
+ * PHASE 2: TITLE GENERATION POLICY (NON-NEGOTIABLE)
+ * 
+ * Title field is OPTIONAL.
+ * The system must NEVER auto-add or auto-modify the title.
+ * Title generation must happen ONLY when the user explicitly clicks a "Generate title" button.
+ * 
+ * Metadata may SUGGEST a title (stored in Nugget.title for transformation to previewMetadata.title)
+ * but must NEVER mutate state automatically.
+ * 
+ * Backend stores metadata titles in Nugget.title for transformation purposes only.
+ * Frontend transforms this to previewMetadata.title and uses it ONLY for the suggestion button.
+ * Frontend NEVER auto-populates the title field from metadata.
+ * 
+ * REGRESSION SAFEGUARD: If you see code that sets article.title from metadata automatically,
+ * that is a BUG and must be removed immediately.
  */
 
 import ogs from 'open-graph-scraper';
@@ -162,49 +178,18 @@ function detectContentType(url: URL, domain: string): Nugget['contentType'] {
 }
 
 /**
- * Check if auto-title generation is allowed for a given content type
+ * PHASE 2: REMOVED - Auto-title generation is completely disabled.
  * 
- * AUTO-TITLE GENERATION IS STRICTLY LIMITED TO:
- * - Social Networks: X/Twitter, LinkedIn, Facebook, Threads, Reddit
- * - Video Platforms: YouTube, Vimeo, other video-hosting platforms
+ * Title generation must happen ONLY when the user explicitly clicks a "Generate title" button.
+ * The system must NEVER auto-add or auto-modify the title.
  * 
- * FORBIDDEN for:
- * - News websites
- * - Articles/Blogs
- * - Documentation
- * - PDFs
- * - Images
- * - Generic URLs
+ * Metadata may SUGGEST a title (stored in previewMetadata.title) but must NEVER mutate state automatically.
  * 
- * @param contentType - Content type string ('social', 'video', 'article', etc.)
- * @param urlString - Optional URL string for additional validation
- * @returns true ONLY if content type is 'social' or 'video', false otherwise
+ * This function is kept for backward compatibility but always returns false.
+ * All title generation logic has been removed.
  */
 function shouldAutoGenerateTitle(contentType: Nugget['contentType'], urlString?: string): boolean {
-  // Only Social and Video content types allow auto-title generation
-  if (contentType === 'social' || contentType === 'video') {
-    return true;
-  }
-  
-  // Additional URL-based check for edge cases
-  if (urlString) {
-    const lowerUrl = urlString.toLowerCase();
-    
-    // Social networks
-    if (lowerUrl.includes('twitter.com') || lowerUrl.includes('x.com')) return true;
-    if (lowerUrl.includes('linkedin.com')) return true;
-    if (lowerUrl.includes('instagram.com')) return true;
-    if (lowerUrl.includes('tiktok.com')) return true;
-    if (lowerUrl.includes('facebook.com')) return true;
-    if (lowerUrl.includes('threads.net')) return true;
-    if (lowerUrl.includes('reddit.com')) return true;
-    
-    // Video platforms
-    if (lowerUrl.includes('youtube.com') || lowerUrl.includes('youtu.be')) return true;
-    if (lowerUrl.includes('vimeo.com')) return true;
-  }
-  
-  // All other content types - NO auto-title generation
+  // PHASE 2: Always return false - no auto-title generation allowed
   return false;
 }
 
@@ -212,8 +197,9 @@ function shouldAutoGenerateTitle(contentType: Nugget['contentType'], urlString?:
  * TIER 0: Zero Risk - URL parsing only
  * Always returns a valid Nugget shell instantly
  * 
- * CRITICAL: DO NOT generate titles for image URLs
- * Images skip metadata fetching, so titles should be null (user-provided or "Untitled Nugget")
+ * PHASE 2: NO title generation - title is always null/undefined.
+ * Title generation must happen ONLY when the user explicitly clicks a "Generate title" button.
+ * Metadata may SUGGEST a title (stored in previewMetadata.title) but must NEVER mutate state automatically.
  */
 function tier0(urlString: string): Nugget {
   const { url, domain } = parseUrl(urlString);
@@ -221,39 +207,16 @@ function tier0(urlString: string): Nugget {
   const platformName = PLATFORM_NAMES[domain] || domain;
   const platformColor = PLATFORM_COLORS[domain];
 
-  // CRITICAL: Auto-title generation is STRICTLY LIMITED to Social/Video content types
-  // DO NOT generate titles for:
-  // - News websites (article content type)
-  // - Blogs (article content type)
-  // - Documents (document content type)
-  // - Images (image content type)
-  // - Generic URLs (article content type)
-  //
-  // Titles should only come from:
-  // 1. User input (always takes precedence)
-  // 2. Fetched metadata titles (ONLY for Social/Video platforms)
-  let title: string | null = null;
-  
-  // Only generate titles for Social and Video content types
-  if (shouldAutoGenerateTitle(contentType, urlString)) {
-    if (contentType === 'video' && domain.includes('youtube')) {
-      title = 'YouTube Video';
-    } else if (contentType === 'social') {
-      title = domain.includes('x.com') ? 'Post on X' : 'Tweet';
-    }
-    // Note: Actual titles from metadata (oEmbed, OG tags) will come from higher tiers
-    // This is just a minimal fallback for Social/Video platforms
-  }
-  
-  // For all other content types (article, document, image), title remains null
-  // Frontend will use user-provided title or "Untitled Nugget" fallback
+  // PHASE 2: Title is ALWAYS null - no auto-generation under any circumstance
+  // Title comes ONLY from user input or explicit "Generate title" button click
+  // Metadata title will be stored in previewMetadata.title for suggestion purposes only
 
   return {
     id: `nugget-${Date.now()}`,
     url: urlString,
     domain,
     contentType,
-    title: title || undefined, // Convert null to undefined for consistency
+    title: undefined, // PHASE 2: Always undefined - no auto-generation
     source: {
       name: platformName,
       domain,
@@ -339,10 +302,12 @@ async function tier0_6_youtube(urlString: string, domain: string): Promise<Parti
     // Extract enrichment data
     const enrichment: Partial<Nugget> = {};
     
-    // Title is the most important - actual video title
-    if (data.title) {
-      enrichment.title = data.title;
-    }
+    // FIX: Do NOT return title for YouTube videos - auto-title disabled per user request
+    // User explicitly requested no auto-title functionality for YouTube/social networks
+    // Title field is left undefined to prevent any auto-population
+    // if (data.title) {
+    //   enrichment.title = data.title;
+    // }
     
     // Author/channel name
     if (data.author_name) {
@@ -404,14 +369,12 @@ async function tier1(urlString: string, isAdmin: boolean): Promise<Partial<Nugge
 
     const enrichment: Partial<Nugget> = {};
 
-    // Only set title if content type allows auto-title generation (Social/Video only)
-    // Microlink can return titles for all content types, but we must filter them
-    if (data.data?.title) {
-      // Note: We can't check contentType here as it's not available in tier1
-      // The title will be filtered later in fetchUrlMetadata based on baseNugget.contentType
-      // For now, we set it and let the main function decide
-      enrichment.title = data.data.title;
-    }
+    // FIX: Do NOT return title for social networks/videos from Microlink - auto-title disabled
+    // User explicitly requested no auto-title functionality for YouTube/social networks
+    // Title field is left undefined to prevent any auto-population
+    // if (data.data?.title) {
+    //   enrichment.title = data.data.title;
+    // }
     if (data.data?.description) {
       enrichment.description = data.data.description;
     }
@@ -473,9 +436,13 @@ async function tier2(urlString: string): Promise<Partial<Nugget> | null> {
     const { result: ogData } = result;
     const enrichment: Partial<Nugget> = {};
 
-    if (ogData.ogTitle) {
-      enrichment.title = ogData.ogTitle;
-    }
+    // FIX: Do NOT return title from Open Graph for social networks - auto-title disabled
+    // User explicitly requested no auto-title functionality for YouTube/social networks
+    // Title field is left undefined to prevent any auto-population
+    // Note: This is for articles/blogs, but we're being consistent and not returning titles
+    // if (ogData.ogTitle) {
+    //   enrichment.title = ogData.ogTitle;
+    // }
     if (ogData.ogDescription) {
       enrichment.description = ogData.ogDescription;
     }
@@ -723,13 +690,9 @@ export async function fetchUrlMetadata(
       );
 
       if (enrichment) {
-        // CRITICAL: Only apply title if content type allows auto-title generation
-        // Microlink can return titles for all content types, but we must filter them
-        if (enrichment.title && !shouldAutoGenerateTitle(baseNugget.contentType, urlString)) {
-          // Remove title for non-Social/Video content types
-          delete enrichment.title;
-        }
-        
+        // PHASE 2: Title from metadata is stored for SUGGESTION ONLY
+        // Frontend will transform it to previewMetadata.title and never auto-populate
+        // Title generation must happen ONLY when the user explicitly clicks a "Generate title" button
         Object.assign(baseNugget, enrichment);
         // Cache and return if Microlink succeeded (only if we got meaningful data)
         if (enrichment.title || enrichment.description || enrichment.media) {
@@ -753,13 +716,9 @@ export async function fetchUrlMetadata(
       );
 
       if (enrichment) {
-        // CRITICAL: Articles should NOT auto-generate titles from OG tags
-        // Only Social/Video content types are allowed to auto-generate titles
-        if (enrichment.title && !shouldAutoGenerateTitle(baseNugget.contentType, urlString)) {
-          // Remove title for non-Social/Video content types (including articles)
-          delete enrichment.title;
-        }
-        
+        // PHASE 2: Title from metadata is stored for SUGGESTION ONLY
+        // Frontend will transform it to previewMetadata.title and never auto-populate
+        // Title generation must happen ONLY when the user explicitly clicks a "Generate title" button
         Object.assign(baseNugget, enrichment);
       }
     } catch {
