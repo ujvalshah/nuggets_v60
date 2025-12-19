@@ -134,3 +134,4 @@ Write-Host "⚠️  Remember: .env file should NOT be committed!" -ForegroundCol
 Write-Host "   Verify with: git status"
 
 
+
