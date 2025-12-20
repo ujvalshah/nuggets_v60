@@ -71,7 +71,7 @@ export const FilterPopover: React.FC<FilterPopoverProps> = ({
   };
 
   return (
-    <div className="w-72 bg-white rounded-xl shadow-xl border border-gray-100 p-2 z-50">
+    <div className="w-72 bg-white rounded-xl shadow-xl border border-gray-100 p-2">
       {/* Header */}
       <div className="flex items-center justify-between mb-2 px-1">
         <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider">

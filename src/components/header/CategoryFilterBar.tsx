@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import { LAYOUT_CLASSES } from '@/constants/layout';
 
 export interface Category {
   id: string;
@@ -12,6 +13,20 @@ interface CategoryFilterBarProps {
   onSelect: (categoryLabel: string) => void;
 }
 
+/**
+ * CategoryFilterBar: Category filter toolbar component
+ * 
+ * STICKY RULE:
+ * Sticky elements float.
+ * A CategorySpacer MUST follow this component in layout.
+ * 
+ * This component is wrapped in a sticky container by PageStack with:
+ * - position: sticky
+ * - top offset from LAYOUT_CLASSES.STICKY_BELOW_HEADER
+ * - z-index: 40
+ * 
+ * Height: LAYOUT_CLASSES.CATEGORY_BAR_HEIGHT - must match CategorySpacer
+ */
 export const CategoryFilterBar: React.FC<CategoryFilterBarProps> = ({
   categories,
   activeCategory = 'All',
@@ -51,42 +66,47 @@ export const CategoryFilterBar: React.FC<CategoryFilterBarProps> = ({
 
   return (
     <div
-      className="sticky top-[64px] left-0 right-0 z-40 bg-white/95 backdrop-blur-sm py-3 px-4 border-b border-gray-100"
-      style={{
-        maskImage: 'linear-gradient(to right, black 0%, black 95%, transparent 100%)',
-        WebkitMaskImage: 'linear-gradient(to right, black 0%, black 95%, transparent 100%)',
-      }}
+      className={`bg-white dark:bg-slate-950 ${LAYOUT_CLASSES.CATEGORY_BAR_HEIGHT} border-b border-gray-200 dark:border-slate-700`}
     >
-      <div className="flex gap-3 overflow-x-auto items-center [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']">
-        {sortedCategories.map((category, index) => {
-          const isActive = activeCategory === category.label;
-          const isToday = category.label === 'Today';
+      {/* Full-bleed category bar - matches YouTube's unified toolbar approach */}
+      <div className={`${LAYOUT_CLASSES.TOOLBAR_PADDING} h-full flex items-center`}>
+        <div 
+          className="flex gap-2 overflow-x-auto items-center [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']"
+          style={{
+            maskImage: 'linear-gradient(to right, black 0%, black 98%, transparent 100%)',
+            WebkitMaskImage: 'linear-gradient(to right, black 0%, black 98%, transparent 100%)',
+          }}
+        >
+          {sortedCategories.map((category, index) => {
+            const isActive = activeCategory === category.label;
+            const isToday = category.label === 'Today';
 
-          return (
-            <button
-              key={`${category.label}-${index}`}
-              onClick={(e) => handleSelect(category.label, e)}
-              className={`
-                whitespace-nowrap rounded-lg px-3.5 py-1.5 text-sm font-medium transition-all duration-200
-                active:scale-95 shrink-0
-                ${
-                  isActive
-                    ? 'bg-gray-900 text-white shadow-sm'
-                    : isToday
-                    ? 'bg-orange-50 text-orange-800 font-semibold hover:bg-orange-100'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }
-              `}
-              aria-pressed={isActive}
-              aria-label={`Filter by ${category.label}`}
-            >
-              {category.label}
-              {category.count !== undefined && category.count > 0 && (
-                <span className="ml-1.5 opacity-70">({category.count})</span>
-              )}
-            </button>
-          );
-        })}
+            return (
+              <button
+                key={`${category.label}-${index}`}
+                onClick={(e) => handleSelect(category.label, e)}
+                className={`
+                  whitespace-nowrap rounded-full px-3 py-1 text-[13px] font-medium transition-all duration-150
+                  shrink-0
+                  ${
+                    isActive
+                      ? 'bg-gray-900 text-white'
+                      : isToday
+                      ? 'bg-amber-100 text-amber-900 hover:bg-amber-200'
+                      : 'bg-gray-100 text-gray-800 hover:bg-gray-200'
+                  }
+                `}
+                aria-pressed={isActive}
+                aria-label={`Filter by ${category.label}`}
+              >
+                {category.label}
+                {category.count !== undefined && category.count > 0 && (
+                  <span className="ml-1 opacity-60 text-[12px]">({category.count})</span>
+                )}
+              </button>
+            );
+          })}
+        </div>
       </div>
     </div>
   );

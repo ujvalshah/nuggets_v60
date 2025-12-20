@@ -2,7 +2,7 @@
 // This component now uses useInfiniteArticles hook for unified React Query pattern.
 // Eliminates split-brain data fetching model (useArticles vs Feed.tsx).
 
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useCallback } from 'react';
 import { Article } from '@/types';
 import { NewsCard } from './NewsCard';
 import { Loader2 } from 'lucide-react';
@@ -41,24 +41,33 @@ const NuggetSkeleton: React.FC = () => (
 );
 
 // Infinite Scroll Trigger Component
+// Uses useRef for callback to avoid re-subscribing observer on every render
 const InfiniteScrollTrigger: React.FC<{
   onIntersect: () => void;
   isLoading: boolean;
   hasMore: boolean;
 }> = ({ onIntersect, isLoading, hasMore }) => {
   const triggerRef = useRef<HTMLDivElement>(null);
+  const callbackRef = useRef(onIntersect);
+  
+  // Keep callback ref updated without triggering effect
+  useEffect(() => {
+    callbackRef.current = onIntersect;
+  }, [onIntersect]);
 
   useEffect(() => {
+    if (!hasMore) return;
+    
     const observer = new IntersectionObserver(
       (entries) => {
         const [entry] = entries;
-        if (entry.isIntersecting && !isLoading && hasMore) {
-          onIntersect();
+        if (entry.isIntersecting) {
+          callbackRef.current();
         }
       },
       {
-        rootMargin: '200px', // Start loading 200px before reaching the bottom
-        threshold: 0.1,
+        rootMargin: '300px', // Increased prefetch distance for smoother UX
+        threshold: 0,
       }
     );
 
@@ -68,20 +77,18 @@ const InfiniteScrollTrigger: React.FC<{
     }
 
     return () => {
-      if (currentTrigger) {
-        observer.unobserve(currentTrigger);
-      }
+      observer.disconnect();
     };
-  }, [isLoading, hasMore, onIntersect]);
+  }, [hasMore]); // Only re-subscribe when hasMore changes
 
   if (!hasMore) return null;
 
   return (
-    <div ref={triggerRef} className="flex justify-center py-8">
+    <div ref={triggerRef} className="flex justify-center py-6">
       {isLoading && (
-        <div className="flex items-center gap-2 text-gray-500">
-          <Loader2 size={20} className="animate-spin" />
-          <span className="text-sm">Loading more...</span>
+        <div className="flex items-center gap-2 text-gray-400">
+          <Loader2 size={18} className="animate-spin" />
+          <span className="text-sm font-medium">Loading more...</span>
         </div>
       )}
     </div>
@@ -130,17 +137,17 @@ export const Feed: React.FC<FeedProps> = ({
     });
   }, [allNuggets, selectedTag]);
 
-  // Infinite Scroll Handler
-  const handleLoadMore = () => {
+  // Infinite Scroll Handler - memoized for stable reference
+  const handleLoadMore = useCallback(() => {
     if (!isFetchingNextPage && hasNextPage) {
       fetchNextPage();
     }
-  };
+  }, [isFetchingNextPage, hasNextPage, fetchNextPage]);
 
   // Render Initial Load Skeletons
   if (isLoading && nuggets.length === 0) {
     return (
-      <div className="max-w-2xl mx-auto flex flex-col gap-8">
+      <div className="w-full flex flex-col gap-7">
         {Array.from({ length: 8 }).map((_, i) => (
           <NuggetSkeleton key={`skeleton-${i}`} />
         ))}
@@ -151,7 +158,7 @@ export const Feed: React.FC<FeedProps> = ({
   // Render Error State
   if (error && nuggets.length === 0) {
     return (
-      <div className="max-w-2xl mx-auto flex flex-col items-center justify-center py-12">
+      <div className="w-full flex flex-col items-center justify-center py-12">
         <p className="text-gray-500 mb-4">{error.message || 'Failed to load feed'}</p>
         <button
           onClick={() => refetch()}
@@ -166,7 +173,7 @@ export const Feed: React.FC<FeedProps> = ({
   // Render Empty State
   if (nuggets.length === 0 && !isLoading) {
     return (
-      <div className="max-w-2xl mx-auto flex flex-col items-center justify-center py-12">
+      <div className="w-full flex flex-col items-center justify-center py-12">
         <p className="text-gray-500">No nuggets found.</p>
         <p className="text-sm text-gray-400 mt-2">Try adjusting your filters.</p>
       </div>
@@ -174,8 +181,9 @@ export const Feed: React.FC<FeedProps> = ({
   }
 
   // Render Feed
+  // Finance-grade: Consistent vertical rhythm (24-32px gap = gap-7 = 28px)
   return (
-    <div className="max-w-2xl mx-auto flex flex-col gap-8">
+    <div className="w-full flex flex-col gap-7">
       {nuggets.map((article) => (
         <NewsCard
           key={article.id}

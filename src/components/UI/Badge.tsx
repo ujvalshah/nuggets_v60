@@ -32,8 +32,10 @@ export const Badge: React.FC<BadgeProps> = ({
     orange: 'bg-orange-100 text-orange-700 border border-orange-200 dark:bg-orange-900/30 dark:border-orange-800 dark:text-orange-300',
   };
 
+  // Support rounded-full override from className (for feed sidebar tags)
+  const roundedClass = className?.includes('rounded-full') ? 'rounded-full' : 'rounded-md';
   const baseStyles = `
-    inline-flex items-center px-2.5 py-1 rounded-md text-xs font-bold transition-all duration-200
+    inline-flex items-center px-2.5 py-1 ${roundedClass} text-xs font-bold transition-all duration-200
     ${variants[variant]}
     ${onClick ? 'cursor-pointer hover:opacity-80' : 'cursor-default'}
     ${className}

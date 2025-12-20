@@ -34,59 +34,54 @@ export const FeedVariant: React.FC<FeedVariantProps> = ({
 
   return (
     <div
-      className="group relative flex flex-col bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm hover:shadow-lg hover:border-slate-300 dark:hover:border-slate-700 transition-all duration-300 w-full p-5 gap-4"
+      className="group relative flex flex-col bg-white dark:bg-slate-900 rounded-2xl shadow-[0_8px_24px_rgba(0,0,0,0.04)] hover:shadow-[0_12px_32px_rgba(0,0,0,0.08)] transition-all duration-150 w-full p-6 gap-4 hover:-translate-y-0.5"
     >
       {/* Card Body - Clickable area for opening drawer */}
       <div 
         className="flex flex-col flex-1 min-w-0 gap-4 cursor-pointer"
         onClick={handlers.onClick}
       >
-        {/* 1. Tags on top - matching UtilityVariant hierarchy */}
-        <CardTags
-          categories={data.categories}
-          onCategoryClick={handlers.onCategoryClick}
-          showTagPopover={showTagPopover}
-          onToggleTagPopover={handlers.onToggleTagPopover}
-          tagPopoverRef={tagPopoverRef}
-        />
-
-        {/* 2. Title */}
-        {data.shouldShowTitle && <CardTitle title={data.title} />}
-
-        {/* 3. Badge */}
-        <CardBadge 
-          isTextNugget={data.isTextNugget} 
-          sourceType={data.sourceType}
-          media={data.media}
-        />
-
-        {/* 4. Body/Content - flex-1 to take available space, pushing media to bottom */}
-        <div className="flex flex-col flex-1 min-w-0 gap-4">
-          <CardContent
-            excerpt={data.excerpt}
-            content={data.content}
-            isTextNugget={data.isTextNugget}
-            variant="feed"
-            allowExpansion={true}
+        {/* 1. Media first (for video-first nuggets) */}
+        {data.hasMedia && (
+          <CardMedia
+            media={data.media}
+            images={data.images}
+            visibility={data.visibility}
+            onMediaClick={handlers.onMediaClick}
+            className="rounded-lg shrink-0"
+            articleTitle={data.title}
           />
+        )}
 
-          {/* 5. Media anchored to bottom for uniformity across cards */}
-          {data.hasMedia && (
-            <CardMedia
-              media={data.media}
-              images={data.images}
-              visibility={data.visibility}
-              onMediaClick={handlers.onMediaClick}
-              className="mt-auto rounded-lg shrink-0"
-              articleTitle={data.title}
-            />
-          )}
-        </div>
+        {/* 2. Title - Dominant visual anchor */}
+        {data.shouldShowTitle && <CardTitle title={data.title} variant="feed" />}
+
+        {/* 3. Optional excerpt/body */}
+        <CardContent
+          excerpt={data.excerpt}
+          content={data.content}
+          isTextNugget={data.isTextNugget}
+          variant="feed"
+          allowExpansion={true}
+        />
+
+        {/* 4. Tags - Visually demoted (1-2 max, muted pills) */}
+        {data.categories && data.categories.length > 0 && (
+          <CardTags
+            categories={data.categories}
+            onCategoryClick={handlers.onCategoryClick}
+            showTagPopover={showTagPopover}
+            onToggleTagPopover={handlers.onToggleTagPopover}
+            tagPopoverRef={tagPopoverRef}
+            variant="feed"
+          />
+        )}
       </div>
 
       {/* Footer - Actions only, must NOT open drawer */}
+      {/* Finance-grade: Reduced visual weight, increased hit areas, cohesive grouping */}
       <div 
-        className="pt-1.5 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between shrink-0"
+        className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between shrink-0"
         onClick={(e) => e.stopPropagation()}
       >
         <CardMeta
@@ -114,6 +109,7 @@ export const FeedVariant: React.FC<FeedVariantProps> = ({
           onToggleMenu={handlers.onToggleMenu}
           menuRef={menuRef}
           isPreview={isPreview}
+          variant="feed"
         />
       </div>
 

@@ -53,6 +53,14 @@ const AppContent: React.FC = () => {
   return (
     <>
       {/* 
+        LAYOUT INVARIANT:
+        Fixed headers do not reserve space.
+        All fixed/sticky elements require explicit spacers.
+        
+        Global invariant:
+        Header is rendered exactly once here.
+        Do NOT render Header in layouts or pages.
+        
         ARCHITECTURAL INVARIANT: Header Rendering
         Header MUST be rendered OUTSIDE MainLayout to prevent layout instability.
         Header is fixed positioned and must NOT be a child of flex/grid containers.
@@ -62,6 +70,9 @@ const AppContent: React.FC = () => {
         - Filter changes
         - Route transitions
         - Flex/grid recalculations
+        
+        Header height: h-14 (56px) mobile, h-16 (64px) desktop
+        HeaderSpacer MUST be used in PageStack to reserve this space.
       */}
       <Header 
         isDark={isDark} 

@@ -10,6 +10,9 @@ import { getCollectionTheme } from '@/constants/theme';
 import { ShareMenu } from '@/components/shared/ShareMenu';
 import { useAuth } from '@/hooks/useAuth';
 import { toSentenceCase } from '@/utils/formatters';
+import { HeaderSpacer } from '@/components/layouts/HeaderSpacer';
+import { LAYOUT_CLASSES } from '@/constants/layout';
+import { Z_INDEX } from '@/constants/zIndex';
 
 export const CollectionDetailPage: React.FC = () => {
   // URL params are the single source of truth for selected collection
@@ -134,16 +137,30 @@ export const CollectionDetailPage: React.FC = () => {
       });
   };
 
-  if (isLoading) return <div className="flex items-center justify-center py-32"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500"></div></div>;
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
+        <HeaderSpacer />
+        <div className="flex items-center justify-center py-32">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-yellow-400"></div>
+        </div>
+      </div>
+    );
+  }
   if (!collection) return null;
 
   const theme = getCollectionTheme(collection.id);
 
   return (
-    <div className="bg-slate-50 dark:bg-slate-950 pb-20">
-      <div className="bg-slate-900 border-b border-slate-800">
-        <div className="max-w-[1800px] mx-auto px-4 sm:px-6 lg:px-8 py-8">
-            <button onClick={() => navigate('/collections')} className="flex items-center gap-2 text-sm font-bold text-slate-400 hover:text-white mb-6 transition-colors">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 pb-20">
+      <HeaderSpacer />
+      {/* Unified Light Theme Header */}
+      <div 
+        className={`sticky ${LAYOUT_CLASSES.STICKY_BELOW_HEADER} ${LAYOUT_CLASSES.PAGE_TOOLBAR}`}
+        style={{ zIndex: Z_INDEX.CATEGORY_BAR }}
+      >
+        <div className="max-w-[1800px] mx-auto px-4 sm:px-6 lg:px-8 py-6">
+            <button onClick={() => navigate('/collections')} className="flex items-center gap-2 text-sm font-bold text-gray-500 hover:text-gray-900 dark:text-slate-400 dark:hover:text-white mb-6 transition-colors">
                 <ArrowLeft size={16} /> Back to Collections
             </button>
             <div className="flex flex-col md:flex-row gap-6 md:items-start justify-between">
@@ -152,11 +169,11 @@ export const CollectionDetailPage: React.FC = () => {
                         <Folder size={32} strokeWidth={1.5} />
                     </div>
                     <div>
-                        <h1 className="text-3xl font-bold text-white mb-2">
+                        <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
                           {toSentenceCase(collection.name)}
                         </h1>
-                        <p className="text-slate-400 max-w-2xl leading-relaxed">{collection.description || "No description provided."}</p>
-                        <div className="flex items-center gap-6 mt-4 text-sm text-slate-400 font-medium">
+                        <p className="text-gray-500 dark:text-slate-400 max-w-2xl leading-relaxed">{collection.description || "No description provided."}</p>
+                        <div className="flex items-center gap-6 mt-4 text-sm text-gray-500 dark:text-slate-400 font-medium">
                             <span className="flex items-center gap-1.5"><Layers size={16} /> {nuggets.length} nuggets</span>
                             <span className="flex items-center gap-1.5"><Users size={16} /> {collection.followersCount} followers</span>
                             <span className="flex items-center gap-1.5"><Info size={16} /> Created by u1</span>
@@ -174,10 +191,10 @@ export const CollectionDetailPage: React.FC = () => {
                         meta={{
                             text: collection.description
                         }}
-                        className="hover:!bg-slate-800 hover:text-white w-10 h-10"
+                        className="hover:bg-gray-100 dark:hover:bg-slate-800 text-gray-400 hover:text-gray-600 dark:hover:text-white w-10 h-10"
                         iconSize={20}
                     />
-                    <button onClick={handleAddNugget} className="px-4 py-2 bg-white text-slate-900 rounded-xl text-sm font-bold hover:opacity-90 transition-colors flex items-center gap-2 shadow-sm">
+                    <button onClick={handleAddNugget} className="px-4 py-2 bg-gray-900 dark:bg-white text-white dark:text-gray-900 rounded-xl text-sm font-bold hover:bg-gray-800 dark:hover:bg-gray-100 transition-colors flex items-center gap-2 shadow-sm">
                         <Plus size={16} /> Add Nugget
                     </button>
                 </div>

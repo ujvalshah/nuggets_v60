@@ -7,6 +7,9 @@ import { BatchPreviewCard } from '@/components/batch/BatchPreviewCard';
 import { FileSpreadsheet, FileText, Link as LinkIcon, Download, ChevronRight, Loader2, CheckCircle2, ArrowLeft } from 'lucide-react';
 import { useToast } from '@/hooks/useToast';
 import { queryClient } from '@/queryClient';
+import { HeaderSpacer } from '@/components/layouts/HeaderSpacer';
+import { LAYOUT_CLASSES } from '@/constants/layout';
+import { Z_INDEX } from '@/constants/zIndex';
 
 // Helper for small delays
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
@@ -259,10 +262,14 @@ export const BulkCreateNuggetsPage: React.FC = () => {
   };
 
   return (
-    <div className="bg-slate-50 dark:bg-slate-950 pb-20">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 pb-20">
+      <HeaderSpacer />
       
-      {/* Header */}
-      <div className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">
+      {/* Header - Unified Light Theme */}
+      <div 
+        className={`sticky ${LAYOUT_CLASSES.STICKY_BELOW_HEADER} ${LAYOUT_CLASSES.PAGE_TOOLBAR}`}
+        style={{ zIndex: Z_INDEX.CATEGORY_BAR }}
+      >
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6">
           <button 
             onClick={() => {
@@ -278,33 +285,33 @@ export const BulkCreateNuggetsPage: React.FC = () => {
                 navigate('/');
               }
             }} 
-            className="flex items-center gap-2 text-sm text-slate-500 hover:text-slate-900 dark:hover:text-white mb-4 transition-colors"
+            className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-900 dark:text-slate-400 dark:hover:text-white mb-4 transition-colors"
             disabled={isProcessing}
           >
             <ArrowLeft size={16} /> Back to My Space
           </button>
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
                 Batch Nugget Creation
               </h1>
-              <p className="text-slate-500 dark:text-slate-400 mt-1">Import multiple nuggets at once from links or files.</p>
+              <p className="text-gray-500 dark:text-slate-400 mt-1">Import multiple nuggets at once from links or files.</p>
             </div>
             {step === 'review' && (
                 <div className="flex items-center gap-3">
-                   <div className="text-sm font-medium text-slate-500">
+                   <div className="text-sm font-medium text-gray-500 dark:text-slate-400">
                       {rows.filter(r => r.selected).length} items selected
                    </div>
                    <div className="flex items-center gap-3">
                      {batchProgress && (
-                       <div className="text-xs text-slate-500 dark:text-slate-400">
+                       <div className="text-xs text-gray-500 dark:text-slate-400">
                          {batchProgress.current} / {batchProgress.total}
                        </div>
                      )}
                      <button 
                         onClick={handleImport}
                         disabled={isProcessing || rows.filter(r => r.selected && r.status !== 'success').length === 0}
-                        className="px-6 py-2 bg-primary-500 text-slate-900 rounded-xl font-bold text-sm hover:bg-primary-400 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 shadow-sm transition-all"
+                        className="px-6 py-2 bg-yellow-400 text-gray-900 rounded-xl font-bold text-sm hover:bg-yellow-500 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 shadow-sm transition-all"
                      >
                         {isProcessing ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle2 size={16} />}
                         Import Selected
@@ -319,24 +326,24 @@ export const BulkCreateNuggetsPage: React.FC = () => {
       <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8">
         
         {step === 'input' && (
-          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden min-h-[500px] flex flex-col">
-            {/* Tabs */}
-            <div className="flex border-b border-slate-100 dark:border-slate-800">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-100 dark:border-slate-800 shadow-sm overflow-hidden min-h-[500px] flex flex-col">
+            {/* Tabs - Yellow brand accent */}
+            <div className="flex border-b border-gray-100 dark:border-slate-800">
               <button 
                 onClick={() => setActiveTab('links')}
-                className={`flex-1 py-4 text-sm font-bold flex items-center justify-center gap-2 border-b-2 transition-colors ${activeTab === 'links' ? 'border-primary-500 text-slate-900 dark:text-white bg-primary-50/50 dark:bg-primary-900/10' : 'border-transparent text-slate-500 hover:text-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800/50'}`}
+                className={`flex-1 py-4 text-sm font-bold flex items-center justify-center gap-2 border-b-2 transition-colors ${activeTab === 'links' ? 'border-yellow-400 text-gray-900 dark:text-white bg-yellow-50/50 dark:bg-yellow-900/10' : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50 dark:hover:bg-slate-800/50'}`}
               >
                 <LinkIcon size={18} /> Paste Links
               </button>
               <button 
                 onClick={() => setActiveTab('csv')}
-                className={`flex-1 py-4 text-sm font-bold flex items-center justify-center gap-2 border-b-2 transition-colors ${activeTab === 'csv' ? 'border-primary-500 text-slate-900 dark:text-white bg-primary-50/50 dark:bg-primary-900/10' : 'border-transparent text-slate-500 hover:text-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800/50'}`}
+                className={`flex-1 py-4 text-sm font-bold flex items-center justify-center gap-2 border-b-2 transition-colors ${activeTab === 'csv' ? 'border-yellow-400 text-gray-900 dark:text-white bg-yellow-50/50 dark:bg-yellow-900/10' : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50 dark:hover:bg-slate-800/50'}`}
               >
                 <FileText size={18} /> Import CSV
               </button>
               <button 
                 onClick={() => setActiveTab('excel')}
-                className={`flex-1 py-4 text-sm font-bold flex items-center justify-center gap-2 border-b-2 transition-colors ${activeTab === 'excel' ? 'border-primary-500 text-slate-900 dark:text-white bg-primary-50/50 dark:bg-primary-900/10' : 'border-transparent text-slate-500 hover:text-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800/50'}`}
+                className={`flex-1 py-4 text-sm font-bold flex items-center justify-center gap-2 border-b-2 transition-colors ${activeTab === 'excel' ? 'border-yellow-400 text-gray-900 dark:text-white bg-yellow-50/50 dark:bg-yellow-900/10' : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50 dark:hover:bg-slate-800/50'}`}
               >
                 <FileSpreadsheet size={18} /> Import Excel
               </button>
@@ -348,19 +355,19 @@ export const BulkCreateNuggetsPage: React.FC = () => {
               {activeTab === 'links' && (
                 <div className="flex flex-col h-full max-w-2xl mx-auto w-full gap-6">
                   <div className="space-y-2">
-                    <label className="text-sm font-bold text-slate-700 dark:text-slate-200">Paste URLs (one per line)</label>
+                    <label className="text-sm font-bold text-gray-700 dark:text-slate-200">Paste URLs (one per line)</label>
                     <textarea 
                       value={linkInput}
                       onChange={(e) => setLinkInput(e.target.value)}
                       placeholder="https://example.com/article-1&#10;https://example.com/article-2"
-                      className="w-full h-64 p-4 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 font-mono text-sm resize-none"
+                      className="w-full h-64 p-4 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400 font-mono text-sm resize-none text-gray-900 dark:text-white"
                     />
                   </div>
                   <div className="flex justify-end">
                     <button 
                       onClick={handleLinksParse}
                       disabled={!linkInput.trim() || isProcessing}
-                      className="px-8 py-3 bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-xl font-bold hover:opacity-90 disabled:opacity-50 flex items-center gap-2 transition-all shadow-lg shadow-primary-500/20"
+                      className="px-8 py-3 bg-gray-900 dark:bg-white text-white dark:text-gray-900 rounded-xl font-bold hover:bg-gray-800 dark:hover:bg-gray-100 disabled:opacity-50 flex items-center gap-2 transition-all shadow-lg"
                     >
                       {isProcessing ? <Loader2 size={18} className="animate-spin" /> : <>Next <ChevronRight size={18} /></>}
                     </button>
@@ -371,35 +378,35 @@ export const BulkCreateNuggetsPage: React.FC = () => {
               {/* FILE MODES */}
               {(activeTab === 'csv' || activeTab === 'excel') && (
                 <div className="flex flex-col items-center justify-center h-full gap-6 max-w-xl mx-auto w-full text-center">
-                   <div className="w-20 h-20 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center text-slate-400 mb-2">
+                   <div className="w-20 h-20 bg-gray-100 dark:bg-slate-800 rounded-full flex items-center justify-center text-gray-400 mb-2">
                       {activeTab === 'csv' ? <FileText size={40} /> : <FileSpreadsheet size={40} />}
                    </div>
                    
                    <div>
-                     <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-2">Upload your {activeTab === 'csv' ? 'CSV' : 'Excel'} file</h3>
-                     <p className="text-sm text-slate-500 dark:text-slate-400">
-                       Ensure your file has headers: <code>url, title, text, categories, visibility</code>
+                     <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Upload your {activeTab === 'csv' ? 'CSV' : 'Excel'} file</h3>
+                     <p className="text-sm text-gray-500 dark:text-slate-400">
+                       Ensure your file has headers: <code className="bg-gray-100 dark:bg-slate-800 px-1.5 py-0.5 rounded text-gray-700 dark:text-slate-300">url, title, text, categories, visibility</code>
                      </p>
                    </div>
 
                    <div className="flex flex-col gap-4 w-full max-w-sm">
-                      <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-slate-300 dark:border-slate-700 border-dashed rounded-xl cursor-pointer bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors group">
+                      <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-gray-300 dark:border-slate-700 border-dashed rounded-xl cursor-pointer bg-gray-50 dark:bg-slate-800/50 hover:bg-gray-100 dark:hover:bg-slate-800 hover:border-yellow-400 transition-colors group">
                           <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                              <p className="mb-2 text-sm text-slate-500 dark:text-slate-400 group-hover:text-primary-600 transition-colors font-bold">Click to upload</p>
-                              <p className="text-xs text-slate-500 dark:text-slate-400">or drag and drop</p>
+                              <p className="mb-2 text-sm text-gray-500 dark:text-slate-400 group-hover:text-yellow-600 transition-colors font-bold">Click to upload</p>
+                              <p className="text-xs text-gray-500 dark:text-slate-400">or drag and drop</p>
                           </div>
                           <input type="file" className="hidden" accept={activeTab === 'csv' ? ".csv" : ".xlsx, .xls"} onChange={(e) => handleFileUpload(e, activeTab === 'csv' ? 'csv' : 'excel')} />
                       </label>
 
                       <button 
                         onClick={() => downloadTemplate(activeTab === 'csv' ? 'csv' : 'excel')}
-                        className="text-xs font-bold text-primary-600 hover:text-primary-700 flex items-center justify-center gap-1.5 py-2 hover:bg-primary-50 rounded-lg transition-colors"
+                        className="text-xs font-bold text-yellow-600 hover:text-yellow-700 flex items-center justify-center gap-1.5 py-2 hover:bg-yellow-50 dark:hover:bg-yellow-900/10 rounded-lg transition-colors"
                       >
                          <Download size={14} /> Download {activeTab.toUpperCase()} Template
                       </button>
                    </div>
                    
-                   {isProcessing && <div className="flex items-center gap-2 text-sm font-bold text-slate-500"><Loader2 size={16} className="animate-spin" /> Parsing file...</div>}
+                   {isProcessing && <div className="flex items-center gap-2 text-sm font-bold text-gray-500"><Loader2 size={16} className="animate-spin" /> Parsing file...</div>}
                 </div>
               )}
             </div>
@@ -409,12 +416,12 @@ export const BulkCreateNuggetsPage: React.FC = () => {
         {step === 'review' && (
           <div className="space-y-4">
              <div className="flex items-center justify-between">
-                <h2 className="text-lg font-bold text-slate-900 dark:text-white">
+                <h2 className="text-lg font-bold text-gray-900 dark:text-white">
                   Review & Edit ({rows.length} items)
                 </h2>
                 <button 
                   onClick={() => { setRows([]); setStep('input'); }} 
-                  className="text-sm font-bold text-red-500 hover:text-red-600"
+                  className="text-sm font-bold text-red-500 hover:text-red-600 transition-colors"
                 >
                   Discard All
                 </button>
@@ -455,7 +462,7 @@ export const BulkCreateNuggetsPage: React.FC = () => {
              </div>
              
              {rows.length === 0 && (
-               <div className="text-center py-12 text-slate-500 dark:text-slate-400">
+               <div className="text-center py-12 text-gray-500 dark:text-slate-400">
                  No items to review. Add URLs to get started.
                </div>
              )}

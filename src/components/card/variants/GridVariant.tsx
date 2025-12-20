@@ -81,17 +81,16 @@ export const GridVariant: React.FC<GridVariantProps> = ({
 
       {/* Card Body - Clickable area for opening drawer */}
       <div 
-        className={`flex flex-col flex-1 min-w-0 ${selectionMode ? 'cursor-pointer' : 'cursor-pointer'}`}
+        className="flex flex-col flex-1 min-w-0 cursor-pointer"
         onClick={handleCardClick}
       >
         {data.hasMedia && (
-          <div className="relative">
+          <div className="relative mb-3">
             <CardMedia
               media={data.media}
               images={data.images}
               visibility={data.visibility}
               onMediaClick={handlers.onMediaClick}
-              className="aspect-[4/3]"
               articleTitle={data.title}
             />
             {/* Source Badge Overlay - Top-Left Corner */}
@@ -115,6 +114,7 @@ export const GridVariant: React.FC<GridVariantProps> = ({
             showTagPopover={showTagPopover}
             onToggleTagPopover={handlers.onToggleTagPopover}
             tagPopoverRef={tagPopoverRef}
+            variant="grid"
           />
 
           {data.shouldShowTitle && <CardTitle title={data.title} />}

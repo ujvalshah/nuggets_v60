@@ -5,6 +5,7 @@ import { useToast } from '@/hooks/useToast';
 import { storageService } from '@/services/storageService';
 import { Avatar } from '../shared/Avatar';
 import { adminConfigService } from '@/admin/services/adminConfigService';
+import { LAYOUT_CLASSES } from '@/constants/layout';
 
 // Format join date as "Jan 2024"
 const formatJoinDate = (isoString: string): string => {
@@ -120,8 +121,8 @@ export const ProfileCard: React.FC<ProfileCardProps> = ({ user, isOwner, nuggetC
 
   return (
     <>
-      {/* Offset: Header only (64px = top-16) - ProfileCard is used in MySpacePage without CategoryFilterBar */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm sticky top-16 flex flex-col gap-6 items-center text-center">
+      {/* Offset: Header only - ProfileCard is used in MySpacePage without CategoryFilterBar */}
+      <div className={`bg-white dark:bg-slate-900 rounded-2xl border border-gray-100 dark:border-slate-800 p-6 shadow-sm sticky ${LAYOUT_CLASSES.STICKY_BELOW_HEADER} flex flex-col gap-6 items-center text-center`}>
       {/* 1. Avatar Section - Centered */}
       <div className="relative w-24 h-24 mx-auto">
         <div className="w-full h-full rounded-full bg-slate-100 dark:bg-slate-800 border-4 border-white dark:border-slate-900 shadow-lg flex items-center justify-center overflow-hidden">

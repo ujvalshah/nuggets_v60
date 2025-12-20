@@ -13,6 +13,9 @@ import { useToast } from '@/hooks/useToast';
 import { ConfirmActionModal } from '@/components/settings/ConfirmActionModal';
 import { Tooltip } from '@/components/UI/Tooltip';
 import { queryClient } from '@/queryClient';
+import { HeaderSpacer } from '@/components/layouts/HeaderSpacer';
+import { LAYOUT_CLASSES } from '@/constants/layout';
+import { Z_INDEX } from '@/constants/zIndex';
 
 interface MySpacePageProps {
   currentUserId: string;
@@ -453,11 +456,23 @@ export const MySpacePage: React.FC<MySpacePageProps> = ({ currentUserId }) => {
 
   // Early returns for loading and error states
   if (loading) {
-    return <div className="flex items-center justify-center py-32 bg-slate-50"><Loader2 className="animate-spin text-slate-400" /></div>;
+    return (
+      <div className="bg-slate-50 dark:bg-slate-950 min-h-screen">
+        <HeaderSpacer />
+        <div className="flex items-center justify-center py-32">
+          <Loader2 className="animate-spin text-slate-400" />
+        </div>
+      </div>
+    );
   }
   
   if (!profileUser) {
-    return <div className="p-12 text-center text-slate-500">User not found</div>;
+    return (
+      <div className="bg-slate-50 dark:bg-slate-950 min-h-screen">
+        <HeaderSpacer />
+        <div className="p-12 text-center text-slate-500">User not found</div>
+      </div>
+    );
   }
 
   // --- HIERARCHY LOGIC ---
@@ -475,7 +490,8 @@ export const MySpacePage: React.FC<MySpacePageProps> = ({ currentUserId }) => {
   const tabDescription = getDescription(activeTab, nuggetVisibility);
 
   return (
-    <div className="bg-slate-50 dark:bg-slate-950 font-sans text-slate-900 dark:text-white pb-32">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 font-sans text-gray-900 dark:text-white pb-32">
+      <HeaderSpacer />
       <div className="max-w-[1280px] mx-auto px-6 py-8">
         
         <div className="flex flex-col lg:flex-row items-start">
@@ -516,8 +532,8 @@ export const MySpacePage: React.FC<MySpacePageProps> = ({ currentUserId }) => {
                             
                             {selectionMode ? (
                                 // --- SELECTION ACTIVE STATE ---
-                                <div className="flex items-center gap-2 animate-in slide-in-from-right-2 duration-200">
-                                    <span className="text-xs font-bold text-slate-500 dark:text-slate-400 mr-2">
+                                <div className="flex items-center gap-2 bg-gray-100 dark:bg-slate-800 p-1 rounded-xl border border-gray-200 dark:border-slate-700 animate-in slide-in-from-right-2 duration-200">
+                                    <span className="text-xs font-bold text-gray-600 dark:text-slate-400 ml-2">
                                         {selectedIds.length} Selected
                                     </span>
 
@@ -526,7 +542,7 @@ export const MySpacePage: React.FC<MySpacePageProps> = ({ currentUserId }) => {
                                         <button 
                                             onClick={() => setIsActionMenuOpen(!isActionMenuOpen)}
                                             disabled={selectedIds.length === 0 || isUpdatingVisibility}
-                                            className="flex items-center gap-2 px-4 py-2 bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-xl text-xs font-bold shadow-sm hover:opacity-90 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                                            className="flex items-center gap-2 px-4 py-2 bg-yellow-400 text-gray-900 rounded-lg text-xs font-bold shadow-sm hover:bg-yellow-500 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                                         >
                                             {isUpdatingVisibility ? (
                                                 <>
@@ -540,27 +556,27 @@ export const MySpacePage: React.FC<MySpacePageProps> = ({ currentUserId }) => {
                                         </button>
 
                                         {isActionMenuOpen && (
-                                            <div className="absolute right-0 top-full mt-2 w-48 bg-white dark:bg-slate-900 rounded-xl shadow-xl border border-slate-200 dark:border-slate-700 z-50 overflow-hidden animate-in zoom-in-95 duration-100 origin-top-right">
+                                            <div className="absolute right-0 top-full mt-2 w-48 bg-white dark:bg-slate-900 rounded-xl shadow-xl border border-gray-200 dark:border-slate-700 z-50 overflow-hidden animate-in zoom-in-95 duration-100 origin-top-right">
                                                 {activeTab === 'nuggets' && (
                                                     <>
                                                         <button 
                                                             onClick={() => { handleBulkVisibility('public'); setIsActionMenuOpen(false); }} 
                                                             disabled={isUpdatingVisibility}
-                                                            className="w-full flex items-center gap-2 px-4 py-2.5 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                                            className="w-full flex items-center gap-2 px-4 py-2.5 text-xs font-bold text-gray-600 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                                         >
                                                             <Globe size={14} className="text-blue-500" /> Make Public
                                                         </button>
                                                         <button 
                                                             onClick={() => { handleBulkVisibility('private'); setIsActionMenuOpen(false); }} 
                                                             disabled={isUpdatingVisibility}
-                                                            className="w-full flex items-center gap-2 px-4 py-2.5 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                                            className="w-full flex items-center gap-2 px-4 py-2.5 text-xs font-bold text-gray-600 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                                         >
                                                             <Lock size={14} className="text-amber-500" /> Make Private
                                                         </button>
-                                                        <button onClick={() => { setShowAddToCollection(true); setIsActionMenuOpen(false); }} className="w-full flex items-center gap-2 px-4 py-2.5 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
+                                                        <button onClick={() => { setShowAddToCollection(true); setIsActionMenuOpen(false); }} className="w-full flex items-center gap-2 px-4 py-2.5 text-xs font-bold text-gray-600 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors">
                                                             <FolderPlus size={14} className="text-indigo-500" /> Add to Collection
                                                         </button>
-                                                        <div className="h-px bg-slate-100 dark:bg-slate-800 my-1" />
+                                                        <div className="h-px bg-gray-100 dark:bg-slate-800 my-1" />
                                                     </>
                                                 )}
                                                 
@@ -570,11 +586,11 @@ export const MySpacePage: React.FC<MySpacePageProps> = ({ currentUserId }) => {
                                                         <button onClick={() => { handleBulkFollow('follow'); setIsActionMenuOpen(false); }} className="w-full flex items-center gap-2 px-4 py-2.5 text-xs font-bold text-green-600 hover:bg-green-50 dark:hover:bg-green-900/10 transition-colors">
                                                             <Plus size={14} /> Follow Selected
                                                         </button>
-                                                        <div className="h-px bg-slate-100 dark:bg-slate-800 my-1" />
+                                                        <div className="h-px bg-gray-100 dark:bg-slate-800 my-1" />
                                                         <button onClick={() => { handleBulkFollow('unfollow'); setIsActionMenuOpen(false); }} className="w-full flex items-center gap-2 px-4 py-2.5 text-xs font-bold text-red-600 hover:bg-red-50 dark:hover:bg-red-900/10 transition-colors">
                                                             <X size={14} /> Unfollow Selected
                                                         </button>
-                                                        <div className="h-px bg-slate-100 dark:bg-slate-800 my-1" />
+                                                        <div className="h-px bg-gray-100 dark:bg-slate-800 my-1" />
                                                     </>
                                                 )}
 
@@ -590,7 +606,7 @@ export const MySpacePage: React.FC<MySpacePageProps> = ({ currentUserId }) => {
 
                                     <button 
                                         onClick={toggleSelectionMode}
-                                        className="p-2 rounded-xl text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                                        className="p-2 rounded-lg text-gray-400 hover:text-gray-700 dark:hover:text-white hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
                                         title="Cancel Selection"
                                     >
                                         <X size={18} />
@@ -602,7 +618,7 @@ export const MySpacePage: React.FC<MySpacePageProps> = ({ currentUserId }) => {
                                     <Tooltip content="Import links or CSV files">
                                         <button 
                                             onClick={() => navigate('/bulk-create')}
-                                            className="flex items-center gap-2 px-4 py-2 text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white rounded-xl text-xs font-bold transition-colors"
+                                            className="flex items-center gap-2 px-4 py-2 text-gray-500 hover:text-gray-900 dark:text-slate-400 dark:hover:text-white rounded-xl text-xs font-bold transition-colors"
                                         >
                                             <Layers size={16} /> Batch Import
                                         </button>
@@ -611,7 +627,7 @@ export const MySpacePage: React.FC<MySpacePageProps> = ({ currentUserId }) => {
                                     <Tooltip content="Select multiple items to organize or delete">
                                         <button 
                                             onClick={toggleSelectionMode}
-                                            className="flex items-center gap-2 px-3 py-2 bg-primary-50 text-primary-700 border border-primary-200 hover:bg-primary-100 dark:bg-primary-900/10 dark:text-primary-400 dark:border-primary-900/30 rounded-xl text-xs font-bold transition-all shadow-sm"
+                                            className="flex items-center gap-2 px-3 py-2 bg-yellow-50 text-yellow-700 border border-yellow-200 hover:bg-yellow-100 dark:bg-yellow-900/10 dark:text-yellow-400 dark:border-yellow-900/30 rounded-xl text-xs font-bold transition-all shadow-sm"
                                         >
                                             <CheckSquare size={16} /> Select
                                         </button>
@@ -626,16 +642,16 @@ export const MySpacePage: React.FC<MySpacePageProps> = ({ currentUserId }) => {
                     <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center w-full">
                         {/* Hierarchy Sub-Navigation (For Nuggets Tab Only) - MOVED TO LEFT */}
                         {activeTab === 'nuggets' && isOwner && (
-                            <div className="flex bg-slate-200 dark:bg-slate-800 p-1 rounded-xl shrink-0">
+                            <div className="flex bg-gray-100 dark:bg-slate-800 p-1 rounded-xl border border-gray-200 dark:border-slate-700 shrink-0">
                                 <button
                                     onClick={() => setNuggetVisibility('public')}
-                                    className={`px-4 py-1.5 text-xs font-bold rounded-lg flex items-center gap-2 transition-all ${nuggetVisibility === 'public' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+                                    className={`px-4 py-1.5 text-xs font-bold rounded-lg flex items-center gap-2 transition-all ${nuggetVisibility === 'public' ? 'bg-white dark:bg-slate-700 text-gray-900 dark:text-white shadow-sm' : 'text-gray-500 hover:text-gray-700 dark:hover:text-slate-300'}`}
                                 >
                                     <Globe size={12} /> Public <span className="opacity-60 text-[10px]">{publicNuggets.length}</span>
                                 </button>
                                 <button
                                     onClick={() => setNuggetVisibility('private')}
-                                    className={`px-4 py-1.5 text-xs font-bold rounded-lg flex items-center gap-2 transition-all ${nuggetVisibility === 'private' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+                                    className={`px-4 py-1.5 text-xs font-bold rounded-lg flex items-center gap-2 transition-all ${nuggetVisibility === 'private' ? 'bg-white dark:bg-slate-700 text-gray-900 dark:text-white shadow-sm' : 'text-gray-500 hover:text-gray-700 dark:hover:text-slate-300'}`}
                                 >
                                     <Lock size={12} /> Private <span className="opacity-60 text-[10px]">{privateNuggets.length}</span>
                                 </button>
@@ -643,7 +659,7 @@ export const MySpacePage: React.FC<MySpacePageProps> = ({ currentUserId }) => {
                         )}
 
                         {/* Tab Description Helper */}
-                        <div className="flex items-center gap-2 text-xs text-slate-400 dark:text-slate-500 px-1 animate-in fade-in">
+                        <div className="flex items-center gap-2 text-xs text-gray-400 dark:text-slate-500 px-1 animate-in fade-in">
                             <Info size={12} className="shrink-0" />
                             {tabDescription}
                         </div>
@@ -682,8 +698,8 @@ export const MySpacePage: React.FC<MySpacePageProps> = ({ currentUserId }) => {
                 )}
 
                 {currentList.length === 0 && (
-                  <div className="col-span-full py-16 text-center border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-2xl">
-                    <p className="text-slate-400 text-sm">Nothing to see here yet.</p>
+                  <div className="col-span-full py-16 text-center border-2 border-dashed border-gray-200 dark:border-slate-800 rounded-2xl">
+                    <p className="text-gray-400 text-sm">Nothing to see here yet.</p>
                   </div>
                 )}
               </div>

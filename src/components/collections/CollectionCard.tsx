@@ -129,7 +129,7 @@ export const CollectionCard: React.FC<CollectionCardProps> = ({
                             flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg transition-all border
                             ${isFollowing 
                                 ? 'bg-green-50 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-900' 
-                                : 'bg-white text-slate-500 border-slate-200 hover:border-primary-300 hover:text-primary-700 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700'
+                                : 'bg-white text-gray-500 border-gray-200 hover:border-yellow-300 hover:text-yellow-700 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700'
                             }
                             ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}
                         `}

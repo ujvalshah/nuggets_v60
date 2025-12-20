@@ -1,7 +1,6 @@
 import React from 'react';
 import { Article } from '@/types';
-import { NewsCard } from './NewsCard';
-import { useRowExpansion } from '@/hooks/useRowExpansion';
+import { MasonryAtom } from './masonry/MasonryAtom';
 import { useMasonry } from '@/hooks/useMasonry';
 
 interface MasonryGridProps {
@@ -14,23 +13,22 @@ interface MasonryGridProps {
 }
 
 /**
- * PRESENTATIONAL Masonry Grid Component
+ * MasonryGrid: Dedicated Masonry layout renderer
  * 
  * Architecture:
  * - Uses useMasonry hook for layout logic (Layer 1)
  * - Renders flex-based columns (Layer 2)
- * - No layout logic beyond flex structure
- * - No business logic
- * - No measurements
- * - No conditional reshuffling
+ * - Uses MasonryAtom for content-first rendering (Layer 3)
  * 
  * Rules:
  * - Deterministic Round-Robin distribution (index % columnCount)
  * - Flex-based columns (NOT CSS columns)
  * - SSR-safe (uses defaultColumns on server)
  * - Debounced resize handling
- * - No height measurement
- * - No shortest-column logic
+ * - Fixed gap (~1rem)
+ * - Fixed column count per breakpoint
+ * - NO card components
+ * - NO card styling
  */
 export const MasonryGrid: React.FC<MasonryGridProps> = ({
   articles,
@@ -40,15 +38,13 @@ export const MasonryGrid: React.FC<MasonryGridProps> = ({
   currentUserId,
   onTagClick,
 }) => {
-  const { registerCard } = useRowExpansion();
-  
   // Layer 1: Layout logic (delegated to hook)
   const { columns, columnCount } = useMasonry(articles, {
     breakpoints: [
       { minWidth: 0, columnCount: 1 },      // < 768px: 1 column
-      { minWidth: 768, columnCount: 2 },    // 768-1024: 2 columns
-      { minWidth: 1024, columnCount: 3 },   // 1024-1536: 3 columns
-      { minWidth: 1536, columnCount: 4 },   // >= 1536: 4 columns
+      { minWidth: 768, columnCount: 3 },    // 768-1024: 3 columns (tablet)
+      { minWidth: 1024, columnCount: 4 },  // 1024-1536: 4 columns (desktop)
+      { minWidth: 1536, columnCount: 5 },  // >= 1536: 5 columns (large desktop)
     ],
     defaultColumns: 1, // SSR-safe default (mobile-first, reduces CLS)
     debounceMs: 100,
@@ -57,11 +53,11 @@ export const MasonryGrid: React.FC<MasonryGridProps> = ({
   // Layer 2: Presentational rendering only
   if (isLoading) {
     return (
-      <div className="flex gap-6 w-full">
+      <div className="flex gap-4 w-full">
         {Array.from({ length: columnCount }).map((_, colIdx) => (
-          <div key={colIdx} className="flex-1 flex flex-col gap-6">
+          <div key={colIdx} className="flex-1 flex flex-col gap-4">
             {[1, 2, 3].map((i) => (
-              <div key={i} className="bg-slate-100 dark:bg-slate-800 rounded-2xl h-80 animate-pulse" />
+              <div key={i} className="bg-slate-100 dark:bg-slate-800 h-80 animate-pulse" />
             ))}
           </div>
         ))}
@@ -70,19 +66,16 @@ export const MasonryGrid: React.FC<MasonryGridProps> = ({
   }
 
   return (
-    <div className="flex gap-6 w-full">
+    <div className="flex gap-4 w-full">
       {columns.map((columnArticles, colIdx) => (
-        <div key={colIdx} className="flex-1 flex flex-col gap-6">
+        <div key={colIdx} className="flex-1 flex flex-col gap-4">
           {columnArticles.map((article) => (
-            <NewsCard
+            <MasonryAtom
               key={article.id}
-              ref={(el) => registerCard(article.id, el)}
               article={article}
-              viewMode="masonry"
+              onArticleClick={onArticleClick}
               onCategoryClick={onCategoryClick}
-              onClick={onArticleClick}
               currentUserId={currentUserId}
-              onTagClick={onTagClick}
             />
           ))}
         </div>

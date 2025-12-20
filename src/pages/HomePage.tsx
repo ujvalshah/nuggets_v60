@@ -7,10 +7,12 @@ import { ArticleModal } from '@/components/ArticleModal';
 import { ArticleGrid } from '@/components/ArticleGrid';
 import { Feed } from '@/components/Feed';
 import { CategoryFilterBar } from '@/components/header/CategoryFilterBar';
+import { PageStack } from '@/components/layouts/PageStack';
 import { storageService } from '@/services/storageService';
 import { Badge } from '@/components/UI/Badge';
 import { useAuth } from '@/hooks/useAuth';
 import { Link } from 'react-router-dom';
+import { twMerge } from 'tailwind-merge';
 
 interface HomePageProps {
   searchQuery: string;
@@ -136,6 +138,30 @@ export const HomePage: React.FC<HomePageProps> = ({
       .map(([label, count]) => ({ label, count }));
   }, [allArticles]);
 
+  // Compute "Today's Nuggets" count (Agent Level)
+  // Finance-grade: Editorial context, not analytics
+  const todaysCount = useMemo(() => {
+    if (!allArticles || allArticles.length === 0) return 0;
+    
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayEnd = new Date(today);
+    todayEnd.setHours(23, 59, 59, 999);
+    
+    const count = allArticles.filter(article => {
+      if (!article.publishedAt) return false;
+      const publishedDate = new Date(article.publishedAt);
+      return publishedDate >= today && publishedDate <= todayEnd;
+    }).length;
+    
+    // Debug: Log count in development
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[HomePage] Today\'s nuggets count:', count, 'from', allArticles.length, 'total articles');
+    }
+    
+    return count;
+  }, [allArticles]);
+
   // Determine active category from selectedCategories
   const activeCategory = useMemo(() => {
     if (selectedCategories.length === 0) return 'All';
@@ -245,26 +271,61 @@ export const HomePage: React.FC<HomePageProps> = ({
       </div>
 
       <div className="w-full transition-transform duration-300 ease-out origin-top" style={{ transform: `translateY(${pullY}px)` }}>
-        
-        {/* Category Filter Bar - Triage Controller */}
-        <CategoryFilterBar
-          categories={categoriesWithCounts}
-          activeCategory={activeCategory}
-          onSelect={handleCategorySelect}
-        />
-        
-        {/* Holy Grail Layout for Feed View */}
-        {viewMode === 'feed' ? (
-            <div className="max-w-[1800px] mx-auto px-4 sm:px-6 lg:px-8 py-6 grid grid-cols-1 md:grid-cols-12 gap-6 lg:gap-8 items-start">
+        {/* 
+          Layout Contract:
+          Header owns the top (fixed, rendered in App.tsx).
+          PageStack owns vertical order.
+          Content must never overlap siblings.
+          
+          LAYOUT INVARIANT:
+          Fixed headers do not reserve space.
+          All fixed/sticky elements require explicit spacers.
+          
+          Sticky elements do not reserve space.
+          Always add explicit spacing before content.
+        */}
+        <PageStack
+          categoryToolbar={
+            <CategoryFilterBar
+              categories={categoriesWithCounts}
+              activeCategory={activeCategory}
+              onSelect={handleCategorySelect}
+            />
+          }
+          mainContent={
+            <>
+              {/* Power User Feed Layout - Content-first, high density */}
+              {viewMode === 'feed' ? (
+                <div className="max-w-[1400px] mx-auto px-4 lg:px-6 pb-4">
+              <div className="grid grid-cols-1 lg:grid-cols-[220px_minmax(0,1fr)_260px] gap-4 lg:gap-6 items-start">
                 
                 {/* Left Sidebar: Topics Widget */}
-                {/* Fixed height + Scrollable if too many topics */}
-                {/* Offset: Header (64px) + CategoryFilterBar (~48px) = 112px = top-28 */}
-                <div className="hidden md:block md:col-span-3 lg:col-span-3 sticky top-28 max-h-[calc(100vh-7rem)] overflow-y-auto custom-scrollbar pr-2 space-y-6">
-                    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm">
-                        <div className="flex items-center gap-2 mb-4 text-slate-900 dark:text-white">
-                            <Hash size={16} className="text-primary-500" />
-                            <h3 className="text-sm font-bold uppercase tracking-wider">Topics</h3>
+                {/* Offset: Header (56px) + CategoryFilterBar (44px) + gap = ~104px */}
+                <div className="hidden lg:block sticky top-[104px] max-h-[calc(100vh-7rem)] overflow-y-auto custom-scrollbar pr-2 space-y-4">
+                    {/* Today's Nuggets Indicator - Editorial context, not analytics */}
+                    {todaysCount > 0 && (
+                        <div className="bg-white dark:bg-slate-900 rounded-xl p-4 border border-gray-100 dark:border-slate-800">
+                            <button
+                                onClick={() => {
+                                    handleCategorySelect('Today');
+                                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                                }}
+                                className={twMerge(
+                                    'w-full text-left text-sm text-slate-600 dark:text-slate-400 transition-colors',
+                                    activeCategory === 'Today'
+                                        ? 'font-medium underline decoration-slate-400 dark:decoration-slate-500 underline-offset-4'
+                                        : 'font-normal hover:text-slate-800 dark:hover:text-slate-300'
+                                )}
+                            >
+                                Today · {todaysCount} new
+                            </button>
+                        </div>
+                    )}
+
+                    <div className="bg-white dark:bg-slate-900 rounded-xl p-4 border border-gray-100 dark:border-slate-800">
+                        <div className="flex items-center gap-2 mb-3">
+                            <Hash size={12} className="text-slate-400 dark:text-slate-500" />
+                            <h3 className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Topics</h3>
                         </div>
                         <div className="flex flex-wrap gap-2">
                             {allCategories.map(cat => (
@@ -272,7 +333,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                                     key={cat} 
                                     label={cat} 
                                     variant={selectedCategories.includes(cat) ? 'primary' : 'neutral'}
-                                    className="cursor-pointer text-[11px] py-1.5 px-3"
+                                    className="cursor-pointer text-[11px] py-1.5 px-3 rounded-full"
                                     onClick={() => toggleCategory(cat)}
                                 />
                             ))}
@@ -281,10 +342,10 @@ export const HomePage: React.FC<HomePageProps> = ({
 
                     {/* Tags Widget - Including "General" virtual tag */}
                     {tagsWithCounts.length > 0 && (
-                        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm">
-                            <div className="flex items-center gap-2 mb-4 text-slate-900 dark:text-white">
-                                <Hash size={16} className="text-primary-500" />
-                                <h3 className="text-sm font-bold uppercase tracking-wider">Tags</h3>
+                        <div className="bg-white dark:bg-slate-900 rounded-xl p-4 border border-gray-100 dark:border-slate-800">
+                            <div className="flex items-center gap-2 mb-3">
+                                <Hash size={12} className="text-slate-400 dark:text-slate-500" />
+                                <h3 className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Tags</h3>
                             </div>
                             <div className="flex flex-wrap gap-2">
                                 {tagsWithCounts.map(tag => (
@@ -292,7 +353,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                                         key={tag.label} 
                                         label={`${tag.label} (${tag.count})`}
                                         variant={selectedTag === tag.label ? 'primary' : 'neutral'}
-                                        className="cursor-pointer text-[11px] py-1.5 px-3"
+                                        className="cursor-pointer text-[11px] py-1.5 px-3 rounded-full"
                                         onClick={() => {
                                             // Toggle tag selection: click again to deselect
                                             setSelectedTag(selectedTag === tag.label ? null : tag.label);
@@ -329,7 +390,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                 {/* Center: Feed */}
                 {/* Phase 3 Complete: Feed uses unified useInfiniteArticles hook with React Query */}
                 {/* Note: Tag filtering is handled client-side in HomePage articles useMemo */}
-                <div className="md:col-span-9 lg:col-span-6 w-full mx-auto">
+                <div className="w-full">
                     <Feed
                         activeCategory={activeCategory}
                         searchQuery={searchQuery}
@@ -343,37 +404,42 @@ export const HomePage: React.FC<HomePageProps> = ({
                 </div>
 
                 {/* Right Sidebar: Collections & Footer */}
-                {/* Fixed height + Scrollable */}
-                {/* Offset: Header (64px) + CategoryFilterBar (~48px) = 112px = top-28 */}
-                <div className="hidden lg:block lg:col-span-3 sticky top-28 max-h-[calc(100vh-7rem)] overflow-y-auto custom-scrollbar pl-2 space-y-6">
+                {/* Offset: Header (56px) + CategoryFilterBar (44px) + gap = ~104px */}
+                <div className="hidden lg:block sticky top-[104px] max-h-[calc(100vh-7rem)] overflow-y-auto custom-scrollbar pl-2 space-y-4">
                     {/* Collections Widget */}
-                    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm">
-                        <div className="flex items-center gap-2 mb-4 text-slate-900 dark:text-white">
-                            <TrendingUp size={16} className="text-primary-500" />
-                            <h3 className="text-sm font-bold uppercase tracking-wider">Top Collections</h3>
-                        </div>
-                        <div className="space-y-1">
-                            {featuredCollections.map(col => (
-                                <div key={col.id} className="group cursor-pointer p-2 hover:bg-slate-50 dark:hover:bg-slate-800/50 rounded-xl transition-colors">
-                                    <div className="flex items-center gap-3">
-                                        <div className="w-8 h-8 rounded-lg bg-primary-50 dark:bg-primary-900/20 flex items-center justify-center text-primary-600 dark:text-primary-400 shrink-0">
-                                            <Folder size={14} />
+                    {/* Finance-grade: Hide collections with 0 nuggets */}
+                    {featuredCollections.filter(col => (col.validEntriesCount ?? col.entries?.length ?? 0) > 0).length > 0 && (
+                        <div className="bg-white dark:bg-slate-900 rounded-xl p-4 border border-gray-100 dark:border-slate-800">
+                            <div className="flex items-center gap-2 mb-3">
+                                <TrendingUp size={12} className="text-slate-400 dark:text-slate-500" />
+                                <h3 className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Collections</h3>
+                            </div>
+                            <div className="space-y-1">
+                                {featuredCollections
+                                    .filter(col => (col.validEntriesCount ?? col.entries?.length ?? 0) > 0)
+                                    .map(col => (
+                                        <div key={col.id} className="group cursor-pointer p-2 hover:bg-slate-50 dark:hover:bg-slate-800/50 rounded-xl transition-colors">
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-8 h-8 rounded-lg bg-primary-50 dark:bg-primary-900/20 flex items-center justify-center text-primary-600 dark:text-primary-400 shrink-0">
+                                                    <Folder size={14} />
+                                                </div>
+                                                <div className="flex-1 min-w-0">
+                                                    <div className="text-xs font-bold text-slate-700 dark:text-slate-300 truncate group-hover:text-primary-600 transition-colors">{col.name}</div>
+                                                    <div className="text-[10px] text-slate-400 font-medium">{col.validEntriesCount ?? col.entries?.length ?? 0} nuggets</div>
+                                                </div>
+                                            </div>
                                         </div>
-                                        <div className="flex-1 min-w-0">
-                                            <div className="text-xs font-bold text-slate-700 dark:text-slate-300 truncate group-hover:text-primary-600 transition-colors">{col.name}</div>
-                                            <div className="text-[10px] text-slate-400 font-medium">{col.validEntriesCount ?? col.entries?.length ?? 0} nuggets</div>
-                                        </div>
-                                    </div>
-                                </div>
-                            ))}
+                                    ))}
+                            </div>
                         </div>
-                    </div>
+                    )}
                 </div>
 
+              </div>
             </div>
         ) : (
-            // Grid/Masonry/Utility View: Standard Full Width Container
-            <div className="max-w-[1800px] mx-auto px-4 sm:px-6 lg:px-8 py-6">
+            // Grid/Masonry/Utility View: Full-width for maximum content density
+            <div className="max-w-[1800px] mx-auto px-4 lg:px-6 pb-4">
                 <ArticleGrid 
                     articles={articles}
                     viewMode={viewMode}
@@ -383,8 +449,11 @@ export const HomePage: React.FC<HomePageProps> = ({
                     onCategoryClick={(c) => toggleCategory(c)}
                     currentUserId={currentUserId}
                 />
-            </div>
-        )}
+                </div>
+              )}
+            </>
+          }
+        />
       </div>
 
       {selectedArticle && (

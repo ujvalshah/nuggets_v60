@@ -21,6 +21,7 @@ interface CardActionsProps {
   menuRef: React.RefObject<HTMLDivElement | null>;
   className?: string;
   isPreview?: boolean; // Add preview flag to hide ShareMenu
+  variant?: 'grid' | 'feed' | 'masonry' | 'utility'; // Variant for feed-specific styling
 }
 
 export const CardActions: React.FC<CardActionsProps> = ({
@@ -41,9 +42,24 @@ export const CardActions: React.FC<CardActionsProps> = ({
   menuRef,
   className,
   isPreview = false,
+  variant = 'grid',
 }) => {
+  // Finance-grade: Feed variant has larger hit areas, reduced visual weight
+  const isFeed = variant === 'feed';
+  const buttonSize = isFeed ? 'w-11 h-11' : 'w-10 h-10';
+  const iconSize = isFeed ? 18 : 18;
+  const textColor = isFeed 
+    ? 'text-slate-500 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-400' 
+    : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300';
+  const hoverBg = isFeed 
+    ? 'hover:bg-slate-50 dark:hover:bg-slate-800/50' 
+    : 'hover:bg-slate-100 dark:hover:bg-slate-800';
+  const transitionClass = isFeed 
+    ? 'transition-colors' 
+    : 'transition-all hover:scale-105 active:scale-95';
+
   return (
-    <div className={twMerge('flex items-center gap-0', className)}>
+    <div className={twMerge('flex items-center gap-1', className)}>
       {/* Hide ShareMenu in preview mode (preview IDs are invalid) */}
       {!isPreview && (
         <ShareMenu
@@ -64,10 +80,16 @@ export const CardActions: React.FC<CardActionsProps> = ({
       {onAddToCollection && (
         <button
           onClick={onAddToCollection}
-          className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-all hover:scale-105 active:scale-95"
+          className={twMerge(
+            buttonSize,
+            'flex items-center justify-center rounded-full',
+            hoverBg,
+            textColor,
+            transitionClass
+          )}
           title="Add to Collection"
         >
-          <FolderPlus size={18} />
+          <FolderPlus size={iconSize} />
         </button>
       )}
 
@@ -77,10 +99,16 @@ export const CardActions: React.FC<CardActionsProps> = ({
             e.stopPropagation();
             onToggleMenu(e);
           }}
-          className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-all hover:scale-105 active:scale-95"
+          className={twMerge(
+            buttonSize,
+            'flex items-center justify-center rounded-full',
+            hoverBg,
+            textColor,
+            transitionClass
+          )}
           title="More options"
         >
-          <MoreVertical size={18} />
+          <MoreVertical size={iconSize} />
         </button>
         {showMenu && (
           <div className="absolute right-0 bottom-full mb-1 w-40 bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-200 dark:border-slate-700 py-1 z-20 overflow-hidden">

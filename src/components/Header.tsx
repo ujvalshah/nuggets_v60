@@ -1,14 +1,18 @@
+// NOTE: Do not add multiple React imports in this file.
+// Consolidate all hooks into the single import below.
 import React, { useState, useRef, useEffect } from 'react';
 import { Sparkles, LogOut, Settings, Shield, LogIn, Layers, User as UserIcon, Globe, FileText, Lock, BookOpen, MessageSquare, Menu, X, LayoutGrid, Rows, Columns, List, Filter, ArrowUpDown, Maximize, Sun, Moon, Send, CheckCircle2, Search } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
-import { createPortal } from 'react-dom';
+import { createPortal } from 'react-dom'; // Still needed for NavigationDrawer
 import { Avatar } from './shared/Avatar';
 import { FilterPopover, FilterState } from './header/FilterPopover';
-import { storageService } from '@/services/storageService';
 import { useAuth } from '@/hooks/useAuth';
 import { useRequireAuth } from '@/hooks/useRequireAuth';
 import { useToast } from '@/hooks/useToast';
 import { adminFeedbackService } from '@/admin/services/adminFeedbackService';
+import { Z_INDEX } from '@/constants/zIndex';
+import { LAYOUT_CLASSES } from '@/constants/layout';
+import { DropdownPortal } from './UI/DropdownPortal';
 
 interface HeaderProps {
   isDark: boolean;
@@ -38,25 +42,29 @@ export const Header: React.FC<HeaderProps> = ({
   viewMode,
   setViewMode,
   selectedCategories,
-  setSelectedCategories,
   sortOrder,
   setSortOrder,
   isDark,
   toggleTheme
 }) => {
+  // Dropdown state - managed by DropdownPortal
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [isFilterPopoverOpen, setIsFilterPopoverOpen] = useState(false);
   const [isSortOpen, setIsSortOpen] = useState(false);
-  const [categories, setCategories] = useState<string[]>([]);
+  
+  // Filter state
   const [filterState, setFilterState] = useState<FilterState>({
     favorites: false,
     unread: false,
     formats: [],
     timeRange: 'all',
   });
-  const userMenuRef = useRef<HTMLDivElement>(null);
-  const sortRef = useRef<HTMLDivElement>(null);
-  const filterPopoverRef = useRef<HTMLDivElement>(null);
+  
+  // Dropdown anchor refs - DropdownPortal handles positioning
+  const avatarButtonRef = useRef<HTMLButtonElement>(null);
+  const filterButtonRef = useRef<HTMLButtonElement>(null);
+  const sortButtonRef = useRef<HTMLButtonElement>(null);
+  
   const location = useLocation();
   const { currentUser, isAuthenticated, openAuthModal, logout } = useAuth();
   const { withAuth } = useRequireAuth();
@@ -66,46 +74,8 @@ export const Header: React.FC<HeaderProps> = ({
   const isHome = currentPath === '/';
   const isCollections = currentPath === '/collections';
 
-  useEffect(() => {
-    storageService.getCategories().then(setCategories);
-  }, []);
-
-  const toggleCategory = (cat: string) => {
-    setSelectedCategories(selectedCategories.includes(cat) 
-      ? selectedCategories.filter(c => c !== cat) 
-      : [...selectedCategories, cat]);
-  };
-  
-  const clearCategories = () => setSelectedCategories([]);
-
-  // Removed auto-open behavior - CategoryFilterBar now handles category selection
-  // The old FilterScrollRow overlay should only open via explicit filter button click
-
-  // Close dropdowns when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      const target = event.target as Node;
-      const targetElement = target as HTMLElement;
-      
-      // Check if click is on a logout button - don't close menu in that case
-      // Logout buttons have data-logout-button attribute and handle their own closing
-      const isLogoutButton = targetElement.closest('button[data-logout-button="true"]');
-      
-      if (userMenuRef.current && !userMenuRef.current.contains(target) && !isLogoutButton) {
-        setIsUserMenuOpen(false);
-      }
-      if (sortRef.current && !sortRef.current.contains(target)) {
-        setIsSortOpen(false);
-      }
-      if (filterPopoverRef.current && !filterPopoverRef.current.contains(target)) {
-        setIsFilterPopoverOpen(false);
-      }
-    };
-    if (isUserMenuOpen || isSortOpen || isFilterPopoverOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [isUserMenuOpen, isSortOpen, isFilterPopoverOpen]);
+  // DropdownPortal handles positioning, scroll/resize updates, and click-outside detection
+  // Only keyboard shortcuts need manual handling
 
   const toggleFullScreen = () => {
     if (!document.fullscreenElement) {
@@ -139,137 +109,130 @@ export const Header: React.FC<HeaderProps> = ({
 
   return (
     <>
-      {/* Desktop Header */}
-      <header className="hidden lg:block fixed top-0 left-0 right-0 z-50 w-full h-16 bg-white/80 backdrop-blur-sm border-b border-gray-200 isolate">
-        <div className="grid grid-cols-[1fr_minmax(auto,600px)_1fr] items-center px-4 h-full max-w-full overflow-hidden">
-        
-        {/* Zone A: Left - Logo + Segmented Control */}
-        <div className="flex items-center gap-3 min-w-0 shrink-0">
-          {/* Menu Button */}
-          <button
-            onClick={() => setSidebarOpen(true)}
-            className="p-2 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors"
-            aria-label="Open Menu"
-          >
-            <Menu size={20} />
-          </button>
-
-          {/* Logo (Icon Only) */}
-          <Link to="/" className="flex items-center justify-center">
-            <div className="w-8 h-8 bg-yellow-400 rounded-lg flex items-center justify-center text-gray-900 font-bold text-lg shadow-sm">
-              N
-            </div>
-          </Link>
-
-          {/* Segmented Control */}
-          <nav 
-            className="bg-gray-100 rounded-lg p-1 flex gap-1 overflow-x-auto no-scrollbar-visual min-w-0 shrink-0" 
-            role="navigation"
-            aria-label="Main navigation"
-          >
-            <Link
-              to="/"
-              className={`px-3 py-1 text-sm font-medium rounded-md transition-all whitespace-nowrap flex-shrink-0 ${
-                isHome
-                  ? 'bg-white text-gray-900 shadow-sm'
-                  : 'text-gray-500 hover:text-gray-700'
-              }`}
-              aria-current={isHome ? 'page' : undefined}
+      {/* Power User Header - Full-bleed, unified with category bar */}
+      {/* No bottom border - category bar provides the visual separation */}
+      <header className={`fixed top-0 left-0 right-0 w-full bg-white ${LAYOUT_CLASSES.HEADER_HEIGHT}`} style={{ zIndex: Z_INDEX.HEADER }}>
+        <div className={`${LAYOUT_CLASSES.TOOLBAR_PADDING} h-full flex items-center gap-3`}>
+          {/* Left: Menu + Logo + Navigation */}
+          <div className="flex items-center gap-3 min-w-0 shrink-0">
+            <button
+              onClick={() => setSidebarOpen(true)}
+              className="p-2 text-gray-500 hover:text-gray-700 transition-colors"
+              aria-label="Open Menu"
             >
-              Home
+              <Menu size={16} />
+            </button>
+
+            <Link to="/" className="flex items-center justify-center shrink-0">
+              <div className="w-8 h-8 bg-yellow-400 rounded-lg flex items-center justify-center text-gray-900 font-bold text-sm">
+                N
+              </div>
             </Link>
-            <Link
-              to="/collections"
-              className={`px-3 py-1 text-sm font-medium rounded-md transition-all whitespace-nowrap flex-shrink-0 ${
-                isCollections
-                  ? 'bg-white text-gray-900 shadow-sm'
-                  : 'text-gray-500 hover:text-gray-700'
-              }`}
-              aria-current={isCollections ? 'page' : undefined}
+
+            <nav 
+              className="bg-gray-100 rounded-lg p-1 flex gap-1 overflow-x-auto no-scrollbar-visual min-w-0 shrink-0" 
+              role="navigation"
+              aria-label="Main navigation"
             >
-              Collections
-            </Link>
-            {isAuthenticated && (
               <Link
-                to={`/profile/${currentUser?.id || ''}`}
+                to="/"
                 className={`px-3 py-1 text-sm font-medium rounded-md transition-all whitespace-nowrap flex-shrink-0 ${
-                  currentPath.includes('/profile') || currentPath === '/myspace'
-                    ? 'bg-white text-gray-900 shadow-sm'
+                  isHome
+                    ? 'bg-white text-gray-900'
                     : 'text-gray-500 hover:text-gray-700'
                 }`}
-                aria-current={(currentPath.includes('/profile') || currentPath === '/myspace') ? 'page' : undefined}
+                aria-current={isHome ? 'page' : undefined}
               >
-                My Space
+                Home
               </Link>
-            )}
-            {isAdmin && (
-              <>
-                <Link
-                  to="/bulk-create"
-                  className={`px-3 py-1 text-sm font-medium rounded-md transition-all whitespace-nowrap flex-shrink-0 ${
-                    currentPath === '/bulk-create'
-                      ? 'bg-white text-gray-900 shadow-sm'
-                      : 'text-gray-500 hover:text-gray-700'
-                  }`}
-                  aria-current={currentPath === '/bulk-create' ? 'page' : undefined}
-                >
-                  Batch Import
-                </Link>
-                <Link
-                  to="/admin"
-                  className={`px-3 py-1 text-sm font-medium rounded-md transition-all whitespace-nowrap flex-shrink-0 ${
-                    currentPath.startsWith('/admin')
-                      ? 'bg-white text-gray-900 shadow-sm'
-                      : 'text-gray-500 hover:text-gray-700'
-                  }`}
-                  aria-current={currentPath.startsWith('/admin') ? 'page' : undefined}
-                >
-                  Admin
-                </Link>
-              </>
-            )}
-          </nav>
-        </div>
-
-        {/* Zone B: Center - Search Hero */}
-        <div className="flex items-center justify-center min-w-0 shrink">
-          <div className="relative w-full max-w-2xl min-w-0">
-            {/* Search Icon */}
-            <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none">
-              <Search size={16} />
-            </div>
-            
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value.trimStart())}
-              onBlur={(e) => setSearchQuery(e.target.value.trim())}
-              placeholder="Search..."
-              className="w-full h-10 pl-10 pr-24 text-sm bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-yellow-400 focus:bg-white focus:outline-none transition-all"
-              aria-label="Search"
-            />
-            
-            {/* Clear Button - positioned before clustered controls */}
-            {searchQuery && (
-              <button
-                onClick={() => setSearchQuery('')}
-                className="absolute right-[72px] top-1/2 -translate-y-1/2 p-1 rounded text-gray-400 hover:text-gray-600 transition-colors"
-                aria-label="Clear search"
+              <Link
+                to="/collections"
+                className={`px-3 py-1 text-sm font-medium rounded-md transition-all whitespace-nowrap flex-shrink-0 ${
+                  isCollections
+                    ? 'bg-white text-gray-900'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+                aria-current={isCollections ? 'page' : undefined}
               >
-                <X size={14} />
-              </button>
-            )}
+                Collections
+              </Link>
+              {isAuthenticated && (
+                <Link
+                  to={`/profile/${currentUser?.id || ''}`}
+                  className={`px-3 py-1 text-sm font-medium rounded-md transition-all whitespace-nowrap flex-shrink-0 ${
+                    currentPath.includes('/profile') || currentPath === '/myspace'
+                      ? 'bg-white text-gray-900'
+                      : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                  aria-current={(currentPath.includes('/profile') || currentPath === '/myspace') ? 'page' : undefined}
+                >
+                  My Space
+                </Link>
+              )}
+              {isAdmin && (
+                <>
+                  <Link
+                    to="/bulk-create"
+                    className={`px-3 py-1 text-sm font-medium rounded-md transition-all whitespace-nowrap flex-shrink-0 ${
+                      currentPath === '/bulk-create'
+                        ? 'bg-white text-gray-900'
+                        : 'text-gray-500 hover:text-gray-700'
+                    }`}
+                    aria-current={currentPath === '/bulk-create' ? 'page' : undefined}
+                  >
+                    Batch Import
+                  </Link>
+                  <Link
+                    to="/admin"
+                    className={`px-3 py-1 text-sm font-medium rounded-md transition-all whitespace-nowrap flex-shrink-0 ${
+                      currentPath.startsWith('/admin')
+                        ? 'bg-white text-gray-900'
+                        : 'text-gray-500 hover:text-gray-700'
+                    }`}
+                    aria-current={currentPath.startsWith('/admin') ? 'page' : undefined}
+                  >
+                    Admin
+                  </Link>
+                </>
+              )}
+            </nav>
+          </div>
 
-            {/* Clustered Controls: Filter/Sort + ⌘K Badge */}
-            <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
-              {/* Filter Button with Popover */}
-              <div className="relative" ref={filterPopoverRef}>
+          {/* Center: Search */}
+          <div className="flex-1 flex items-center justify-center min-w-0">
+            <div className="relative w-full max-w-2xl min-w-0">
+              <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none">
+                <Search size={16} />
+              </div>
+            
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value.trimStart())}
+                onBlur={(e) => setSearchQuery(e.target.value.trim())}
+                placeholder="Search..."
+                className="w-full h-9 pl-10 pr-28 text-sm font-medium bg-gray-50 border border-gray-100 rounded-lg focus:ring-2 focus:ring-yellow-400 focus:bg-white focus:outline-none transition-all"
+                aria-label="Search"
+              />
+            
+              {searchQuery && (
                 <button
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-20 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600 transition-colors"
+                  aria-label="Clear search"
+                >
+                  <X size={14} />
+                </button>
+              )}
+
+              <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
+                <button
+                  ref={filterButtonRef}
                   onClick={(e) => {
                     e.stopPropagation();
                     setIsFilterPopoverOpen(!isFilterPopoverOpen);
                   }}
-                  className={`p-1.5 rounded transition-all relative ${
+                  className={`p-2 rounded transition-all relative ${
                     isFilterPopoverOpen || 
                     selectedCategories.length > 0 || 
                     filterState.favorites || 
@@ -292,7 +255,6 @@ export const Header: React.FC<HeaderProps> = ({
                       ? "currentColor" 
                       : "none"
                   } />
-                  {/* Muted Filter Count Badge */}
                   {(selectedCategories.length > 0 || 
                     filterState.favorites || 
                     filterState.unread || 
@@ -307,455 +269,298 @@ export const Header: React.FC<HeaderProps> = ({
                     </span>
                   )}
                 </button>
-                {isFilterPopoverOpen && (
-                  <div className="absolute top-full right-0 mt-2 z-50">
-                    <FilterPopover
-                      filters={filterState}
-                      onChange={setFilterState}
-                      onClear={() => {
-                        setFilterState({
-                          favorites: false,
-                          unread: false,
-                          formats: [],
-                          timeRange: 'all',
-                        });
-                      }}
-                    />
-                  </div>
-                )}
-              </div>
 
-              {/* Sort Dropdown */}
-              <div className="relative" ref={sortRef}>
                 <button
+                  ref={sortButtonRef}
                   onClick={(e) => {
                     e.stopPropagation();
                     setIsSortOpen(!isSortOpen);
                   }}
-                  className="p-1.5 rounded text-gray-400 hover:text-gray-600 transition-colors"
+                  className="p-2 rounded text-gray-400 hover:text-gray-600 transition-colors"
                   aria-label="Sort"
                   title="Sort"
                 >
                   <ArrowUpDown size={16} />
                 </button>
-                {isSortOpen && (
-                  <div className="absolute top-full right-0 mt-2 w-36 bg-white rounded-lg shadow-lg border border-gray-200 overflow-hidden z-50">
-                    <button
-                      onClick={() => { setSortOrder('latest'); setIsSortOpen(false); }}
-                      className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-50 transition-colors ${
-                        sortOrder === 'latest' ? 'bg-gray-50 font-medium' : ''
-                      }`}
-                    >
-                      Latest
-                    </button>
-                    <button
-                      onClick={() => { setSortOrder('oldest'); setIsSortOpen(false); }}
-                      className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-50 transition-colors ${
-                        sortOrder === 'oldest' ? 'bg-gray-50 font-medium' : ''
-                      }`}
-                    >
-                      Oldest
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              {/* Keyboard Shortcut Badge - clustered with filter/sort */}
-              <div className="flex items-center gap-1 px-2 py-0.5 bg-white border border-gray-200 rounded text-xs text-gray-500 font-mono ml-0.5">
-                <kbd className="text-[10px]">⌘</kbd>
-                <kbd className="text-[10px]">K</kbd>
               </div>
             </div>
           </div>
-        </div>
 
-        {/* Zone C: Right - Profile & Utilities */}
-        <div className="flex items-center justify-end gap-2 min-w-0 shrink-0">
-          {/* Create Button */}
-          <button
-            onClick={withAuth(onCreateNugget)}
-            className="h-9 px-4 bg-white hover:bg-[#F7F7F7] text-[#202124] font-medium text-sm rounded-full shadow-sm border border-gray-200/50 transition-all active:scale-95"
-          >
-            <span className="flex items-center gap-1.5">
-              <Sparkles size={16} strokeWidth={2.5} className="text-yellow-500" fill="currentColor" />
-              Create
-            </span>
-          </button>
-
-          {/* View Mode Switcher */}
-          <div className="flex items-center bg-gray-100 p-1 rounded-lg border border-gray-200">
-            <button
-              onClick={() => setViewMode('grid')}
-              className={`p-1.5 rounded transition-all ${
-                viewMode === 'grid'
-                  ? 'bg-white text-gray-900 shadow-sm'
-                  : 'text-gray-500 hover:text-gray-700'
-              }`}
-              title="Grid View"
-            >
-              <LayoutGrid size={16} />
-            </button>
-            <button
-              onClick={() => setViewMode('feed')}
-              className={`p-1.5 rounded transition-all ${
-                viewMode === 'feed'
-                  ? 'bg-white text-gray-900 shadow-sm'
-                  : 'text-gray-500 hover:text-gray-700'
-              }`}
-              title="Feed View"
-            >
-              <Rows size={16} />
-            </button>
-            <button
-              onClick={() => setViewMode('masonry')}
-              className={`p-1.5 rounded transition-all ${
-                viewMode === 'masonry'
-                  ? 'bg-white text-gray-900 shadow-sm'
-                  : 'text-gray-500 hover:text-gray-700'
-              }`}
-              title="Masonry View"
-            >
-              <Columns size={16} />
-            </button>
-            <button
-              onClick={() => setViewMode('utility')}
-              className={`p-1.5 rounded transition-all ${
-                viewMode === 'utility'
-                  ? 'bg-white text-gray-900 shadow-sm'
-                  : 'text-gray-500 hover:text-gray-700'
-              }`}
-              title="Utility View"
-            >
-              <List size={16} />
-            </button>
-          </div>
-
-          {/* Fullscreen Toggle */}
-          <button
-            onClick={toggleFullScreen}
-            className="p-2 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors"
-            title="Toggle Fullscreen"
-            aria-label="Toggle Fullscreen"
-          >
-            <Maximize size={18} />
-          </button>
-
-          {/* Theme Toggle */}
-          <button
-            onClick={toggleTheme}
-            className="p-2 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors"
-            title="Toggle Theme"
-            aria-label="Toggle Theme"
-          >
-            {isDark ? <Sun size={18} /> : <Moon size={18} />}
-          </button>
-
-          {/* User Avatar Dropdown */}
-          <div className="relative" ref={userMenuRef}>
-            {isAuthenticated ? (
-              <>
-                <button
-                  onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
-                  className="p-0.5 rounded-full border-2 border-transparent hover:border-gray-300 transition-colors"
-                  aria-label="User menu"
-                >
-                  <Avatar 
-                    name={currentUser?.name || 'User'} 
-                    src={currentUser?.avatarUrl}
-                    size="md" 
-                  />
-                </button>
-
-                {isUserMenuOpen && (
-                  <div className="absolute top-full right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border border-gray-200 overflow-hidden z-50 animate-in slide-in-from-top-2 fade-in duration-200">
-                    {/* User Info */}
-                    <div className="px-4 py-3 border-b border-gray-100">
-                      <p className="text-sm font-medium text-gray-900 truncate">
-                        {currentUser?.name}
-                      </p>
-                      {currentUser?.email && (
-                        <p className="text-xs text-gray-500 truncate mt-0.5">
-                          {currentUser.email}
-                        </p>
-                      )}
-                    </div>
-
-                    {/* Menu Items */}
-                    <div className="py-1">
-                      <Link
-                        to={`/profile/${currentUser?.id || ''}`}
-                        onClick={() => setIsUserMenuOpen(false)}
-                        className="flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
-                      >
-                        <UserIcon size={16} />
-                        My Space
-                      </Link>
-                      <Link
-                        to="/account"
-                        onClick={() => setIsUserMenuOpen(false)}
-                        className="flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
-                      >
-                        <Settings size={16} />
-                        Settings
-                      </Link>
-                      {isAdmin && (
-                        <>
-                          <div className="h-px bg-gray-100 my-1" />
-                          <Link
-                            to="/admin"
-                            onClick={() => setIsUserMenuOpen(false)}
-                            className="flex items-center gap-3 px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50 transition-colors"
-                          >
-                            <Shield size={16} />
-                            Admin Panel
-                          </Link>
-                          <Link
-                            to="/bulk-create"
-                            onClick={() => setIsUserMenuOpen(false)}
-                            className="flex items-center gap-3 px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50 transition-colors"
-                          >
-                            <Layers size={16} />
-                            Batch Import
-                          </Link>
-                        </>
-                      )}
-                    </div>
-
-                    {/* Legal & Info */}
-                    <div className="border-t border-gray-100 py-1">
-                      <p className="px-4 py-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider">Legal & Info</p>
-                      <Link
-                        to="/about"
-                        onClick={() => setIsUserMenuOpen(false)}
-                        className="flex items-center gap-3 px-4 py-2 text-xs text-gray-600 hover:bg-gray-50 transition-colors"
-                      >
-                        <Globe size={14} />
-                        About Us
-                      </Link>
-                      <Link
-                        to="/terms"
-                        onClick={() => setIsUserMenuOpen(false)}
-                        className="flex items-center gap-3 px-4 py-2 text-xs text-gray-600 hover:bg-gray-50 transition-colors"
-                      >
-                        <FileText size={14} />
-                        Terms of Service
-                      </Link>
-                      <Link
-                        to="/privacy"
-                        onClick={() => setIsUserMenuOpen(false)}
-                        className="flex items-center gap-3 px-4 py-2 text-xs text-gray-600 hover:bg-gray-50 transition-colors"
-                      >
-                        <Lock size={14} />
-                        Privacy Policy
-                      </Link>
-                      <Link
-                        to="/guidelines"
-                        onClick={() => setIsUserMenuOpen(false)}
-                        className="flex items-center gap-3 px-4 py-2 text-xs text-gray-600 hover:bg-gray-50 transition-colors"
-                      >
-                        <BookOpen size={14} />
-                        Guidelines
-                      </Link>
-                      <Link
-                        to="/contact"
-                        onClick={() => setIsUserMenuOpen(false)}
-                        className="flex items-center gap-3 px-4 py-2 text-xs text-gray-600 hover:bg-gray-50 transition-colors"
-                      >
-                        <MessageSquare size={14} />
-                        Contact
-                      </Link>
-                    </div>
-
-                    {/* Logout */}
-                    <div className="border-t border-gray-100 py-1">
-                      <button
-                        data-logout-button="true"
-                        onMouseDown={(e) => {
-                          // Stop mousedown propagation to prevent click-outside handler from closing menu
-                          e.preventDefault();
-                          e.stopPropagation();
-                        }}
-                        onClick={async (e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          // Don't close menu immediately - let logout complete first
-                          // Menu will close naturally when isAuthenticated becomes false
-                          try {
-                            await logout();
-                            // Close menu after logout completes
-                            setIsUserMenuOpen(false);
-                          } catch (error) {
-                            console.error('Logout failed:', error);
-                            // Close menu even if logout fails
-                            setIsUserMenuOpen(false);
-                          }
-                        }}
-                        className="w-full flex items-center gap-3 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 transition-colors"
-                      >
-                        <LogOut size={16} />
-                        Log Out
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </>
-            ) : (
-              <button
-                onClick={() => openAuthModal('login')}
-                className="flex items-center gap-2 px-4 py-2 bg-gray-900 text-white font-medium text-sm rounded-lg hover:bg-gray-800 transition-colors"
-              >
-                <LogIn size={16} />
-                Sign In
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* Old Filter Overlay - Removed in favor of CategoryFilterBar */}
-        {/* CategoryFilterBar now handles category filtering via the YouTube-style bar */}
-      </div>
-      </header>
-
-      {/* Mobile Header */}
-      <header className="lg:hidden fixed top-0 left-0 right-0 z-50 w-full h-14 bg-white/80 backdrop-blur-sm border-b border-gray-200 isolate">
-        <div className="flex items-center justify-between px-4 h-full max-w-full overflow-hidden">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => setSidebarOpen(true)}
-              className="p-1.5 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors"
-              aria-label="Open Menu"
-            >
-              <Menu size={22} />
-            </button>
-            <Link to="/" className="flex items-center justify-center">
-              <div className="w-7 h-7 bg-yellow-400 rounded-lg flex items-center justify-center text-gray-900 font-bold text-base shadow-sm">
-                N
-              </div>
-            </Link>
-          </div>
-          
-          <div className="flex items-center gap-2">
+          {/* Right: Tools Cluster */}
+          <div className="flex items-center justify-end gap-2 min-w-0 shrink-0">
             <button
               onClick={withAuth(onCreateNugget)}
-              className="p-2 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors"
-              aria-label="Create"
+              className="px-3 py-1 text-sm font-medium text-gray-700 hover:text-gray-900 transition-colors"
             >
-              <Sparkles size={20} className="text-yellow-500" fill="currentColor" />
+              <Sparkles size={16} strokeWidth={2.5} className="text-yellow-500" fill="currentColor" />
             </button>
+
+            <div className="flex items-center bg-gray-100 p-1 rounded-lg border border-gray-100">
+              <button
+                onClick={() => setViewMode('grid')}
+                className={`p-2 rounded transition-all ${
+                  viewMode === 'grid'
+                    ? 'bg-white text-gray-900'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+                title="Grid View"
+              >
+                <LayoutGrid size={16} />
+              </button>
+              <button
+                onClick={() => setViewMode('feed')}
+                className={`p-2 rounded transition-all ${
+                  viewMode === 'feed'
+                    ? 'bg-white text-gray-900'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+                title="Feed View"
+              >
+                <Rows size={16} />
+              </button>
+              <button
+                onClick={() => setViewMode('masonry')}
+                className={`p-2 rounded transition-all ${
+                  viewMode === 'masonry'
+                    ? 'bg-white text-gray-900'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+                title="Masonry View"
+              >
+                <Columns size={16} />
+              </button>
+              <button
+                onClick={() => setViewMode('utility')}
+                className={`p-2 rounded transition-all ${
+                  viewMode === 'utility'
+                    ? 'bg-white text-gray-900'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+                title="Utility View"
+              >
+                <List size={16} />
+              </button>
+            </div>
+
+            <button
+              onClick={toggleFullScreen}
+              className="p-2 text-gray-500 hover:text-gray-700 transition-colors"
+              title="Toggle Fullscreen"
+              aria-label="Toggle Fullscreen"
+            >
+              <Maximize size={16} />
+            </button>
+
             <button
               onClick={toggleTheme}
-              className="p-2 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+              className="p-2 text-gray-500 hover:text-gray-700 transition-colors"
+              title="Toggle Theme"
               aria-label="Toggle Theme"
             >
-              {isDark ? <Sun size={18} /> : <Moon size={18} />}
+              {isDark ? <Sun size={16} /> : <Moon size={16} />}
             </button>
+
             {isAuthenticated ? (
-              <div className="relative" ref={userMenuRef}>
-                <button
-                  onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
-                  className="p-0.5 rounded-full border-2 border-transparent hover:border-gray-300 transition-colors"
-                  aria-label="User menu"
-                >
-                  <Avatar 
-                    name={currentUser?.name || 'User'} 
-                    src={currentUser?.avatarUrl}
-                    size="sm" 
-                  />
-                </button>
-                {isUserMenuOpen && (
-                  <div className="absolute top-full right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border border-gray-200 overflow-hidden z-50">
-                    <div className="px-4 py-3 border-b border-gray-100">
-                      <p className="text-sm font-medium text-gray-900 truncate">
-                        {currentUser?.name}
-                      </p>
-                      {currentUser?.email && (
-                        <p className="text-xs text-gray-500 truncate mt-0.5">
-                          {currentUser.email}
-                        </p>
-                      )}
-                    </div>
-                    <div className="py-1">
-                      <Link
-                        to={`/profile/${currentUser?.id || ''}`}
-                        onClick={() => setIsUserMenuOpen(false)}
-                        className="flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
-                      >
-                        <UserIcon size={16} />
-                        My Space
-                      </Link>
-                      <Link
-                        to="/account"
-                        onClick={() => setIsUserMenuOpen(false)}
-                        className="flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
-                      >
-                        <Settings size={16} />
-                        Settings
-                      </Link>
-                      {isAdmin && (
-                        <>
-                          <div className="h-px bg-gray-100 my-1" />
-                          <Link
-                            to="/admin"
-                            onClick={() => setIsUserMenuOpen(false)}
-                            className="flex items-center gap-3 px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50 transition-colors"
-                          >
-                            <Shield size={16} />
-                            Admin Panel
-                          </Link>
-                          <Link
-                            to="/bulk-create"
-                            onClick={() => setIsUserMenuOpen(false)}
-                            className="flex items-center gap-3 px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50 transition-colors"
-                          >
-                            <Layers size={16} />
-                            Batch Import
-                          </Link>
-                        </>
-                      )}
-                    </div>
-                    <div className="border-t border-gray-100 py-1">
-                      <button
-                        data-logout-button="true"
-                        onMouseDown={(e) => {
-                          // Stop mousedown propagation to prevent click-outside handler from closing menu
-                          e.preventDefault();
-                          e.stopPropagation();
-                        }}
-                        onClick={async (e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          // Don't close menu immediately - let logout complete first
-                          // Menu will close naturally when isAuthenticated becomes false
-                          try {
-                            await logout();
-                            // Close menu after logout completes
-                            setIsUserMenuOpen(false);
-                          } catch (error) {
-                            console.error('Logout failed:', error);
-                            // Close menu even if logout fails
-                            setIsUserMenuOpen(false);
-                          }
-                        }}
-                        className="w-full flex items-center gap-3 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 transition-colors"
-                      >
-                        <LogOut size={16} />
-                        Log Out
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
+              <button
+                ref={avatarButtonRef}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsUserMenuOpen(!isUserMenuOpen);
+                }}
+                className="p-0.5 rounded-full border-2 border-transparent hover:border-gray-300 transition-colors"
+                aria-label="User menu"
+              >
+                <Avatar 
+                  name={currentUser?.name || 'User'} 
+                  src={currentUser?.avatarUrl}
+                  size="md"
+                  className="w-8 h-8"
+                />
+              </button>
             ) : (
               <button
                 onClick={() => openAuthModal('login')}
-                className="px-3 py-1.5 bg-gray-900 text-white font-medium text-xs rounded-lg hover:bg-gray-800 transition-colors"
+                className="p-2 text-sm font-medium bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors"
               >
-                Sign In
+                <LogIn size={16} />
               </button>
             )}
           </div>
         </div>
       </header>
+
+      {/* Avatar Menu - uses DropdownPortal for positioning and click-outside */}
+      <DropdownPortal
+        isOpen={isUserMenuOpen}
+        anchorRef={avatarButtonRef}
+        onClickOutside={() => setIsUserMenuOpen(false)}
+        className="w-56 bg-white rounded-lg shadow-lg border border-gray-200 overflow-hidden"
+      >
+        {/* User Info */}
+        <div className="px-4 py-3 border-b border-gray-100">
+          <p className="text-sm font-medium text-gray-900 truncate">
+            {currentUser?.name}
+          </p>
+          {currentUser?.email && (
+            <p className="text-xs text-gray-500 truncate mt-0.5">
+              {currentUser.email}
+            </p>
+          )}
+        </div>
+
+        {/* Menu Items */}
+        <div className="py-1">
+          <Link
+            to={`/profile/${currentUser?.id || ''}`}
+            onClick={() => setIsUserMenuOpen(false)}
+            className="flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+          >
+            <UserIcon size={16} />
+            My Space
+          </Link>
+          <Link
+            to="/account"
+            onClick={() => setIsUserMenuOpen(false)}
+            className="flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+          >
+            <Settings size={16} />
+            Settings
+          </Link>
+          {isAdmin && (
+            <>
+              <div className="h-px bg-gray-100 my-1" />
+              <Link
+                to="/admin"
+                onClick={() => setIsUserMenuOpen(false)}
+                className="flex items-center gap-3 px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50 transition-colors"
+              >
+                <Shield size={16} />
+                Admin Panel
+              </Link>
+              <Link
+                to="/bulk-create"
+                onClick={() => setIsUserMenuOpen(false)}
+                className="flex items-center gap-3 px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50 transition-colors"
+              >
+                <Layers size={16} />
+                Batch Import
+              </Link>
+            </>
+          )}
+        </div>
+
+        {/* Legal & Info */}
+        <div className="border-t border-gray-100 py-1">
+          <p className="px-4 py-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider">Legal & Info</p>
+          <Link
+            to="/about"
+            onClick={() => setIsUserMenuOpen(false)}
+            className="flex items-center gap-3 px-4 py-2 text-xs text-gray-600 hover:bg-gray-50 transition-colors"
+          >
+            <Globe size={14} />
+            About Us
+          </Link>
+          <Link
+            to="/terms"
+            onClick={() => setIsUserMenuOpen(false)}
+            className="flex items-center gap-3 px-4 py-2 text-xs text-gray-600 hover:bg-gray-50 transition-colors"
+          >
+            <FileText size={14} />
+            Terms of Service
+          </Link>
+          <Link
+            to="/privacy"
+            onClick={() => setIsUserMenuOpen(false)}
+            className="flex items-center gap-3 px-4 py-2 text-xs text-gray-600 hover:bg-gray-50 transition-colors"
+          >
+            <Lock size={14} />
+            Privacy Policy
+          </Link>
+          <Link
+            to="/guidelines"
+            onClick={() => setIsUserMenuOpen(false)}
+            className="flex items-center gap-3 px-4 py-2 text-xs text-gray-600 hover:bg-gray-50 transition-colors"
+          >
+            <BookOpen size={14} />
+            Guidelines
+          </Link>
+          <Link
+            to="/contact"
+            onClick={() => setIsUserMenuOpen(false)}
+            className="flex items-center gap-3 px-4 py-2 text-xs text-gray-600 hover:bg-gray-50 transition-colors"
+          >
+            <MessageSquare size={14} />
+            Contact
+          </Link>
+        </div>
+
+        {/* Logout */}
+        <div className="border-t border-gray-100 py-1">
+          <button
+            onClick={async (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              try {
+                await logout();
+                setIsUserMenuOpen(false);
+              } catch (error) {
+                console.error('Logout failed:', error);
+                setIsUserMenuOpen(false);
+              }
+            }}
+            className="w-full flex items-center gap-3 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 transition-colors"
+          >
+            <LogOut size={16} />
+            Log Out
+          </button>
+        </div>
+      </DropdownPortal>
+
+      {/* Filter Popover - uses DropdownPortal */}
+      <DropdownPortal
+        isOpen={isFilterPopoverOpen}
+        anchorRef={filterButtonRef}
+        onClickOutside={() => setIsFilterPopoverOpen(false)}
+        className="bg-white rounded-xl shadow-xl border border-gray-100"
+      >
+        <FilterPopover
+          filters={filterState}
+          onChange={setFilterState}
+          onClear={() => {
+            setFilterState({
+              favorites: false,
+              unread: false,
+              formats: [],
+              timeRange: 'all',
+            });
+          }}
+        />
+      </DropdownPortal>
+
+      {/* Sort Dropdown - uses DropdownPortal */}
+      <DropdownPortal
+        isOpen={isSortOpen}
+        anchorRef={sortButtonRef}
+        onClickOutside={() => setIsSortOpen(false)}
+        className="w-36 bg-white rounded-lg border border-gray-100 overflow-hidden"
+      >
+        <button
+          onClick={() => { setSortOrder('latest'); setIsSortOpen(false); }}
+          className={`w-full text-left px-4 py-2 text-sm font-medium hover:bg-gray-50 transition-colors ${
+            sortOrder === 'latest' ? 'bg-gray-50' : ''
+          }`}
+        >
+          Latest
+        </button>
+        <button
+          onClick={() => { setSortOrder('oldest'); setIsSortOpen(false); }}
+          className={`w-full text-left px-4 py-2 text-sm font-medium hover:bg-gray-50 transition-colors ${
+            sortOrder === 'oldest' ? 'bg-gray-50' : ''
+          }`}
+        >
+          Oldest
+        </button>
+      </DropdownPortal>
 
       <NavigationDrawer 
         isOpen={sidebarOpen} 
@@ -884,8 +689,13 @@ const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
 }) => {
   if (!isOpen) return null;
 
+  // IMPORTANT:
+  // Portals must remain OUTSIDE layout JSX.
+  // Never access `document` at module scope.
+  if (typeof document === "undefined") return null;
+
   return createPortal(
-    <div className="fixed inset-0 z-[100]">
+    <div className="fixed inset-0" style={{ zIndex: Z_INDEX.HEADER_OVERLAY }}>
       <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm animate-in fade-in" onClick={onClose} />
       <div className="absolute top-0 bottom-0 left-0 w-[280px] bg-white shadow-2xl flex flex-col animate-in slide-in-from-left duration-300 border-r border-gray-200">
         

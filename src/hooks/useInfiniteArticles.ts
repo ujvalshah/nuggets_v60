@@ -1,4 +1,5 @@
-import { useInfiniteQuery, UseInfiniteQueryResult } from '@tanstack/react-query';
+import { useInfiniteQuery } from '@tanstack/react-query';
+import { useMemo } from 'react';
 import { articleService, PaginatedArticlesResponse } from '@/services/articleService';
 import { FilterState, SortOrder, Article } from '@/types';
 
@@ -69,20 +70,26 @@ export const useInfiniteArticles = ({
     placeholderData: (previousData) => previousData,
   });
 
-  // Accumulate all pages into a single articles array
-  const articles = query.data?.pages.flatMap((page) => page.data) || [];
+  // Accumulate all pages into a single articles array (memoized)
+  const articles = useMemo(() => {
+    return query.data?.pages.flatMap((page) => page.data) || [];
+  }, [query.data?.pages]);
 
   // Filter "Today" client-side (backend doesn't support date filtering)
-  const filteredArticles = activeCategory === 'Today'
-    ? articles.filter((article) => {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        const todayEnd = new Date(today);
-        todayEnd.setHours(23, 59, 59, 999);
-        const publishedDate = new Date(article.publishedAt);
-        return publishedDate >= today && publishedDate <= todayEnd;
-      })
-    : articles;
+  // Memoized to prevent unnecessary re-renders
+  const filteredArticles = useMemo(() => {
+    if (activeCategory !== 'Today') return articles;
+    
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayEnd = new Date(today);
+    todayEnd.setHours(23, 59, 59, 999);
+    
+    return articles.filter((article) => {
+      const publishedDate = new Date(article.publishedAt);
+      return publishedDate >= today && publishedDate <= todayEnd;
+    });
+  }, [articles, activeCategory]);
 
   return {
     articles: filteredArticles,
