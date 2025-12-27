@@ -17,12 +17,15 @@ const previewMetadataSchema = z.object({
   authorName: z.string().optional(),
   publishDate: z.string().optional(),
   mediaType: z.string().optional(),
+  // YouTube title persistence fields
+  titleSource: z.string().optional(), // e.g., "youtube-oembed"
+  titleFetchedAt: z.string().optional(), // ISO timestamp
 }).optional();
 
-// Schema for media object
+// Schema for media object (all fields optional for partial updates)
 const mediaSchema = z.object({
-  type: z.string(),
-  url: z.string(),
+  type: z.string().optional(),
+  url: z.string().optional(),
   thumbnail_url: z.string().optional(),
   aspect_ratio: z.string().optional(),
   filename: z.string().optional(),
@@ -57,6 +60,11 @@ const baseArticleSchema = z.object({
   images: z.array(z.string()).optional(),
   documents: documentSchema,
   source_type: z.string().optional(),
+  // Cloudinary media tracking (array of MongoDB Media ObjectIds)
+  mediaIds: z.array(z.string()).optional(),
+  // Legacy fields
+  video: z.string().optional(),
+  themes: z.array(z.string()).optional(),
   // Display author (for aliases)
   displayAuthor: z.object({
     name: z.string(),
@@ -66,7 +74,8 @@ const baseArticleSchema = z.object({
 
 // Create schema with refinement: at least one of content/media/images/documents must be present
 // AND at least one tag must be present (tags are mandatory)
-export const createArticleSchema = baseArticleSchema.refine(
+// Use .strict() to reject unknown fields
+export const createArticleSchema = baseArticleSchema.strict().refine(
   (data) => {
     // At least one of: content, media, images, or documents must be present
     const hasContent = data.content && data.content.trim().length > 0;
@@ -92,16 +101,16 @@ export const createArticleSchema = baseArticleSchema.refine(
   }
 );
 
-export const updateArticleSchema = baseArticleSchema.partial();
+export const updateArticleSchema = baseArticleSchema.partial().strict();
 
 export const createCollectionSchema = z.object({
   name: z.string().min(1, 'Name is required').max(100, 'Name too long'),
   description: z.string().max(500, 'Description too long').optional(),
   creatorId: z.string().min(1, 'Creator ID is required'),
   type: z.enum(['private', 'public']).default('public')
-});
+}).strict();
 
-export const updateCollectionSchema = createCollectionSchema.partial();
+export const updateCollectionSchema = createCollectionSchema.partial().strict();
 
 export const updateUserSchema = z.object({
   name: z.string().min(1).optional(),
@@ -140,16 +149,16 @@ export const updateUserSchema = z.object({
   company: z.string().optional(),
   twitter: z.string().optional(),
   linkedin: z.string().optional(),
-});
+}).strict();
 
 export const addEntrySchema = z.object({
   articleId: z.string().min(1, 'Article ID is required'),
   userId: z.string().min(1, 'User ID is required')
-});
+}).strict();
 
 export const flagEntrySchema = z.object({
   userId: z.string().min(1, 'User ID is required')
-});
+}).strict();
 
 /**
  * Validation middleware factory

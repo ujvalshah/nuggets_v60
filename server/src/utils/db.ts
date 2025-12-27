@@ -1,4 +1,7 @@
 import mongoose from 'mongoose';
+import { getLogger } from './logger.js';
+
+const SLOW_QUERY_THRESHOLD_MS = 500; // Log queries slower than 500ms
 
 /**
  * Connect to MongoDB database
@@ -35,25 +38,76 @@ export async function connectDB(): Promise<void> {
 
   try {
     await mongoose.connect(connectionString);
-    console.log('[DB] ✓ Connected to MongoDB');
+    const logger = getLogger();
+    logger.info({ msg: 'Database connected', database: 'MongoDB' });
+    
+    // Database Performance Monitoring
+    // Hook into mongoose queries to detect slow operations
+    mongoose.plugin((schema: mongoose.Schema) => {
+      schema.pre(['find', 'findOne', 'findOneAndUpdate', 'findOneAndDelete', 'count', 'countDocuments', 'aggregate'], function() {
+        const startTime = Date.now();
+        const collectionName = this.model?.collection?.name || 'unknown';
+        const operation = this.op || 'unknown';
+        
+        // Store start time on query
+        (this as any)._queryStartTime = startTime;
+        (this as any)._queryCollection = collectionName;
+        (this as any)._queryOperation = operation;
+      });
+      
+      schema.post(['find', 'findOne', 'findOneAndUpdate', 'findOneAndDelete', 'count', 'countDocuments', 'aggregate'], function() {
+        const startTime = (this as any)._queryStartTime;
+        if (startTime) {
+          const duration = Date.now() - startTime;
+          const collectionName = (this as any)._queryCollection || 'unknown';
+          const operation = (this as any)._queryOperation || 'unknown';
+          
+          if (duration >= SLOW_QUERY_THRESHOLD_MS) {
+            const logger = getLogger();
+            logger.warn({
+              msg: 'Slow database query detected',
+              collection: collectionName,
+              operation,
+              duration: `${duration}ms`,
+            });
+          }
+        }
+      });
+    });
     
     // Handle connection events
     mongoose.connection.on('error', (err) => {
-      console.error('[DB] MongoDB connection error:', err);
+      const logger = getLogger();
+      logger.error({
+        msg: 'MongoDB connection error',
+        error: {
+          message: err.message,
+          stack: err.stack,
+        },
+      });
     });
     
     mongoose.connection.on('disconnected', () => {
-      console.warn('[DB] MongoDB disconnected');
+      const logger = getLogger();
+      logger.warn({ msg: 'MongoDB disconnected' });
     });
     
     // Graceful shutdown
     process.on('SIGINT', async () => {
       await mongoose.connection.close();
-      console.log('[DB] MongoDB connection closed through app termination');
+      const logger = getLogger();
+      logger.info({ msg: 'MongoDB connection closed through app termination' });
       process.exit(0);
     });
   } catch (error: any) {
-    console.error('[DB] Failed to connect to MongoDB:', error.message);
+    const logger = getLogger();
+    logger.error({
+      msg: 'Failed to connect to MongoDB',
+      error: {
+        message: error.message,
+        stack: error.stack,
+      },
+    });
     throw error;
   }
 }
@@ -126,11 +180,12 @@ function transformArticle(doc: any): any {
     video: rest.video,
     documents: rest.documents || [],
     themes: rest.themes || [],
-      engagement: rest.engagement,
-      source_type: rest.source_type,
-      created_at: rest.created_at,
-      updated_at: rest.updated_at,
-      displayAuthor: rest.displayAuthor
+    mediaIds: rest.mediaIds || [],
+    engagement: rest.engagement,
+    source_type: rest.source_type,
+    created_at: rest.created_at,
+    updated_at: rest.updated_at,
+    displayAuthor: rest.displayAuthor
     };
     
     return article;

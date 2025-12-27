@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import jwt from 'jsonwebtoken';
+import { verifyToken } from '../utils/jwt.js';
 import { fetchUrlMetadata } from '../services/metadata.js';
 
 /**
@@ -54,10 +54,9 @@ export async function unfurlUrl(req: Request, res: Response) {
     if (authHeader) {
       try {
         const token = authHeader.split(' ')[1]; // Bearer TOKEN
-        const JWT_SECRET = process.env.JWT_SECRET;
         
-        if (token && JWT_SECRET) {
-          const decoded = jwt.verify(token, JWT_SECRET) as { userId: string; email: string; role: string };
+        if (token) {
+          const decoded = verifyToken(token);
           isAdmin = decoded.role === 'admin';
         }
       } catch {

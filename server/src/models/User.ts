@@ -147,10 +147,17 @@ const UserSchema = new Schema<IUser>({
   timestamps: true // Auto-manage createdAt / updatedAt
 });
 
-// Note: Indexes are automatically created by the 'unique: true' constraints
-// on auth.email and profile.username fields above, so no explicit indexes needed here
+// Explicit indexes for performance
+// Unique indexes are automatically created by 'unique: true' constraints above
+// Additional indexes for common query patterns
+UserSchema.index({ 'auth.email': 1 }); // Already unique, but explicit for clarity
+UserSchema.index({ 'profile.username': 1 }); // Already unique, but explicit for clarity
+UserSchema.index({ role: 1 }); // For admin queries
+UserSchema.index({ 'appState.lastLoginAt': -1 }); // For sorting by last login
 
 export const User = mongoose.model<IUser>('User', UserSchema);
+
+
 
 
 

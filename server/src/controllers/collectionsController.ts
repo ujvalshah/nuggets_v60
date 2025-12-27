@@ -13,37 +13,43 @@ export const getCollections = async (req: Request, res: Response) => {
     const creatorId = req.query.creatorId as string | undefined;
     const includeCount = req.query.includeCount === 'true';
     
+    // Pagination parameters (MANDATORY - no unbounded lists)
+    const page = Math.max(parseInt(req.query.page as string) || 1, 1);
+    const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 25, 1), 100);
+    const skip = (page - 1) * limit;
+    
     // Build filters using shared query helper
     const filters: CollectionQueryFilters = {};
     if (type) filters.type = type;
     if (searchQuery) filters.searchQuery = searchQuery;
     if (creatorId) filters.creatorId = creatorId;
     
-    // Get collections using shared query function
-    // If no type specified, default to all (for admin), otherwise use filters
-    let collections;
-    if (type) {
-      // Use shared query helper for filtered queries
-      collections = await getCommunityCollections(filters, { sort: { createdAt: -1 } });
-    } else {
-      // Admin view: get all collections, but still apply search if provided
-      if (searchQuery) {
-        const searchRegex = new RegExp(searchQuery, 'i');
-        collections = await Collection.find({
-          $or: [
-            { name: searchRegex },
-            { description: searchRegex }
-          ]
-        }).sort({ createdAt: -1 });
-      } else {
-        collections = await Collection.find().sort({ createdAt: -1 });
-      }
+    // Build MongoDB query
+    const query: any = {};
+    if (type) query.type = type;
+    if (creatorId) query.creatorId = creatorId;
+    if (searchQuery) {
+      const searchRegex = new RegExp(searchQuery, 'i');
+      query.$or = [
+        { name: searchRegex },
+        { description: searchRegex }
+      ];
     }
+    
+    // Get collections with pagination
+    const [collections, total] = await Promise.all([
+      Collection.find(query)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      Collection.countDocuments(query)
+    ]);
     
     // Validate entries against existing articles and set validEntriesCount
     // This ensures counts are accurate even if entries contain stale references
     const allArticleIds = new Set(
-      (await Article.find({}, { _id: 1 })).map(a => a._id.toString())
+      (await Article.find({}, { _id: 1 }).lean()).map(a => a._id.toString())
     );
     
     // Process collections to validate entries and set validEntriesCount
@@ -63,30 +69,29 @@ export const getCollections = async (req: Request, res: Response) => {
             collection.validEntriesCount !== validCount) {
           
           // Update collection with validated entries and count
+          await Collection.findByIdAndUpdate(collection._id, {
+            entries: validEntries,
+            validEntriesCount: validCount,
+            updatedAt: new Date().toISOString()
+          });
+          
+          // Update local object for response
           collection.entries = validEntries;
           collection.validEntriesCount = validCount;
-          collection.updatedAt = new Date().toISOString();
-          await collection.save();
         }
         
         return collection;
       })
     );
     
-    // If includeCount is requested, return count along with collections
-    if (includeCount) {
-      const count = type === 'public' 
-        ? await getCommunityCollectionsCount({ type: 'public' })
-        : await Collection.countDocuments();
-      
-      res.json({
-        data: normalizeDocs(validatedCollections),
-        count: count,
-        total: validatedCollections.length // Current filtered result count
-      });
-    } else {
-      res.json(normalizeDocs(validatedCollections));
-    }
+    // Return paginated response
+    res.json({
+      data: normalizeDocs(validatedCollections),
+      total,
+      page,
+      limit,
+      hasMore: page * limit < total
+    });
   } catch (error: any) {
     console.error('[Collections] Get collections error:', error);
     res.status(500).json({ message: 'Internal server error' });
@@ -95,12 +100,12 @@ export const getCollections = async (req: Request, res: Response) => {
 
 export const getCollectionById = async (req: Request, res: Response) => {
   try {
-    const collection = await Collection.findById(req.params.id);
+    const collection = await Collection.findById(req.params.id).lean();
     if (!collection) return res.status(404).json({ message: 'Collection not found' });
     
     // Validate entries against existing articles and set validEntriesCount
     const allArticleIds = new Set(
-      (await Article.find({}, { _id: 1 })).map(a => a._id.toString())
+      (await Article.find({}, { _id: 1 }).lean()).map(a => a._id.toString())
     );
     
     // Filter out entries referencing non-existent articles
@@ -117,10 +122,15 @@ export const getCollectionById = async (req: Request, res: Response) => {
         collection.validEntriesCount !== validCount) {
       
       // Update collection with validated entries and count
+      await Collection.findByIdAndUpdate(req.params.id, {
+        entries: validEntries,
+        validEntriesCount: validCount,
+        updatedAt: new Date().toISOString()
+      });
+      
+      // Update local object for response
       collection.entries = validEntries;
       collection.validEntriesCount = validCount;
-      collection.updatedAt = new Date().toISOString();
-      await collection.save();
     }
     
     res.json(normalizeDoc(collection));

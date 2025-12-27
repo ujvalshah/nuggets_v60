@@ -20,7 +20,16 @@ const LegalPageSchema = new Schema<ILegalPage>({
   timestamps: false
 });
 
+// Explicit indexes for performance
+LegalPageSchema.index({ slug: 1 }); // Already unique, but explicit for clarity
+LegalPageSchema.index({ id: 1 }); // Already unique, but explicit for clarity
+LegalPageSchema.index({ isEnabled: 1 }); // For filtering enabled pages
+
 export const LegalPage = mongoose.model<ILegalPage>('LegalPage', LegalPageSchema);
+
+
+
+
 
 
 

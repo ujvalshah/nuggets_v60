@@ -1,11 +1,18 @@
 import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
 import { User } from '../models/User.js';
 import { normalizeDoc } from '../utils/db.js';
+import { generateToken } from '../utils/jwt.js';
 import { z } from 'zod';
-
-const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret-change-in-production';
+import {
+  sendErrorResponse,
+  sendValidationError,
+  sendUnauthorizedError,
+  sendNotFoundError,
+  sendConflictError,
+  sendInternalError,
+  handleDuplicateKeyError
+} from '../utils/errorResponse.js';
 
 // Validation Schemas
 const loginSchema = z.object({
@@ -62,14 +69,8 @@ const signupSchema = z.object({
   country: z.string().optional(),
   gender: z.string().optional(),
   phoneNumber: z.string().optional()
-});
+}).strict();
 
-/**
- * Generate JWT token for user
- */
-function generateToken(userId: string): string {
-  return jwt.sign({ userId }, JWT_SECRET, { expiresIn: '7d' });
-}
 
 /**
  * POST /api/auth/login
@@ -81,10 +82,16 @@ export const login = async (req: Request, res: Response) => {
     const validationResult = loginSchema.safeParse(req.body);
     if (!validationResult.success) {
       const formattedMessage = formatValidationErrors(validationResult.error.errors);
-      return res.status(400).json({ 
-        message: formattedMessage || 'Validation failed. Please check your input and try again.',
-        errors: validationResult.error.errors 
-      });
+      const errors = validationResult.error.errors.map(err => ({
+        path: err.path,
+        message: err.message,
+        code: err.code
+      }));
+      return sendValidationError(
+        res,
+        formattedMessage || 'Validation failed. Please check your input and try again.',
+        errors
+      );
     }
 
     const { email, password } = validationResult.data;
@@ -94,35 +101,33 @@ export const login = async (req: Request, res: Response) => {
       .select('+password');
     
     if (!user) {
-      return res.status(401).json({ message: 'Invalid email or password' });
+      return sendUnauthorizedError(res, 'Invalid email or password');
     }
 
     // Check password (if user has one - social auth users may not)
     if (user.password) {
       const isPasswordValid = await bcrypt.compare(password, user.password);
       if (!isPasswordValid) {
-        return res.status(401).json({ message: 'Invalid email or password' });
+        return sendUnauthorizedError(res, 'Invalid email or password');
       }
     } else {
       // User exists but has no password (social auth only)
-      return res.status(401).json({ 
-        message: 'This account was created with social login. Please use social login to continue.' 
-      });
+      return sendUnauthorizedError(res, 'This account was created with social login. Please use social login to continue.');
     }
 
     // Update last login time
     user.appState.lastLoginAt = new Date().toISOString();
     await user.save();
 
-    // Generate token
-    const token = generateToken(user._id.toString());
+    // Generate token with userId and role
+    const token = generateToken(user._id.toString(), user.role, user.auth.email);
 
     // Return user data (without password) and token
     const userData = normalizeDoc(user);
     res.json({ user: userData, token });
   } catch (error: any) {
     console.error('[Auth] Login error:', error);
-    res.status(500).json({ message: 'Internal server error' });
+    sendInternalError(res);
   }
 };
 
@@ -142,10 +147,16 @@ export const signup = async (req: Request, res: Response) => {
     const validationResult = signupSchema.safeParse(req.body);
     if (!validationResult.success) {
       const formattedMessage = formatValidationErrors(validationResult.error.errors);
-      return res.status(400).json({ 
-        message: formattedMessage || 'Validation failed. Please check your input and try again.',
-        errors: validationResult.error.errors 
-      });
+      const errors = validationResult.error.errors.map(err => ({
+        path: err.path,
+        message: err.message,
+        code: err.code
+      }));
+      return sendValidationError(
+        res,
+        formattedMessage || 'Validation failed. Please check your input and try again.',
+        errors
+      );
     }
 
     const data = validationResult.data;
@@ -184,10 +195,7 @@ export const signup = async (req: Request, res: Response) => {
     }
     
     if (existingUser) {
-      return res.status(409).json({ 
-        message: 'Email already registered',
-        code: 'EMAIL_ALREADY_EXISTS'
-      });
+      return sendConflictError(res, 'Email already registered', 'EMAIL_ALREADY_EXISTS');
     }
 
     // Check if username already exists (case-insensitive)
@@ -203,10 +211,7 @@ export const signup = async (req: Request, res: Response) => {
         requestedUsername: normalizedUsername
       });
       
-      return res.status(409).json({ 
-        message: 'Username already taken',
-        code: 'USERNAME_ALREADY_EXISTS'
-      });
+      return sendConflictError(res, 'Username already taken', 'USERNAME_ALREADY_EXISTS');
     }
 
     // Hash password if provided
@@ -259,8 +264,8 @@ export const signup = async (req: Request, res: Response) => {
 
     await newUser.save();
 
-    // Generate token
-    const token = generateToken(newUser._id.toString());
+    // Generate token with userId and role
+    const token = generateToken(newUser._id.toString(), newUser.role, newUser.auth.email);
 
     // Return user data (without password) and token
     const userData = normalizeDoc(newUser);
@@ -286,42 +291,26 @@ export const signup = async (req: Request, res: Response) => {
         findOneFoundUsername: !!existingUsername
       });
       
-      let field: 'email' | 'username' = 'email';
-      let code = 'EMAIL_ALREADY_EXISTS';
-      let message = 'Email already registered';
+      // Use helper to handle duplicate key error
+      const handled = handleDuplicateKeyError(res, error, {
+        'auth.email': { message: 'Email already registered', code: 'EMAIL_ALREADY_EXISTS' },
+        'profile.username': { message: 'Username already taken', code: 'USERNAME_ALREADY_EXISTS' }
+      });
       
-      // Check for email duplicate
-      if (keyPattern['auth.email']) {
-        field = 'email';
-        code = 'EMAIL_ALREADY_EXISTS';
-        message = 'Email already registered';
-        
-        // If findOne didn't find user but index says duplicate, it's a stale index
-        if (!existingUser) {
+      if (handled) {
+        // Check for stale index issues
+        if (keyPattern['auth.email'] && !existingUser) {
           console.warn('[Auth] STALE INDEX DETECTED: MongoDB index blocks email but no user found in database.');
           console.warn('[Auth] Email in index:', keyValue['auth.email']);
           console.warn('[Auth] This indicates a stale index entry. Run: npm run fix-indexes');
-          // Still return error - user can't signup until index is fixed
         }
-      } 
-      // Check for username duplicate (correct key pattern)
-      else if (keyPattern['profile.username']) {
-        field = 'username';
-        code = 'USERNAME_ALREADY_EXISTS';
-        message = 'Username already taken';
-        
-        // If findOne didn't find username but index says duplicate, it's a stale index
-        if (!existingUsername) {
+        if (keyPattern['profile.username'] && !existingUsername) {
           console.warn('[Auth] STALE INDEX DETECTED: MongoDB index blocks username but no user found in database.');
           console.warn('[Auth] Username in index:', keyValue['profile.username']);
           console.warn('[Auth] This indicates a stale index entry. Run: npm run fix-indexes');
         }
+        return;
       }
-      
-      return res.status(409).json({ 
-        message,
-        code
-      });
     }
     
     // Generic error handler - log full error for debugging
@@ -334,10 +323,7 @@ export const signup = async (req: Request, res: Response) => {
       errorName: error.name
     });
     
-    return res.status(500).json({ 
-      message: 'Something went wrong on our end. Please try again in a moment.',
-      code: 'INTERNAL_SERVER_ERROR'
-    });
+    sendInternalError(res, 'Something went wrong on our end. Please try again in a moment.');
   }
 };
 
@@ -350,18 +336,18 @@ export const getMe = async (req: Request, res: Response) => {
     // This assumes req.user is set by authentication middleware
     const userId = (req as any).user?.userId;
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return sendUnauthorizedError(res);
     }
 
     const user = await User.findById(userId).select('-password');
     if (!user) {
-      return res.status(404).json({ message: 'User not found' });
+      return sendNotFoundError(res, 'User not found');
     }
 
     const userData = normalizeDoc(user);
     res.json(userData);
   } catch (error: any) {
     console.error('[Auth] Get me error:', error);
-    res.status(500).json({ message: 'Internal server error' });
+    sendInternalError(res);
   }
 };

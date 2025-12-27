@@ -42,8 +42,11 @@ const CollectionSchema = new Schema<ICollection>({
   timestamps: false
 });
 
-// Compound index for efficient filtering by creator and type
-CollectionSchema.index({ creatorId: 1, type: 1 });
+// Explicit indexes for performance
+CollectionSchema.index({ creatorId: 1 }); // Ownership queries
+CollectionSchema.index({ creatorId: 1, type: 1 }); // Compound: filtering by creator and type
+CollectionSchema.index({ createdAt: -1 }); // List sorting
+CollectionSchema.index({ type: 1, createdAt: -1 }); // Visibility filters with sorting
 
 export const Collection = mongoose.model<ICollection>('Collection', CollectionSchema);
 

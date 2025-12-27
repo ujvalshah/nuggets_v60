@@ -21,6 +21,9 @@ export interface INuggetMedia {
     authorName?: string;
     publishDate?: string;
     mediaType?: MediaType;
+    // YouTube title persistence fields (backend as source of truth)
+    titleSource?: string; // e.g., "youtube-oembed"
+    titleFetchedAt?: string; // ISO timestamp
   };
 }
 
@@ -57,6 +60,7 @@ export interface IArticle extends Document {
   video?: string; // Legacy field
   documents?: IDocument[]; // Legacy field
   themes?: string[];
+  mediaIds?: string[]; // Cloudinary Media ObjectIds for tracking uploads
   
   // Engagement metrics
   engagement?: IEngagement;
@@ -85,7 +89,10 @@ const NuggetMediaSchema = new Schema<INuggetMedia>({
       faviconUrl: String,
       authorName: String,
       publishDate: String,
-      mediaType: String
+      mediaType: String,
+      // YouTube title persistence fields
+      titleSource: String,
+      titleFetchedAt: String
     },
     required: false
   }
@@ -124,6 +131,7 @@ const ArticleSchema = new Schema<IArticle>({
   video: { type: String }, // Legacy
   documents: { type: [DocumentSchema], default: [] }, // Legacy
   themes: { type: [String], default: [] },
+  mediaIds: { type: [String], default: [] }, // Cloudinary Media ObjectIds
   
   // Engagement
   engagement: { type: EngagementSchema },
@@ -135,6 +143,15 @@ const ArticleSchema = new Schema<IArticle>({
 }, {
   timestamps: false // We manage our own timestamps
 });
+
+// Explicit indexes for performance
+ArticleSchema.index({ authorId: 1 }); // Ownership queries
+ArticleSchema.index({ publishedAt: -1 }); // List sorting (latest first)
+ArticleSchema.index({ createdAt: -1 }); // List sorting (if using created_at)
+ArticleSchema.index({ visibility: 1, publishedAt: -1 }); // Visibility filters with sorting
+ArticleSchema.index({ 'categories': 1 }); // Category filtering
+ArticleSchema.index({ tags: 1 }); // Tag filtering
+ArticleSchema.index({ authorId: 1, visibility: 1 }); // User's articles by visibility
 
 export const Article = mongoose.model<IArticle>('Article', ArticleSchema);
 

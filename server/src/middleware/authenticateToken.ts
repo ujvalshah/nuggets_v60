@@ -1,11 +1,9 @@
 import { Request, Response, NextFunction } from 'express';
-import jwt from 'jsonwebtoken';
-
-const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret-change-in-production';
+import { verifyToken } from '../utils/jwt.js';
 
 /**
  * Express middleware to authenticate JWT tokens
- * Adds req.user = { userId: string } to the request if token is valid
+ * Adds req.user = { userId: string, role: string } to the request if token is valid
  */
 export function authenticateToken(req: Request, res: Response, next: NextFunction) {
   const authHeader = req.headers['authorization'];
@@ -16,13 +14,23 @@ export function authenticateToken(req: Request, res: Response, next: NextFunctio
   }
 
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as { userId: string };
+    const decoded = verifyToken(token);
     (req as any).user = decoded;
     next();
-  } catch (error) {
+  } catch (error: any) {
+    if (error.name === 'TokenExpiredError') {
+      return res.status(401).json({ message: 'Token expired' });
+    }
+    if (error.name === 'JsonWebTokenError') {
+      return res.status(401).json({ message: 'Invalid token' });
+    }
     return res.status(403).json({ message: 'Invalid or expired token' });
   }
 }
+
+
+
+
 
 
 

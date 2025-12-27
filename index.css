@@ -74,5 +74,87 @@ body {
   }
 }
 
+/* ============================================
+   Markdown Table Styling (GFM)
+   ============================================ */
+
+/* Table wrapper for horizontal scrolling on small screens */
+.markdown-table-wrapper {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Base table styles */
+.markdown-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 12px 0;
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+/* Table header cells */
+.markdown-table thead th {
+  font-weight: 600;
+  text-align: left;
+  padding: 8px 12px;
+  border-bottom: 2px solid var(--border-muted, #e2e8f0);
+  background-color: var(--bg-subtle, #f8fafc);
+  white-space: nowrap;
+}
+
+/* Table body cells */
+.markdown-table tbody td {
+  padding: 8px 12px;
+  vertical-align: top;
+  border-bottom: 1px solid var(--border-muted, #e2e8f0);
+}
+
+/* Alternating row backgrounds */
+.markdown-table tbody tr:nth-child(even) {
+  background-color: var(--bg-subtle, rgba(248, 250, 252, 0.5));
+}
+
+/* Table hover effect */
+.markdown-table tbody tr:hover {
+  background-color: var(--bg-hover, rgba(241, 245, 249, 0.8));
+}
+
+/* Dark mode table styles */
+.dark .markdown-table thead th {
+  border-bottom-color: #475569;
+  background-color: rgba(30, 41, 59, 0.5);
+}
+
+.dark .markdown-table tbody td {
+  border-bottom-color: #334155;
+}
+
+.dark .markdown-table tbody tr:nth-child(even) {
+  background-color: rgba(30, 41, 59, 0.3);
+}
+
+.dark .markdown-table tbody tr:hover {
+  background-color: rgba(51, 65, 85, 0.5);
+}
+
+/* Prevent tables from being clamped in collapsed state */
+.markdown-content .markdown-table-wrapper {
+  /* Tables should not be affected by line-clamp */
+  display: block;
+}
+
+/* When in clamped container, hide tables entirely to prevent broken rendering */
+.line-clamp-3 .markdown-table-wrapper,
+.line-clamp-4 .markdown-table-wrapper,
+.line-clamp-6 .markdown-table-wrapper {
+  display: none;
+}
+
+/* Ensure markdown content in expanded state shows tables */
+.markdown-content:not(.line-clamp-3):not(.line-clamp-4):not(.line-clamp-6) .markdown-table-wrapper {
+  display: block;
+}
+
 
 

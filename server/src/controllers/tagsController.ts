@@ -15,14 +15,51 @@ export const getTags = async (req: Request, res: Response) => {
   try {
     // Support format=simple query parameter for backward compatibility
     if (req.query.format === 'simple') {
-      const tags = await Tag.find({ status: 'active' }).sort({ name: 1 });
+      // Even simple format should have pagination for safety
+      const page = Math.max(parseInt(req.query.page as string) || 1, 1);
+      const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 100, 1), 500);
+      const skip = (page - 1) * limit;
+      
+      const [tags, total] = await Promise.all([
+        Tag.find({ status: 'active' })
+          .sort({ name: 1 })
+          .skip(skip)
+          .limit(limit)
+          .lean(),
+        Tag.countDocuments({ status: 'active' })
+      ]);
+      
       const tagNames = tags.map(tag => tag.name);
-      return res.json(tagNames);
+      return res.json({
+        data: tagNames,
+        total,
+        page,
+        limit,
+        hasMore: page * limit < total
+      });
     }
     
-    // Return full tag objects for Admin Panel
-    const tags = await Tag.find().sort({ name: 1 });
-    res.json(normalizeDocs(tags));
+    // Return full tag objects for Admin Panel with pagination
+    const page = Math.max(parseInt(req.query.page as string) || 1, 1);
+    const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 25, 1), 100);
+    const skip = (page - 1) * limit;
+    
+    const [tags, total] = await Promise.all([
+      Tag.find()
+        .sort({ name: 1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      Tag.countDocuments()
+    ]);
+    
+    res.json({
+      data: normalizeDocs(tags),
+      total,
+      page,
+      limit,
+      hasMore: page * limit < total
+    });
   } catch (error: any) {
     console.error('[Tags] Get tags error:', error);
     res.status(500).json({ message: 'Internal server error' });
@@ -87,6 +124,10 @@ export const deleteTag = async (req: Request, res: Response) => {
     res.status(500).json({ message: 'Internal server error' });
   }
 };
+
+
+
+
 
 
 

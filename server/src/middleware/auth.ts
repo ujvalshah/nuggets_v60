@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import jwt from 'jsonwebtoken';
+import { verifyToken } from '../utils/jwt.js';
 
 /**
  * Extend Express Request to include user info
@@ -13,6 +13,7 @@ export interface AuthRequest extends Request {
 /**
  * JWT Authentication Middleware
  * Validates JWT token and attaches user info to request
+ * Token must include userId and role (validated by verifyToken)
  */
 export const authenticateToken = (req: AuthRequest, res: Response, next: NextFunction) => {
   const authHeader = req.headers['authorization'];
@@ -22,14 +23,8 @@ export const authenticateToken = (req: AuthRequest, res: Response, next: NextFun
     return res.status(401).json({ message: 'Authentication required' });
   }
 
-  const JWT_SECRET = process.env.JWT_SECRET;
-  if (!JWT_SECRET) {
-    console.error('[Auth] JWT_SECRET is not defined');
-    return res.status(500).json({ message: 'Server configuration error' });
-  }
-
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as { userId: string; email: string; role: string };
+    const decoded = verifyToken(token);
     req.userId = decoded.userId;
     req.userEmail = decoded.email;
     req.userRole = decoded.role;
@@ -44,6 +39,10 @@ export const authenticateToken = (req: AuthRequest, res: Response, next: NextFun
     return res.status(401).json({ message: 'Authentication failed' });
   }
 };
+
+
+
+
 
 
 
