@@ -1,15 +1,23 @@
 /**
  * Layout Constants
  * 
+ * @see src/LAYOUT_ARCHITECTURE.md for full documentation
+ * 
  * Centralized layout values to ensure consistency across:
  * - Header height
  * - Spacers
  * - Sticky offsets
  * - Breakpoint-aware sizing
+ * - Grid layout dimensions
  * 
  * LAYOUT INVARIANT:
  * All fixed/sticky elements must have matching spacers.
  * Heights defined here are the single source of truth.
+ * 
+ * STABILITY RULES:
+ * - Use LAYOUT_CLASSES for Tailwind classes
+ * - Use LAYOUT for JavaScript calculations
+ * - Use GRID_WIDTHS for layout component widths
  */
 
 /**
@@ -26,6 +34,29 @@ export const LAYOUT = {
   PAGE_TOOLBAR_HEIGHT: 'auto',
   /** Tailwind lg breakpoint in pixels */
   LG_BREAKPOINT: 1024,
+  /** Tailwind xl breakpoint in pixels */
+  XL_BREAKPOINT: 1280,
+} as const;
+
+/**
+ * Grid layout widths (for ResponsiveLayoutShell and HomePage feed view)
+ * 
+ * STABILITY RULE: These are applied via width utilities on children,
+ * NOT via arbitrary grid-cols-[...] templates.
+ */
+export const GRID_WIDTHS = {
+  /** Sidebar width on desktop */
+  SIDEBAR_XL: 260,
+  /** Sidebar width on tablet */
+  SIDEBAR_LG: 240,
+  /** Feed/main content max width */
+  FEED_MAX: 760,
+  /** Detail panel max width */
+  DETAIL_MAX: 720,
+  /** Right sidebar width (HomePage feed view) */
+  RIGHT_SIDEBAR: 260,
+  /** Left sidebar width (HomePage feed view) */
+  LEFT_SIDEBAR: 220,
 } as const;
 
 /**

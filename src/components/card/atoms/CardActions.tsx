@@ -44,22 +44,17 @@ export const CardActions: React.FC<CardActionsProps> = ({
   isPreview = false,
   variant = 'grid',
 }) => {
-  // Finance-grade: Feed variant has larger hit areas, reduced visual weight
+  // PHASE 2: Consistent 8-pt aligned action buttons (w-8 = 32px, h-8 = 32px)
   const isFeed = variant === 'feed';
-  const buttonSize = isFeed ? 'w-11 h-11' : 'w-10 h-10';
-  const iconSize = isFeed ? 18 : 18;
-  const textColor = isFeed 
-    ? 'text-slate-500 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-400' 
-    : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300';
-  const hoverBg = isFeed 
-    ? 'hover:bg-slate-50 dark:hover:bg-slate-800/50' 
-    : 'hover:bg-slate-100 dark:hover:bg-slate-800';
-  const transitionClass = isFeed 
-    ? 'transition-colors' 
-    : 'transition-all hover:scale-105 active:scale-95';
+  const buttonSize = isFeed ? 'w-9 h-9' : 'w-8 h-8';
+  const iconSize = 16;
+  const textColor = 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300';
+  const hoverBg = 'hover:bg-slate-100 dark:hover:bg-slate-800';
+  const transitionClass = 'transition-colors duration-150';
 
   return (
-    <div className={twMerge('flex items-center gap-1', className)}>
+    // PHASE 2: 8-pt gap between action buttons
+    <div className={twMerge('flex items-center gap-0.5', className)}>
       {/* Hide ShareMenu in preview mode (preview IDs are invalid) */}
       {!isPreview && (
         <ShareMenu

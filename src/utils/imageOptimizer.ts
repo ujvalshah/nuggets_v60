@@ -130,6 +130,9 @@ export async function compressImage(
       reject(new Error('Failed to read file'));
     };
 
+    // CRITICAL: readAsDataURL is used ONLY for temporary image processing (compression)
+    // The Base64 data is NEVER persisted - it's only used to load the image into a canvas
+    // All compressed images are uploaded to Cloudinary via useMediaUpload hook
     reader.readAsDataURL(file);
   });
 }
@@ -163,6 +166,10 @@ export async function optimizeFileForUpload(
   }
   return file;
 }
+
+
+
+
 
 
 

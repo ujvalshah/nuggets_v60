@@ -1,4 +1,30 @@
 
+/**
+ * ============================================================================
+ * HOME PAGE: Multi-View Content Browser
+ * ============================================================================
+ * 
+ * @see src/LAYOUT_ARCHITECTURE.md for full documentation
+ * 
+ * PURPOSE:
+ * - Display articles in multiple view modes (grid, feed, masonry, utility)
+ * - Handle view mode switching via Header buttons
+ * - Article clicks open modal overlays (NOT side panel like FeedLayoutPage)
+ * 
+ * VIEW MODES:
+ * - grid: 4-column ArticleGrid (default)
+ * - feed: 3-column layout with sidebars (Topics, Collections)
+ * - masonry: Masonry-style ArticleGrid
+ * - utility: Compact utility ArticleGrid
+ * 
+ * STABILITY RULES:
+ * - Use stable grid-cols-{n} classes only (NO arbitrary templates)
+ * - Width constraints on children, not grid definitions
+ * - This page does NOT use ResponsiveLayoutShell (that's for /feed route)
+ * 
+ * ============================================================================
+ */
+
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { Article, SortOrder, Collection } from '@/types';
 import { useArticles } from '@/hooks/useArticles';
@@ -9,7 +35,7 @@ import { Feed } from '@/components/Feed';
 import { CategoryFilterBar } from '@/components/header/CategoryFilterBar';
 import { PageStack } from '@/components/layouts/PageStack';
 import { storageService } from '@/services/storageService';
-import { Badge } from '@/components/UI/Badge';
+import { TagPill } from '@/components/card/atoms/CardTags';
 import { useAuth } from '@/hooks/useAuth';
 import { Link } from 'react-router-dom';
 import { twMerge } from 'tailwind-merge';
@@ -295,13 +321,14 @@ export const HomePage: React.FC<HomePageProps> = ({
           mainContent={
             <>
               {/* Power User Feed Layout - Content-first, high density */}
+              {/* STABILITY RULE: Use stable grid-cols-{n} classes, NOT arbitrary templates */}
               {viewMode === 'feed' ? (
                 <div className="max-w-[1400px] mx-auto px-4 lg:px-6 pb-4">
-              <div className="grid grid-cols-1 lg:grid-cols-[220px_minmax(0,1fr)_260px] gap-4 lg:gap-6 items-start">
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-6 items-start">
                 
-                {/* Left Sidebar: Topics Widget */}
+                {/* Left Sidebar: Topics Widget - Fixed width on desktop */}
                 {/* Offset: Header (56px) + CategoryFilterBar (44px) + gap = ~104px */}
-                <div className="hidden lg:block sticky top-[104px] max-h-[calc(100vh-7rem)] overflow-y-auto custom-scrollbar pr-2 space-y-4">
+                <div className="hidden lg:block lg:w-[220px] sticky top-[104px] max-h-[calc(100vh-7rem)] overflow-y-auto custom-scrollbar pr-2 space-y-4">
                     {/* Today's Nuggets Indicator - Editorial context, not analytics */}
                     {todaysCount > 0 && (
                         <div className="bg-white dark:bg-slate-900 rounded-xl p-4 border border-gray-100 dark:border-slate-800">
@@ -327,13 +354,11 @@ export const HomePage: React.FC<HomePageProps> = ({
                             <Hash size={12} className="text-slate-400 dark:text-slate-500" />
                             <h3 className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Topics</h3>
                         </div>
-                        <div className="flex flex-wrap gap-2">
+                        <div className="flex flex-wrap gap-1">
                             {allCategories.map(cat => (
-                                <Badge 
+                                <TagPill 
                                     key={cat} 
-                                    label={cat} 
-                                    variant={selectedCategories.includes(cat) ? 'primary' : 'neutral'}
-                                    className="cursor-pointer text-[11px] py-1.5 px-3 rounded-full"
+                                    label={cat}
                                     onClick={() => toggleCategory(cat)}
                                 />
                             ))}
@@ -347,13 +372,11 @@ export const HomePage: React.FC<HomePageProps> = ({
                                 <Hash size={12} className="text-slate-400 dark:text-slate-500" />
                                 <h3 className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Tags</h3>
                             </div>
-                            <div className="flex flex-wrap gap-2">
+                            <div className="flex flex-wrap gap-1">
                                 {tagsWithCounts.map(tag => (
-                                    <Badge 
+                                    <TagPill 
                                         key={tag.label} 
                                         label={`${tag.label} (${tag.count})`}
-                                        variant={selectedTag === tag.label ? 'primary' : 'neutral'}
-                                        className="cursor-pointer text-[11px] py-1.5 px-3 rounded-full"
                                         onClick={() => {
                                             // Toggle tag selection: click again to deselect
                                             setSelectedTag(selectedTag === tag.label ? null : tag.label);
@@ -403,9 +426,9 @@ export const HomePage: React.FC<HomePageProps> = ({
                     />
                 </div>
 
-                {/* Right Sidebar: Collections & Footer */}
+                {/* Right Sidebar: Collections & Footer - Fixed width on desktop */}
                 {/* Offset: Header (56px) + CategoryFilterBar (44px) + gap = ~104px */}
-                <div className="hidden lg:block sticky top-[104px] max-h-[calc(100vh-7rem)] overflow-y-auto custom-scrollbar pl-2 space-y-4">
+                <div className="hidden lg:block lg:w-[260px] sticky top-[104px] max-h-[calc(100vh-7rem)] overflow-y-auto custom-scrollbar pl-2 space-y-4">
                     {/* Collections Widget */}
                     {/* Finance-grade: Hide collections with 0 nuggets */}
                     {featuredCollections.filter(col => (col.validEntriesCount ?? col.entries?.length ?? 0) > 0).length > 0 && (

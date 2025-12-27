@@ -1,11 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { User } from '@/types';
-import { MapPin, Link as LinkIcon, Twitter, Linkedin, Github, Camera, Save, Edit3, Calendar } from 'lucide-react';
+import { MapPin, Link as LinkIcon, Twitter, Linkedin, Github, Camera, Save, Edit3, Calendar, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/useToast';
 import { storageService } from '@/services/storageService';
 import { Avatar } from '../shared/Avatar';
 import { adminConfigService } from '@/admin/services/adminConfigService';
 import { LAYOUT_CLASSES } from '@/constants/layout';
+import { useMediaUpload } from '@/hooks/useMediaUpload';
 
 // Format join date as "Jan 2024"
 const formatJoinDate = (isoString: string): string => {
@@ -34,6 +35,7 @@ export const ProfileCard: React.FC<ProfileCardProps> = ({ user, isOwner, nuggetC
   const [allowUpload, setAllowUpload] = useState(false);
   const toast = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const mediaUpload = useMediaUpload({ purpose: 'avatar' });
 
   useEffect(() => {
     adminConfigService.getFeatureFlags().then(flags => {
@@ -59,18 +61,23 @@ export const ProfileCard: React.FC<ProfileCardProps> = ({ user, isOwner, nuggetC
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       if (file.size > 2 * 1024 * 1024) {
         toast.error("Image size must be less than 2MB");
         return;
       }
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setFormData(prev => ({ ...prev, avatarUrl: reader.result as string }));
-      };
-      reader.readAsDataURL(file);
+      
+      // Upload to Cloudinary via media upload hook
+      const uploadResult = await mediaUpload.upload(file);
+      if (uploadResult && uploadResult.secureUrl) {
+        // Use secureUrl instead of Base64
+        setFormData(prev => ({ ...prev, avatarUrl: uploadResult.secureUrl }));
+        toast.success("Avatar uploaded successfully");
+      } else {
+        toast.error(`Failed to upload avatar: ${mediaUpload.error || 'Unknown error'}`);
+      }
     }
   };
 

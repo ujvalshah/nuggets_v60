@@ -8,6 +8,7 @@ import { CardActions } from '../atoms/CardActions';
 import { CardContent } from '../atoms/CardContent';
 import { CardContributor } from '../atoms/CardContributor';
 import { CardBadge } from '../atoms/CardBadge';
+import { CardGradientFallback } from '../atoms/CardGradientFallback';
 
 interface UtilityVariantProps {
   logic: NewsCardLogic;
@@ -32,6 +33,39 @@ export const UtilityVariant: React.FC<UtilityVariantProps> = ({
   isPreview = false,
 }) => {
   const { data, handlers } = logic;
+  
+  // 🔍 AUDIT LOGGING - Card Type Usage in UtilityVariant (Enhanced Diagnostics)
+  React.useEffect(() => {
+    const renderBranch = data.cardType === 'media-only' ? 'TYPE-B-MEDIA-ONLY' : 'TYPE-A-HYBRID';
+    const hasText = Boolean((data.content || data.excerpt || '').trim());
+    const textLength = (data.content || data.excerpt || '').length;
+    
+    const renderingData = {
+      id: data.id.substring(0, 8) + '...',
+      renderComponent: 'UtilityVariant',
+      renderBranch,
+      cardType: data.cardType,
+      hasMedia: data.hasMedia,
+      hasText,
+      textLength,
+      shouldShowTitle: data.shouldShowTitle,
+      willUseCardMedia: data.hasMedia,
+      willUseOverlayText: data.cardType === 'media-only' && hasText,
+      willUseTruncation: data.cardType === 'hybrid',
+    };
+    console.log('[CARD-AUDIT] UtilityVariant Rendering:', JSON.stringify(renderingData, null, 2));
+    console.log('[CARD-AUDIT] UtilityVariant Rendering (expanded):', renderingData);
+    
+    // CRITICAL: Warn if cardType is media-only but has long text
+    if (data.cardType === 'media-only' && textLength > 200) {
+      console.warn('[CARD-AUDIT] ⚠️ MEDIA-ONLY CARD WITH LONG TEXT!', {
+        id: data.id.substring(0, 8) + '...',
+        cardType: data.cardType,
+        contentLength: textLength,
+        renderBranch,
+      });
+    }
+  }, [data.id, data.cardType, data.hasMedia, data.content, data.excerpt, data.shouldShowTitle]);
 
   // Generate descriptive aria-label for the card
   const ariaLabelParts: string[] = [];
@@ -76,38 +110,83 @@ export const UtilityVariant: React.FC<UtilityVariantProps> = ({
       className="group relative flex flex-col bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm hover:shadow-lg hover:border-slate-300 dark:hover:border-slate-700 transition-all duration-300 w-full p-5 gap-4 h-full min-h-[400px] focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"
       onKeyDown={handleKeyDown}
     >
-      {/* Card Body - Clickable area for opening drawer */}
-      <div 
-        className="flex flex-col flex-1 min-w-0 gap-4 cursor-pointer"
-        onClick={handlers.onClick}
-      >
-        {/* 1. Header Zone: Tags (Left) + Source Badge (Right) */}
-        <div className="flex justify-between items-start gap-2">
-          <div className="flex-1 min-w-0">
-            <CardTags
-              categories={data.categories}
-              onCategoryClick={handlers.onCategoryClick}
-              showTagPopover={showTagPopover}
-              onToggleTagPopover={handlers.onToggleTagPopover}
-              tagPopoverRef={tagPopoverRef}
-            />
-          </div>
-          {/* Source Badge - Right Side of Header */}
-          {!data.isTextNugget && data.sourceType === 'link' && (
-            <CardBadge
-              isTextNugget={data.isTextNugget}
-              sourceType={data.sourceType}
-              media={data.media}
-              variant="inline"
-              size="sm"
-            />
+      {/* TWO-CARD ARCHITECTURE: Hybrid vs Media-Only */}
+      {data.cardType === 'media-only' ? (
+        /* TYPE B: MEDIA-ONLY CARD - Media fills card height, optional short caption, footer */
+        <div 
+          className="flex-1 flex flex-col min-h-0 relative overflow-hidden rounded-lg cursor-pointer"
+          onClick={handlers.onClick}
+        >
+          {/* Media fills full available height (except caption + footer) */}
+          {/* For Media-Only cards: image click opens lightbox (same as hybrid cards) */}
+          {data.hasMedia && (
+            <div className="absolute inset-0 pt-2 px-2 relative">
+              <CardMedia
+                article={data}
+                visibility={data.visibility}
+                onMediaClick={(e) => {
+                  // UNIFIED BEHAVIOR: Media-only cards use same lightbox behavior as hybrid cards
+                  console.log('[CARD-CLICK] Media-only card image clicked - opening lightbox (UtilityVariant)');
+                  handlers.onMediaClick(e);
+                }}
+                className="w-full h-full"
+              />
+            </div>
+          )}
+          
+          {/* Optional short caption with compact bottom-band gradient - only render when caption exists */}
+          {((data.content || data.excerpt || '').trim().length > 0) && (
+            <div className="absolute bottom-0 left-0 right-0 pointer-events-none z-10">
+              {/* Compact bottom-band gradient - height auto, sized to caption content - matches YouTube gradient intensity */}
+              <div className="bg-gradient-to-t from-black/80 via-black/60 to-transparent dark:from-black/80 dark:via-black/60 dark:to-transparent">
+                {/* Caption container - bottom-left aligned, small padding */}
+                <div className="px-2 py-1 text-white drop-shadow-sm line-clamp-3 [&_*]:text-white">
+                  <CardContent
+                    excerpt={data.excerpt}
+                    content={data.content}
+                    isTextNugget={data.isTextNugget}
+                    variant="utility"
+                    allowExpansion={false}
+                    cardType="media-only"
+                  />
+                </div>
+              </div>
+            </div>
           )}
         </div>
+      ) : (
+        /* TYPE A: HYBRID CARD - Tags, title, body content, media at bottom, footer */
+        <>
+          {/* Card Body - Clickable area for opening drawer */}
+          <div 
+            className="flex flex-col flex-1 min-w-0 gap-4 cursor-pointer"
+            onClick={handlers.onClick}
+          >
+            {/* 1. Header Zone: Tags (Left) + Source Badge (Right) */}
+            <div className="flex justify-between items-start gap-2">
+              <div className="flex-1 min-w-0">
+                <CardTags
+                  categories={data.categories}
+                  onCategoryClick={handlers.onCategoryClick}
+                  showTagPopover={showTagPopover}
+                  onToggleTagPopover={handlers.onToggleTagPopover}
+                  tagPopoverRef={tagPopoverRef}
+                />
+              </div>
+              {/* Source Badge - Right Side of Header */}
+              {!data.isTextNugget && data.sourceType === 'link' && (
+                <CardBadge
+                  isTextNugget={data.isTextNugget}
+                  sourceType={data.sourceType}
+                  media={data.media}
+                  variant="inline"
+                  size="sm"
+                />
+              )}
+            </div>
 
-        {/* 2. Title */}
-        {data.shouldShowTitle && <CardTitle title={data.title} />}
-
-        {/* 3. Body/Content - flex-1 to take available space, pushing media to bottom */}
+        {/* 2. Title + Body/Content - wrapped together in truncation wrapper for consistent fade alignment */}
+        {/* Title is now included inside CardContent's truncation wrapper */}
         <div className="flex flex-col flex-1 min-w-0 gap-4">
           <CardContent
             excerpt={data.excerpt}
@@ -115,21 +194,29 @@ export const UtilityVariant: React.FC<UtilityVariantProps> = ({
             isTextNugget={data.isTextNugget}
             variant="utility"
             allowExpansion={true}
+            cardType="hybrid"
+            title={data.shouldShowTitle ? data.title : undefined}
           />
-          
-          {/* 4. Media anchored to bottom for uniformity across cards */}
-          {data.hasMedia && (
-            <CardMedia
-              media={data.media}
-              images={data.images}
-              visibility={data.visibility}
-              onMediaClick={handlers.onMediaClick}
-              className="mt-auto rounded-lg shrink-0"
-              articleTitle={data.title}
-            />
-          )}
-        </div>
-      </div>
+              
+              {/* 4. Media anchored to bottom for uniformity across cards (or gradient fallback) */}
+              {data.hasMedia ? (
+                <div className="pt-2 px-2 pb-2 mt-auto">
+                  <CardMedia
+                    article={data}
+                    visibility={data.visibility}
+                    onMediaClick={handlers.onMediaClick}
+                    className="rounded-lg shrink-0"
+                  />
+                </div>
+              ) : (
+                <div className="pt-2 px-2 pb-2 mt-auto">
+                  <CardGradientFallback title={data.title} className="rounded-lg" />
+                </div>
+              )}
+            </div>
+          </div>
+        </>
+      )}
 
       {/* Footer - Actions only, must NOT open drawer */}
       <div 

@@ -1,6 +1,7 @@
 
 // In development, Vite proxies /api to localhost:5000.
 import { recordApiTiming } from '../observability/telemetry.js';
+import { captureException } from '../utils/sentry.js';
 const BASE_URL = '/api';
 
 const AUTH_STORAGE_KEY = 'nuggets_auth_data_v2';
@@ -112,9 +113,13 @@ class ApiClient {
       },
     };
 
+    let requestId: string | null = null;
     try {
       const response = await fetch(`${BASE_URL}${endpoint}`, config);
       statusCode = response.status;
+      
+      // Extract request ID from response headers for correlation
+      requestId = response.headers.get('X-Request-Id');
 
       if (!response.ok) {
         const errorInfo = await extractError(response);
@@ -130,6 +135,47 @@ class ApiClient {
         
         if (response.status === 404) {
           throw new Error('The requested resource was not found.');
+        }
+        if (response.status === 403) {
+          // Handle 403 Forbidden (often used for expired/invalid tokens)
+          const isPublicAuth = this.isPublicAuthEndpoint(endpoint);
+          const hasSession = this.hasAuthenticatedSession();
+          const authHeader = this.getAuthHeader();
+          const tokenWasSent = !!authHeader['Authorization'];
+          
+          // Check if error message indicates token issue
+          const isTokenError = errorInfo.message?.toLowerCase().includes('token') || 
+                              errorInfo.message?.toLowerCase().includes('expired') ||
+                              errorInfo.message?.toLowerCase().includes('invalid');
+          
+          // Never logout on public auth endpoints
+          if (isPublicAuth) {
+            throw error;
+          }
+          
+          // If it's a token-related 403 and we have a session, treat it like 401
+          if (isTokenError && hasSession && tokenWasSent) {
+            // Token expired/invalid → logout
+            if (typeof window !== 'undefined') {
+              try {
+                localStorage.removeItem(AUTH_STORAGE_KEY);
+              } catch (e) {
+                // Ignore storage errors
+              }
+              if (!window.location.pathname.includes('/login')) {
+                window.location.href = '/login';
+              }
+            }
+            const isExpired = errorInfo.message?.toLowerCase().includes('expired') || 
+                            errorInfo.message?.toLowerCase().includes('token expired');
+            throw new Error(isExpired 
+              ? 'Your session has expired. Please sign in again.'
+              : 'Your session is invalid. Please sign in again.'
+            );
+          }
+          
+          // Otherwise, just throw the 403 error
+          throw error;
         }
         if (response.status === 401) {
           const isPublicAuth = this.isPublicAuthEndpoint(endpoint);
@@ -217,6 +263,17 @@ class ApiClient {
       
       // Handle network errors (connection refused, timeout, etc.)
       if (error instanceof TypeError && error.message.includes('fetch')) {
+        // Capture network errors in Sentry
+        captureException(error, {
+          requestId: requestId || undefined,
+          route: endpoint,
+          extra: {
+            method,
+            status: statusCode,
+            networkError: true,
+          },
+        });
+        
         // In development, show helpful message; in production, show generic message
         const isDevelopment = import.meta.env.DEV;
         if (isDevelopment) {
@@ -226,6 +283,21 @@ class ApiClient {
         }
         throw new Error("We couldn't connect to the server. Please check your internet connection and try again.");
       }
+      
+      // Capture API errors (non-network) in Sentry
+      if (statusCode && statusCode >= 500) {
+        // Only capture server errors (5xx), not client errors (4xx)
+        captureException(error, {
+          requestId: requestId || undefined,
+          route: endpoint,
+          extra: {
+            method,
+            status: statusCode,
+            errorMessage: error.message,
+          },
+        });
+      }
+      
       // Re-throw other errors as-is (they'll be mapped by authService)
       throw error;
     } finally {

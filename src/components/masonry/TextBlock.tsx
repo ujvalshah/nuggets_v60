@@ -49,23 +49,19 @@ export const TextBlock: React.FC<TextBlockProps> = ({
         </h3>
       )}
 
-      {/* Body text - Clamped with fade-out */}
+      {/* Body text - Clamped */}
       {content && (
-        <div className="relative">
-          <p
-            className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed line-clamp-5"
-            style={{
-              WebkitLineClamp: 5,
-              display: '-webkit-box',
-              WebkitBoxOrient: 'vertical',
-              overflow: 'hidden',
-            }}
-          >
-            {content}
-          </p>
-          {/* Fade-out mask at bottom */}
-          <div className="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-white via-white/90 to-transparent dark:from-slate-900 dark:via-slate-900/90 pointer-events-none" />
-        </div>
+        <p
+          className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed line-clamp-5"
+          style={{
+            WebkitLineClamp: 5,
+            display: '-webkit-box',
+            WebkitBoxOrient: 'vertical',
+            overflow: 'hidden',
+          }}
+        >
+          {content}
+        </p>
       )}
 
       {/* Metadata - Hidden by default, shown on hover via parent group */}

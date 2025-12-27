@@ -40,3 +40,6 @@ export const AdminPanelPage: React.FC = () => {
     </RequireAdmin>
   );
 };
+
+// Default export for lazy loading compatibility
+export default AdminPanelPage;

@@ -70,6 +70,8 @@ export class RestAdapter implements IAdapter {
       content: article.content,
       excerpt: article.excerpt,
       authorId: article.author?.id || '',
+      // CRITICAL: Include mediaIds if present (Cloudinary-uploaded media)
+      mediaIds: article.mediaIds,
       authorName: article.author?.name || '',
       // Server requires 'category' (singular, required string), use first category or 'General'
       category: article.categories && article.categories.length > 0 
@@ -85,6 +87,8 @@ export class RestAdapter implements IAdapter {
       ...(article.documents && article.documents.length > 0 && { documents: article.documents }),
       // Always include media if it exists (even if null, to explicitly clear it)
       ...(article.media !== undefined && { media: article.media }),
+      // CRITICAL: Include mediaIds for Cloudinary-uploaded media
+      ...(article.mediaIds && article.mediaIds.length > 0 && { mediaIds: article.mediaIds }),
       ...(article.source_type && { source_type: article.source_type }),
       ...(article.displayAuthor && { displayAuthor: article.displayAuthor }),
     };
@@ -111,6 +115,8 @@ export class RestAdapter implements IAdapter {
     if (updates.media !== undefined) payload.media = updates.media;
     if (updates.images !== undefined) payload.images = updates.images;
     if (updates.documents !== undefined) payload.documents = updates.documents;
+    // CRITICAL: Include mediaIds for Cloudinary-uploaded media
+    if (updates.mediaIds !== undefined) payload.mediaIds = updates.mediaIds;
     if (updates.source_type !== undefined) payload.source_type = updates.source_type;
     if (updates.displayAuthor !== undefined) payload.displayAuthor = updates.displayAuthor;
     
@@ -155,16 +161,31 @@ export class RestAdapter implements IAdapter {
 
   // --- Categories ---
   async getCategories(): Promise<string[]> {
-    // Backend returns Tag[] by default, but we need string[] for compatibility
-    // Use ?format=simple to get array of tag names
+    // Backend returns paginated response: { data: string[], total, page, limit, hasMore }
+    // Use ?format=simple to get array of tag names in data field
     // Add cancelKey to prevent duplicate simultaneous requests
     try {
-      const tags = await apiClient.get<any[]>('/categories?format=simple', undefined, 'restAdapter.getCategories');
-      // If backend returns Tag objects, extract names
-      if (tags && tags.length > 0 && typeof tags[0] === 'object') {
-        return tags.map(tag => tag.name || tag);
+      const response = await apiClient.get<any>('/categories?format=simple', undefined, 'restAdapter.getCategories');
+      
+      // Handle paginated response: extract data array
+      if (response && typeof response === 'object' && 'data' in response) {
+        const tags = response.data;
+        // If backend returns Tag objects, extract names
+        if (tags && tags.length > 0 && typeof tags[0] === 'object') {
+          return tags.map((tag: any) => tag.name || tag);
+        }
+        return tags || [];
       }
-      return tags || [];
+      
+      // Legacy: handle plain array response
+      if (Array.isArray(response)) {
+        if (response.length > 0 && typeof response[0] === 'object') {
+          return response.map((tag: any) => tag.name || tag);
+        }
+        return response;
+      }
+      
+      return [];
     } catch (error: any) {
       // Handle cancelled requests gracefully - return empty array instead of throwing
       if (error?.message === 'Request cancelled') {
@@ -184,20 +205,21 @@ export class RestAdapter implements IAdapter {
   }
 
   // --- Collections ---
-  getCollections(params?: { type?: 'public' | 'private'; includeCount?: boolean }): Promise<Collection[] | { data: Collection[]; count: number }> {
+  getCollections(params?: { type?: 'public' | 'private'; includeCount?: boolean }): Promise<Collection[]> {
     // Add cancelKey to prevent duplicate simultaneous requests
     const queryParams = new URLSearchParams();
     if (params?.type) queryParams.set('type', params.type);
     if (params?.includeCount) queryParams.set('includeCount', 'true');
     
     const endpoint = queryParams.toString() ? `/collections?${queryParams}` : '/collections';
-    return apiClient.get<Collection[] | { data: Collection[]; count: number }>(endpoint, undefined, 'restAdapter.getCollections')
+    return apiClient.get<any>(endpoint, undefined, 'restAdapter.getCollections')
       .then(response => {
-        // Handle both array response (legacy) and object response (with count)
-        if (Array.isArray(response)) {
-          return response;
+        // Handle paginated response: { data: Collection[], total, page, limit, hasMore }
+        if (response && typeof response === 'object' && 'data' in response && Array.isArray(response.data)) {
+          return response.data;
         }
-        if (response && typeof response === 'object' && 'data' in response) {
+        // Handle legacy array response
+        if (Array.isArray(response)) {
           return response;
         }
         return [];

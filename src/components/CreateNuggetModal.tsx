@@ -15,6 +15,8 @@ import { compressImage, isImageFile, formatFileSize } from '@/utils/imageOptimiz
 import { unfurlUrl } from '@/services/unfurlService';
 import type { NuggetMedia } from '@/types';
 import { formatApiError, getUserFriendlyMessage, logError } from '@/utils/errorHandler';
+import { processNuggetUrl, detectUrlChanges, getPrimaryUrl } from '@/utils/processNuggetUrl';
+import { useMediaUpload } from '@/hooks/useMediaUpload';
 import { SourceSelector } from './shared/SourceSelector';
 import { SourceBadge } from './shared/SourceBadge';
 import { TagSelector } from './CreateNuggetModal/TagSelector';
@@ -63,6 +65,9 @@ export const CreateNuggetModal: React.FC<CreateNuggetModalProps> = ({ isOpen, on
   
   // Ref to track if form has been initialized from initialData (prevents re-initialization)
   const initializedFromDataRef = useRef<string | null>(null);
+  
+  // Ref to track previous URLs for change detection (CRITICAL for Edit mode)
+  const previousUrlsRef = useRef<string[]>([]);
 
   // Content State
   const [title, setTitle] = useState('');
@@ -79,6 +84,11 @@ export const CreateNuggetModal: React.FC<CreateNuggetModalProps> = ({ isOpen, on
   // Attachments
   const [attachments, setAttachments] = useState<FileAttachment[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const pastedImagesBufferRef = useRef<File[]>([]);
+  const pasteBatchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // Media upload hook
+  const mediaUpload = useMediaUpload({ purpose: 'nugget' });
   
   // Refs for accessibility and focus management
   const modalRef = useRef<HTMLDivElement>(null);
@@ -138,18 +148,23 @@ export const CreateNuggetModal: React.FC<CreateNuggetModalProps> = ({ isOpen, on
         
         // Extract URLs from media
         const urlFromMedia = initialData.media?.url || initialData.media?.previewMetadata?.url;
+        const initialUrls = urlFromMedia ? [urlFromMedia] : [];
+        setUrls(initialUrls);
+        previousUrlsRef.current = initialUrls; // Track initial URLs for change detection
+        
         if (urlFromMedia) {
-          setUrls([urlFromMedia]);
           setDetectedLink(urlFromMedia);
           if (initialData.media) {
             setLinkMetadata(initialData.media);
           }
         } else {
-          setUrls([]);
+          setDetectedLink(null);
+          setLinkMetadata(null);
         }
         
         // Note: We don't pre-fill attachments or collections in edit mode
         // as they require file objects and collection membership is separate
+        // MediaIds are preserved from initialData and will be included in update
         
         initializedFromDataRef.current = initialData.id;
       } else if (mode === 'create') {
@@ -248,6 +263,7 @@ export const CreateNuggetModal: React.FC<CreateNuggetModalProps> = ({ isOpen, on
     setUrls([]);
     setUrlInput('');
     setDetectedLink(null);
+    setLinkMetadata(null);
     setAttachments([]);
     setCategories([]);
     setVisibility('public');
@@ -265,6 +281,8 @@ export const CreateNuggetModal: React.FC<CreateNuggetModalProps> = ({ isOpen, on
     setContentTouched(false);
     // Reset initialization ref
     initializedFromDataRef.current = null;
+    // Reset previous URLs tracking
+    previousUrlsRef.current = [];
   };
 
   const handleClose = () => {
@@ -277,91 +295,113 @@ export const CreateNuggetModal: React.FC<CreateNuggetModalProps> = ({ isOpen, on
     onClose();
   };
 
-  // Fetch metadata when URL is added (PHASE 2: NO auto-title mutation)
+  /**
+   * UNIFIED URL + METADATA PROCESSING
+   * 
+   * This effect handles URL changes for BOTH Create and Edit modes.
+   * It detects URL changes and triggers metadata fetching using the shared processNuggetUrl utility.
+   * 
+   * CRITICAL: This ensures parity between Create and Edit workflows.
+   */
   useEffect(() => {
-    if (urls.length > 0) {
-      // Find first non-image URL that should have metadata fetched
-      const firstLinkUrl = urls.find(url => {
-        const type = detectProviderFromUrl(url);
-        return type !== 'image' && shouldFetchMetadata(url);
-      });
+    // Detect URL changes (works for both create and edit)
+    const urlChanges = detectUrlChanges(previousUrlsRef.current, urls);
+    const primaryUrl = getPrimaryUrl(urls);
+    
+    // Update previous URLs for next comparison
+    previousUrlsRef.current = [...urls];
+    
+    // If primary URL changed or was added, fetch metadata
+    if (primaryUrl && (primaryUrl !== detectedLink || urlChanges.primaryUrlChanged)) {
+      setDetectedLink(primaryUrl);
+      setCustomDomain(null);
+      setIsLoadingMetadata(true);
       
-      if (firstLinkUrl && firstLinkUrl !== detectedLink) {
-        setDetectedLink(firstLinkUrl);
-        setCustomDomain(null);
-        setIsLoadingMetadata(true);
-        unfurlUrl(firstLinkUrl)
-          .then((metadata) => {
-            if (metadata) {
-              setLinkMetadata(metadata);
-              
-              // FIX: Completely disable auto-title suggestions for YouTube/social networks
-              // User explicitly requested no auto-title functionality for these platforms
-              // Check if this is a YouTube or social network URL
-              const isYouTubeOrSocial = firstLinkUrl && (
-                firstLinkUrl.includes('youtube.com') || 
-                firstLinkUrl.includes('youtu.be') ||
-                firstLinkUrl.includes('twitter.com') || 
-                firstLinkUrl.includes('x.com') ||
-                firstLinkUrl.includes('linkedin.com') ||
-                firstLinkUrl.includes('instagram.com') ||
-                firstLinkUrl.includes('tiktok.com') ||
-                firstLinkUrl.includes('facebook.com') ||
-                firstLinkUrl.includes('threads.net') ||
-                firstLinkUrl.includes('reddit.com')
-              );
-              
-              // Do NOT store suggestedTitle for YouTube/social networks
-              if (isYouTubeOrSocial) {
-                console.log('[CreateNuggetModal] YouTube/social network detected - skipping title suggestion');
-                setSuggestedTitle(null);
-              } else if (metadata.previewMetadata?.title) {
-                const metaTitle = metadata.previewMetadata.title.trim();
-                // Skip if title is just a domain or URL pattern
-                const isBadTitle = metaTitle.match(/^(https?:\/\/|www\.|Content from|content from)/i) ||
-                                  metaTitle.match(/^[a-z0-9-]+\.[a-z]{2,}$/i) || // Just domain
-                                  metaTitle.length < 3; // Too short
-                if (!isBadTitle) {
-                  console.log('[CreateNuggetModal] Metadata title found, storing as suggestion:', metaTitle);
-                  setSuggestedTitle(metaTitle);
-                  // CRITICAL: DO NOT call setTitle() here - title must remain empty until user clicks button
-                } else {
-                  console.log('[CreateNuggetModal] Metadata title rejected as bad title:', metaTitle);
-                  setSuggestedTitle(null);
-                }
+      // Use shared processNuggetUrl function (SINGLE SOURCE OF TRUTH)
+      processNuggetUrl(primaryUrl, {
+        cancelKey: `nugget-url-${primaryUrl}`,
+      })
+        .then((metadata) => {
+          if (metadata) {
+            setLinkMetadata(metadata);
+            
+            // FIX: Completely disable auto-title suggestions for YouTube/social networks
+            // User explicitly requested no auto-title functionality for these platforms
+            // Check if this is a YouTube or social network URL
+            const isYouTubeOrSocial = primaryUrl && (
+              primaryUrl.includes('youtube.com') || 
+              primaryUrl.includes('youtu.be') ||
+              primaryUrl.includes('twitter.com') || 
+              primaryUrl.includes('x.com') ||
+              primaryUrl.includes('linkedin.com') ||
+              primaryUrl.includes('instagram.com') ||
+              primaryUrl.includes('tiktok.com') ||
+              primaryUrl.includes('facebook.com') ||
+              primaryUrl.includes('threads.net') ||
+              primaryUrl.includes('reddit.com')
+            );
+            
+            // Do NOT store suggestedTitle for YouTube/social networks
+            if (isYouTubeOrSocial) {
+              console.log('[CreateNuggetModal] YouTube/social network detected - skipping title suggestion');
+              setSuggestedTitle(null);
+            } else if (metadata.previewMetadata?.title) {
+              const metaTitle = metadata.previewMetadata.title.trim();
+              // Skip if title is just a domain or URL pattern
+              const isBadTitle = metaTitle.match(/^(https?:\/\/|www\.|Content from|content from)/i) ||
+                                metaTitle.match(/^[a-z0-9-]+\.[a-z]{2,}$/i) || // Just domain
+                                metaTitle.length < 3; // Too short
+              if (!isBadTitle) {
+                console.log('[CreateNuggetModal] Metadata title found, storing as suggestion:', metaTitle);
+                setSuggestedTitle(metaTitle);
+                // CRITICAL: DO NOT call setTitle() here - title must remain empty until user clicks button
               } else {
-                console.log('[CreateNuggetModal] No metadata title found');
+                console.log('[CreateNuggetModal] Metadata title rejected as bad title:', metaTitle);
                 setSuggestedTitle(null);
               }
             } else {
-              setLinkMetadata(null);
+              console.log('[CreateNuggetModal] No metadata title found');
               setSuggestedTitle(null);
             }
-          })
-          .catch((error) => {
-            console.error('Failed to fetch link metadata:', error);
+          } else {
             setLinkMetadata(null);
             setSuggestedTitle(null);
-          })
-          .finally(() => {
-            setIsLoadingMetadata(false);
-          });
-      } else if (!firstLinkUrl && detectedLink) {
-        // No URLs that need metadata, clear link metadata
-        setDetectedLink(null);
-        setLinkMetadata(null);
-        setSuggestedTitle(null);
-        setCustomDomain(null);
-      }
-    } else {
-      if (detectedLink) {
-        setDetectedLink(null);
-        setLinkMetadata(null);
-        setSuggestedTitle(null);
-        setCustomDomain(null);
-      }
+          }
+        })
+        .catch((error) => {
+          console.error('[CreateNuggetModal] Failed to fetch link metadata:', error);
+          setLinkMetadata(null);
+          setSuggestedTitle(null);
+        })
+        .finally(() => {
+          setIsLoadingMetadata(false);
+        });
+    } else if (!primaryUrl && detectedLink) {
+      // No URLs that need metadata, clear link metadata
+      setDetectedLink(null);
+      setLinkMetadata(null);
+      setSuggestedTitle(null);
+      setCustomDomain(null);
+    } else if (primaryUrl && primaryUrl === detectedLink && !linkMetadata && !isLoadingMetadata) {
+      // Edge case: URL exists but metadata wasn't fetched (e.g., during initialization)
+      // Re-fetch metadata to ensure we have it
+      setIsLoadingMetadata(true);
+      processNuggetUrl(primaryUrl, {
+        cancelKey: `nugget-url-${primaryUrl}`,
+      })
+        .then((metadata) => {
+          if (metadata) {
+            setLinkMetadata(metadata);
+          }
+        })
+        .catch((error) => {
+          console.error('[CreateNuggetModal] Failed to re-fetch metadata:', error);
+        })
+        .finally(() => {
+          setIsLoadingMetadata(false);
+        });
     }
-  }, [urls, detectedLink]);
+  }, [urls, detectedLink, linkMetadata, isLoadingMetadata]);
 
   // Parse multiple URLs from text (separated by newlines, spaces, commas, etc.)
   const parseMultipleUrls = (text: string): string[] => {
@@ -530,15 +570,23 @@ export const CreateNuggetModal: React.FC<CreateNuggetModalProps> = ({ isOpen, on
     }
   }, [content, title, urls, attachments, contentTouched]);
 
+  // Cleanup paste batch timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (pasteBatchTimeoutRef.current) {
+        clearTimeout(pasteBatchTimeoutRef.current);
+      }
+    };
+  }, []);
+
   // Keyboard navigation handlers are now in SelectableDropdown component
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
       const files = e.target.files;
       if (!files) return;
 
-      setIsSubmitting(true); // Show loading state during compression
-      const newAttachments: FileAttachment[] = [];
       const totalFiles = files.length;
+      const newAttachments: FileAttachment[] = [];
       
       try {
           for (let i = 0; i < files.length; i++) {
@@ -559,7 +607,7 @@ export const CreateNuggetModal: React.FC<CreateNuggetModalProps> = ({ isOpen, on
               const isImage = isImageFile(file);
               let processedFile = file;
               
-              // Compress images before adding to attachments
+              // Compress images before upload (for preview only, actual upload uses original)
               if (isImage) {
                   try {
                       processedFile = await compressImage(file);
@@ -578,11 +626,35 @@ export const CreateNuggetModal: React.FC<CreateNuggetModalProps> = ({ isOpen, on
                   }
               }
               
-              newAttachments.push({
+              // Create temporary preview attachment
+              const attachment: FileAttachment = {
                   file: processedFile,
-                  previewUrl: URL.createObjectURL(processedFile),
-                  type: isImage ? 'image' : 'document'
-              });
+                  previewUrl: URL.createObjectURL(processedFile), // Temporary preview only
+                  type: isImage ? 'image' : 'document',
+                  isUploading: isImage, // Only upload images to Cloudinary
+              };
+              
+              newAttachments.push(attachment);
+              
+              // Upload image to Cloudinary immediately
+              if (isImage) {
+                  try {
+                      const uploadResult = await mediaUpload.upload(file); // Use original file for upload
+                      if (uploadResult) {
+                          // Update attachment with mediaId and secureUrl
+                          attachment.mediaId = uploadResult.mediaId;
+                          attachment.secureUrl = uploadResult.secureUrl;
+                          attachment.isUploading = false;
+                      } else {
+                          attachment.uploadError = mediaUpload.error || 'Upload failed';
+                          attachment.isUploading = false;
+                      }
+                  } catch (uploadError: any) {
+                      console.error('Upload error:', uploadError);
+                      attachment.uploadError = uploadError.message || 'Upload failed';
+                      attachment.isUploading = false;
+                  }
+              }
           }
           
           setAttachments(prev => [...prev, ...newAttachments]);
@@ -597,22 +669,13 @@ export const CreateNuggetModal: React.FC<CreateNuggetModalProps> = ({ isOpen, on
           console.error('File upload error:', error);
           setError('Failed to process files. Please try again.');
       } finally {
-          setIsSubmitting(false);
           setUploadProgress(null);
           if (fileInputRef.current) fileInputRef.current.value = '';
       }
   };
 
   // removeAttachment is now handled by AttachmentManager component
-
-  const convertFileToBase64 = (file: File): Promise<string> => {
-      return new Promise((resolve, reject) => {
-          const reader = new FileReader();
-          reader.readAsDataURL(file);
-          reader.onload = () => resolve(reader.result as string);
-          reader.onerror = error => reject(error);
-      });
-  };
+  // CRITICAL: convertFileToBase64 removed - Base64 storage is FORBIDDEN
 
   // --- AI HANDLER ---
   const handleAISummarize = async () => {
@@ -718,6 +781,25 @@ export const CreateNuggetModal: React.FC<CreateNuggetModalProps> = ({ isOpen, on
 
         // Handle edit mode - only update editable fields
         if (mode === 'edit' && initialData) {
+            // CRITICAL: Wait for metadata fetch if in progress
+            // This ensures media is included when URL is added during edit
+            let finalMetadata = linkMetadata;
+            if (isLoadingMetadata && detectedLink) {
+                // Metadata fetch is in progress, wait for it to complete
+                try {
+                    const metadata = await processNuggetUrl(detectedLink, {
+                        cancelKey: `nugget-url-${detectedLink}`,
+                    });
+                    if (metadata) {
+                        finalMetadata = metadata;
+                        setLinkMetadata(metadata); // Update state for UI
+                    }
+                } catch (error) {
+                    console.error('[CreateNuggetModal] Failed to fetch metadata during save:', error);
+                    // Continue with existing metadata or create minimal media
+                }
+            }
+            
             // Prepare update payload with only editable fields
             const updatePayload: Partial<Article> = {
                 title: finalTitle,
@@ -730,7 +812,7 @@ export const CreateNuggetModal: React.FC<CreateNuggetModalProps> = ({ isOpen, on
             const excerptText = content.trim() || finalTitle || '';
             updatePayload.excerpt = excerptText.length > 150 ? excerptText.substring(0, 150) + '...' : excerptText;
             
-            // Handle URLs/media updates
+            // Handle URLs/media updates using shared utility
             const imageUrls: string[] = [];
             const linkUrls: string[] = [];
             
@@ -743,36 +825,72 @@ export const CreateNuggetModal: React.FC<CreateNuggetModalProps> = ({ isOpen, on
                 }
             }
             
-            const primaryUrl = linkUrls.length > 0 ? linkUrls[0] : detectedLink;
+            // Use shared getPrimaryUrl function (SINGLE SOURCE OF TRUTH)
+            const primaryUrl = getPrimaryUrl(urls) || detectedLink;
             
-            // Update media if URLs changed
-            if (linkMetadata || primaryUrl) {
-                updatePayload.media = linkMetadata ? {
-                    ...linkMetadata,
-                    previewMetadata: linkMetadata.previewMetadata ? {
-                        ...linkMetadata.previewMetadata,
-                        url: linkMetadata.previewMetadata.url || primaryUrl || '',
-                        siteName: customDomain || linkMetadata.previewMetadata.siteName,
-                    } : {
-                        url: primaryUrl || '',
-                        title: finalTitle,
-                        siteName: customDomain || undefined,
-                    }
-                } : (primaryUrl ? {
-                    type: detectProviderFromUrl(primaryUrl),
-                    url: primaryUrl,
-                    previewMetadata: {
+            // CRITICAL: Always update media if URLs exist or were changed
+            // This ensures media appears after adding URL via Edit
+            if (primaryUrl) {
+                if (finalMetadata) {
+                    // Use fetched metadata
+                    updatePayload.media = {
+                        ...finalMetadata,
+                        previewMetadata: finalMetadata.previewMetadata ? {
+                            ...finalMetadata.previewMetadata,
+                            url: finalMetadata.previewMetadata.url || primaryUrl || '',
+                            siteName: customDomain || finalMetadata.previewMetadata.siteName,
+                        } : {
+                            url: primaryUrl || '',
+                            title: finalTitle,
+                            siteName: customDomain || undefined,
+                        }
+                    };
+                } else {
+                    // Create minimal media object if metadata not available
+                    // This ensures media field is set even if fetch failed
+                    updatePayload.media = {
+                        type: detectProviderFromUrl(primaryUrl),
                         url: primaryUrl,
-                        title: finalTitle,
-                        siteName: customDomain || undefined,
+                        previewMetadata: {
+                            url: primaryUrl,
+                            title: finalTitle,
+                            siteName: customDomain || undefined,
+                        }
+                    };
+                }
+            } else if (urls.length === 0) {
+                // URLs were removed, clear media
+                updatePayload.media = null;
+            }
+            // If primaryUrl is null but urls exist (all images), don't update media
+            
+            // Collect mediaIds and secureUrls from successfully uploaded images in edit mode
+            const mediaIds: string[] = [];
+            const uploadedImageUrls: string[] = [];
+            for (const att of attachments) {
+                if (att.type === 'image' && att.mediaId) {
+                    mediaIds.push(att.mediaId);
+                    // Also collect Cloudinary URLs for display
+                    if (att.secureUrl) {
+                        uploadedImageUrls.push(att.secureUrl);
                     }
-                } : null);
+                }
             }
             
-            // Update images if image URLs were added
-            if (imageUrls.length > 0) {
-                const existingImages = initialData.images || [];
-                updatePayload.images = [...existingImages, ...imageUrls];
+            // Include existing mediaIds from initialData
+            const existingMediaIds = initialData.mediaIds || [];
+            const allMediaIds = [...existingMediaIds, ...mediaIds];
+            
+            if (allMediaIds.length > 0) {
+                updatePayload.mediaIds = allMediaIds;
+            }
+            
+            // CRITICAL: Add Cloudinary URLs to images array for display
+            // Combine: existing images + URL input images + uploaded Cloudinary images
+            const existingImages = initialData.images || [];
+            const allImages = [...existingImages, ...imageUrls, ...uploadedImageUrls];
+            if (allImages.length > 0) {
+                updatePayload.images = allImages;
             }
             
             // Call update
@@ -782,7 +900,14 @@ export const CreateNuggetModal: React.FC<CreateNuggetModalProps> = ({ isOpen, on
                 throw new Error('Failed to update nugget');
             }
             
-            // Optimistically update query cache
+            // CRITICAL: Invalidate and refresh all query caches
+            // This ensures feed, drawer, and inline views show updated media
+            await queryClient.invalidateQueries({ queryKey: ['articles'] });
+            
+            // Also update specific article cache if it exists
+            queryClient.setQueryData(['article', initialData.id], updatedArticle);
+            
+            // Optimistically update query cache for immediate UI update
             queryClient.setQueryData(['articles'], (oldData: any) => {
                 if (!oldData) return oldData;
                 // Handle paginated response
@@ -803,29 +928,77 @@ export const CreateNuggetModal: React.FC<CreateNuggetModalProps> = ({ isOpen, on
                 return oldData;
             });
             
-            // Also invalidate to ensure consistency
-            await queryClient.invalidateQueries({ queryKey: ['articles'] });
+            // REGRESSION SAFEGUARD: Assert that if URL exists, media must be present
+            // This prevents silent failures where URL is added but media doesn't appear
+            if (primaryUrl && !updatedArticle.media) {
+                const errorMsg = `[CreateNuggetModal] REGRESSION: URL exists but media is missing after update. URL: ${primaryUrl}, ArticleId: ${updatedArticle.id}`;
+                console.error(errorMsg);
+                // In development, throw to catch this early
+                if (process.env.NODE_ENV === 'development') {
+                    console.error('This indicates a bug in URL + media processing. Media should always be set when a URL is present.');
+                }
+            }
+            
+            // REGRESSION SAFEGUARD: Assert that media has required fields if it exists
+            if (updatedArticle.media) {
+                if (!updatedArticle.media.url) {
+                    console.error('[CreateNuggetModal] REGRESSION: Media object exists but missing URL field');
+                }
+                if (!updatedArticle.media.previewMetadata) {
+                    console.error('[CreateNuggetModal] REGRESSION: Media object exists but missing previewMetadata');
+                }
+            }
             
             toast.success('Nugget updated successfully');
             handleClose();
             return;
         }
         
-        // CREATE MODE (existing logic)
-        const uploadedImages: string[] = [];
+        // CREATE MODE - Use mediaIds instead of Base64
+        const mediaIds: string[] = [];
+        const uploadedImageUrls: string[] = []; // Cloudinary URLs for display
         const uploadedDocs: any[] = [];
 
+        // Collect mediaIds and secureUrls from successfully uploaded images
         for (const att of attachments) {
-            const base64 = await convertFileToBase64(att.file);
             if (att.type === 'image') {
-                uploadedImages.push(base64);
+                if (att.mediaId) {
+                    mediaIds.push(att.mediaId);
+                    // Also collect Cloudinary URLs for display in cards
+                    if (att.secureUrl) {
+                        uploadedImageUrls.push(att.secureUrl);
+                    }
+                } else if (att.uploadError) {
+                    // Skip failed uploads, but warn user
+                    toast.warning(`Image "${att.file.name}" failed to upload and was skipped.`);
+                } else if (att.isUploading) {
+                    // Wait for upload to complete
+                    toast.warning(`Image "${att.file.name}" is still uploading. Please wait.`);
+                    setIsSubmitting(false);
+                    return;
+                }
             } else {
-                uploadedDocs.push({
-                    title: att.file.name,
-                    url: base64,
-                    type: att.file.name.split('.').pop() || 'file',
-                    size: (att.file.size / 1024).toFixed(0) + 'KB'
-                });
+                // Documents: Upload to Cloudinary as well (not just images)
+                try {
+                    const uploadResult = await mediaUpload.upload(att.file);
+                    if (uploadResult && uploadResult.secureUrl) {
+                        uploadedDocs.push({
+                            title: att.file.name,
+                            url: uploadResult.secureUrl, // Use Cloudinary URL instead of Base64
+                            type: att.file.name.split('.').pop() || 'file',
+                            size: (att.file.size / 1024).toFixed(0) + 'KB'
+                        });
+                        // Also add to mediaIds if it's an image-like document
+                        if (uploadResult.mediaId) {
+                            mediaIds.push(uploadResult.mediaId);
+                        }
+                    } else {
+                        toast.warning(`Document "${att.file.name}" failed to upload and was skipped.`);
+                    }
+                } catch (uploadError: any) {
+                    console.error('Document upload error:', uploadError);
+                    toast.warning(`Document "${att.file.name}" failed to upload: ${uploadError.message || 'Unknown error'}`);
+                }
             }
         }
 
@@ -842,13 +1015,13 @@ export const CreateNuggetModal: React.FC<CreateNuggetModalProps> = ({ isOpen, on
             }
         }
 
-        // Add image URLs to uploaded images array
-        uploadedImages.push(...imageUrls);
+        // Note: Image URLs are handled separately via media field
+        // They are not added to mediaIds array
 
         const finalAliasName = selectedAlias === 'Custom...' ? customAlias : selectedAlias;
 
-        // Use first non-image URL for media metadata, or fallback to detected link
-        const primaryUrl = linkUrls.length > 0 ? linkUrls[0] : detectedLink;
+        // Use shared getPrimaryUrl function (SINGLE SOURCE OF TRUTH)
+        const primaryUrl = getPrimaryUrl(urls) || detectedLink;
         
         // Generate excerpt from content if available, otherwise use title or empty
         const excerptText = content.trim() || finalTitle || '';
@@ -883,6 +1056,9 @@ export const CreateNuggetModal: React.FC<CreateNuggetModalProps> = ({ isOpen, on
             return;
         }
         
+        // Combine image URLs: from URL input + uploaded Cloudinary images
+        const allImageUrls = [...imageUrls, ...uploadedImageUrls];
+        
         const newArticle = await storageService.createArticle({
             title: finalTitle,
             content: content.trim() || '', // Send empty string if no content (allowed when URLs/images exist)
@@ -892,7 +1068,8 @@ export const CreateNuggetModal: React.FC<CreateNuggetModalProps> = ({ isOpen, on
             categories,
             tags: validTags, // FIX: Use categories (tags) instead of empty array 
             readTime,
-            images: uploadedImages,
+            mediaIds: mediaIds.length > 0 ? mediaIds : undefined, // CRITICAL: Send mediaIds instead of Base64 images
+            images: allImageUrls.length > 0 ? allImageUrls : undefined, // CRITICAL: Cloudinary URLs for display
             documents: uploadedDocs,
             visibility,
             // Store multiple URLs in a custom field if supported, or use first URL for media
@@ -943,6 +1120,16 @@ export const CreateNuggetModal: React.FC<CreateNuggetModalProps> = ({ isOpen, on
         }
 
         await queryClient.invalidateQueries({ queryKey: ['articles'] });
+        
+        // REGRESSION SAFEGUARD: Assert that if URL exists, media must be present
+        if (primaryUrl && newArticle.media === null) {
+            const errorMsg = `[CreateNuggetModal] REGRESSION: URL exists but media is null after create. URL: ${primaryUrl}, ArticleId: ${newArticle.id}`;
+            console.error(errorMsg);
+            if (process.env.NODE_ENV === 'development') {
+                console.error('This indicates a bug in URL + media processing. Media should always be set when a URL is present.');
+            }
+        }
+        
         handleClose();
     } catch (e: any) {
         console.error("Failed to create nugget", e);
@@ -1194,18 +1381,51 @@ export const CreateNuggetModal: React.FC<CreateNuggetModalProps> = ({ isOpen, on
                     }}
                     isAiLoading={isAiLoading}
                     onAiSummarize={handleAISummarize}
-                    onImagePaste={(file) => {
+                    onImagePaste={async (file) => {
                         if (isImageFile(file)) {
-                            const dataTransfer = new DataTransfer();
-                            dataTransfer.items.add(file);
-                            const fileInput = document.createElement('input');
-                            fileInput.type = 'file';
-                            fileInput.files = dataTransfer.files;
-                            const syntheticEvent = {
-                                target: fileInput,
-                                currentTarget: fileInput
-                            } as React.ChangeEvent<HTMLInputElement>;
-                            handleFileUpload(syntheticEvent);
+                            // Batch multiple pasted images by collecting them and processing together
+                            // Add to buffer
+                            pastedImagesBufferRef.current.push(file);
+                            
+                            // Clear any existing timeout
+                            if (pasteBatchTimeoutRef.current) {
+                                clearTimeout(pasteBatchTimeoutRef.current);
+                            }
+                            
+                            // Process after a short delay to allow all images from the same paste event to be collected
+                            pasteBatchTimeoutRef.current = setTimeout(async () => {
+                                const images = [...pastedImagesBufferRef.current];
+                                pastedImagesBufferRef.current = [];
+                                
+                                if (images.length > 0) {
+                                    // Upload each pasted image immediately to Cloudinary
+                                    for (const imageFile of images) {
+                                        try {
+                                            const uploadResult = await mediaUpload.upload(imageFile);
+                                            if (uploadResult) {
+                                                // Create attachment with mediaId
+                                                const attachment: FileAttachment = {
+                                                    file: imageFile,
+                                                    previewUrl: URL.createObjectURL(imageFile), // Temporary preview
+                                                    type: 'image',
+                                                    mediaId: uploadResult.mediaId,
+                                                    secureUrl: uploadResult.secureUrl,
+                                                    isUploading: false,
+                                                };
+                                                setAttachments(prev => [...prev, attachment]);
+                                                if (!contentTouched) setContentTouched(true);
+                                            } else {
+                                                toast.error(`Failed to upload pasted image: ${mediaUpload.error || 'Unknown error'}`);
+                                            }
+                                        } catch (error: any) {
+                                            console.error('Paste upload error:', error);
+                                            toast.error(`Failed to upload pasted image: ${error.message || 'Unknown error'}`);
+                                        }
+                                    }
+                                }
+                                
+                                pasteBatchTimeoutRef.current = null;
+                            }, 50); // Small delay to batch multiple images from the same paste operation
                         }
                     }}
                     error={contentError}

@@ -1,9 +1,10 @@
 
 import React, { useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Check, Upload, Image as ImageIcon } from 'lucide-react';
+import { X, Check, Upload, Image as ImageIcon, Loader2 } from 'lucide-react';
 import { AvatarColor, AVATAR_COLORS } from '@/types/settings';
 import { getInitials } from '@/utils/formatters';
+import { useMediaUpload } from '@/hooks/useMediaUpload';
 
 interface AvatarSelectorModalProps {
   isOpen: boolean;
@@ -24,22 +25,27 @@ export const AvatarSelectorModal: React.FC<AvatarSelectorModalProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<'colors' | 'upload'>('colors');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const mediaUpload = useMediaUpload({ purpose: 'avatar' });
 
   if (!isOpen) return null;
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
         if (file.size > 2 * 1024 * 1024) {
             alert("Image must be less than 2MB");
             return;
         }
-        const reader = new FileReader();
-        reader.onloadend = () => {
-            onSelect({ type: 'image', value: reader.result as string });
+        
+        // Upload to Cloudinary via media upload hook
+        const uploadResult = await mediaUpload.upload(file);
+        if (uploadResult && uploadResult.secureUrl) {
+            // Return secureUrl instead of Base64
+            onSelect({ type: 'image', value: uploadResult.secureUrl });
             onClose();
-        };
-        reader.readAsDataURL(file);
+        } else {
+            alert(`Failed to upload image: ${mediaUpload.error || 'Unknown error'}`);
+        }
     }
   };
 
@@ -112,16 +118,29 @@ export const AvatarSelectorModal: React.FC<AvatarSelectorModalProps> = ({
             {activeTab === 'upload' && allowUpload && (
                 <div className="flex flex-col items-center justify-center gap-4">
                     <div 
-                        onClick={() => fileInputRef.current?.click()}
-                        className="w-full h-32 border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors group"
+                        onClick={() => !mediaUpload.loading && fileInputRef.current?.click()}
+                        className={`w-full h-32 border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-xl flex flex-col items-center justify-center transition-colors group ${
+                            mediaUpload.loading ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800'
+                        }`}
                     >
-                        <div className="p-3 bg-slate-100 dark:bg-slate-800 rounded-full text-slate-400 group-hover:text-primary-500 transition-colors mb-2">
-                            <Upload size={24} />
-                        </div>
-                        <span className="text-sm font-bold text-slate-500 dark:text-slate-400 group-hover:text-slate-700 dark:group-hover:text-slate-200">
-                            Click to upload image
-                        </span>
-                        <span className="text-[10px] text-slate-400 mt-1">Max 2MB</span>
+                        {mediaUpload.loading ? (
+                            <>
+                                <Loader2 size={24} className="animate-spin text-primary-500 mb-2" />
+                                <span className="text-sm font-bold text-slate-500 dark:text-slate-400">
+                                    Uploading...
+                                </span>
+                            </>
+                        ) : (
+                            <>
+                                <div className="p-3 bg-slate-100 dark:bg-slate-800 rounded-full text-slate-400 group-hover:text-primary-500 transition-colors mb-2">
+                                    <Upload size={24} />
+                                </div>
+                                <span className="text-sm font-bold text-slate-500 dark:text-slate-400 group-hover:text-slate-700 dark:group-hover:text-slate-200">
+                                    Click to upload image
+                                </span>
+                                <span className="text-[10px] text-slate-400 mt-1">Max 2MB</span>
+                            </>
+                        )}
                     </div>
                     <input 
                         type="file" 
@@ -129,7 +148,13 @@ export const AvatarSelectorModal: React.FC<AvatarSelectorModalProps> = ({
                         onChange={handleFileUpload} 
                         className="hidden" 
                         accept="image/*"
+                        disabled={mediaUpload.loading}
                     />
+                    {mediaUpload.error && (
+                        <div className="text-xs text-red-600 dark:text-red-400">
+                            {mediaUpload.error}
+                        </div>
+                    )}
                 </div>
             )}
         </div>

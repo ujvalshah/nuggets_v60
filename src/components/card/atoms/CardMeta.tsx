@@ -66,17 +66,15 @@ export const CardMeta: React.FC<CardMetaProps> = ({
   return (
     <div
       className={twMerge(
-        // Finance-grade: Readable metadata (WCAG AA contrast), visually secondary but not muted to unreadable
-        'flex items-center gap-1.5 text-[10px] font-medium text-slate-600 dark:text-slate-400',
+        // PHASE 1: 8-pt spacing (gap-2 = 8px), muted secondary text, 12px font size
+        'flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400',
         className
       )}
     >
-      {/* Compact design: Avatar with hover/tap tooltip for author name */}
+      {/* Avatar with tooltip */}
       {avatarElement}
       
-      {/* Compact design: Author name hidden, only shown in tooltip */}
-      {/* Finance-grade: Maintain readable contrast for metadata */}
-      <span className="text-slate-500 dark:text-slate-500">·</span>
+      {/* Date - small muted metadata */}
       <span>{displayDate}</span>
     </div>
   );

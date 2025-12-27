@@ -7,6 +7,7 @@ import { useRequireAuth } from './useRequireAuth';
 import { storageService } from '@/services/storageService';
 import { queryClient } from '@/queryClient';
 import { sanitizeArticle, hasValidAuthor, logError } from '@/utils/errorHandler';
+import { getAllImageUrls, classifyArticleMedia } from '@/utils/mediaClassifier';
 // formatDate removed - using relative time formatting in CardMeta instead
 
 // ────────────────────────────────────────
@@ -36,6 +37,7 @@ export interface NewsCardData {
   media: Article['media'];
   images: string[] | undefined;
   video: string | undefined;
+  cardType: 'hybrid' | 'media-only'; // Two-card architecture: Hybrid (default) or Media-Only
 }
 
 export interface NewsCardFlags {
@@ -148,7 +150,25 @@ export const useNewsCard = ({
   article = sanitizedArticle;
 
   const isOwner = currentUserId === article.author.id;
-  const hasMedia = !!article.media || (article.images && article.images.length > 0) || !!article.video;
+  
+  // ═══════════════════════════════════════════════════════════════════════
+  // MEDIA DETECTION: Comprehensive check for all media types
+  // ═══════════════════════════════════════════════════════════════════════
+  // Check for media in all possible locations:
+  // 1. Primary/supporting media (new format)
+  // 2. Legacy media field (includes Twitter/LinkedIn links)
+  // 3. Legacy images array
+  // 4. Legacy video field
+  // CRITICAL: Twitter/LinkedIn embeds are in article.media with type='twitter'/'linkedin'
+  const hasPrimaryMedia = !!article.primaryMedia;
+  const hasSupportingMedia = !!(article.supportingMedia && article.supportingMedia.length > 0);
+  const hasLegacyMedia = !!article.media;
+  const hasLegacyImages = !!(article.images && article.images.length > 0);
+  const hasLegacyVideo = !!article.video;
+  
+  // Media exists if ANY of these conditions are true
+  const hasMedia = hasPrimaryMedia || hasSupportingMedia || hasLegacyMedia || hasLegacyImages || hasLegacyVideo;
+  
   const isLink = article.source_type === 'link';
   const isNoteOrIdea = article.source_type === 'note' || article.source_type === 'idea';
   const isTextNugget = !hasMedia && !isLink;
@@ -187,6 +207,246 @@ export const useNewsCard = ({
 
   const resolvedTitle = resolveCardTitle();
   const shouldShowTitle = !!resolvedTitle && !isNoteOrIdea;
+  
+  // CRITICAL: For cardType classification, only check user-provided title, NOT metadata titles
+  // Metadata titles should be used for display but shouldn't force cards to be hybrid
+  // This allows media-only cards to display metadata titles in overlay without being promoted to hybrid
+  const hasUserProvidedTitle = !!article.title?.trim() && !isNoteOrIdea;
+
+  // ────────────────────────────────────────
+  // CARD TYPE CLASSIFICATION (Two-card architecture)
+  // ────────────────────────────────────────
+  /**
+   * Two-card architecture:
+   * 1. 'hybrid' - Media + Text (default) - Media block at top, tags, title, body content, footer
+   * 2. 'media-only' - Media fills card height, optional short caption (2-3 lines max), footer
+   * 
+   * PROMOTION RULE: If text would need truncation (>2-3 lines), MUST be Hybrid Card
+   * "If text needs truncation, it is not a Media-Only card."
+   * 
+   * Media-Only cards are ONLY for:
+   * - Primarily visual content (chart, screenshot, graphic, tweet, image)
+   * - Text content does NOT exceed 2-3 lines (short caption)
+   * - No long-form body content
+   * - No user-provided title (metadata titles are allowed and displayed in overlay)
+   * 
+   * IMPORTANT: CardType classification uses hasUserProvidedTitle (user-entered title only),
+   * NOT shouldShowTitle (which includes metadata titles). This allows media-only cards to
+   * display metadata titles (e.g., YouTube video titles) without being forced to hybrid.
+   */
+  
+  // Helper: Estimate if text would exceed 2-3 lines (rough estimate: ~150-200 chars per 2-3 lines)
+  // This is a heuristic - actual line count depends on container width, but this is conservative
+  const estimateTextLength = (text: string): number => {
+    if (!text) return 0;
+    // Strip markdown headers for estimation
+    const stripped = text.replace(/^#{1,2}\s+/gm, '').trim();
+    return stripped.length;
+  };
+  
+  // Helper: Count actual lines in text (more accurate than character count)
+  const countTextLines = (text: string): number => {
+    if (!text) return 0;
+    const stripped = text.replace(/^#{1,2}\s+/gm, '').trim();
+    if (!stripped) return 0;
+    // Count non-empty lines
+    const lines = stripped.split('\n').filter(line => line.trim().length > 0);
+    return lines.length;
+  };
+  
+  const contentText = article.content || article.excerpt || '';
+  const estimatedLength = estimateTextLength(contentText);
+  const actualLineCount = countTextLines(contentText);
+  // Rough estimate: 2-3 lines ≈ 150-200 characters (conservative: use 200 as threshold)
+  const CAPTION_THRESHOLD = 200; // Characters that fit in 2-3 lines
+  const MAX_PREVIEW_LINES = 3; // Maximum lines for media-only caption
+  
+  // Check for multi-image media
+  const allImageUrls = getAllImageUrls(article);
+  const hasMultipleImages = allImageUrls.length > 1;
+  
+  // Get trimmed body text for classification
+  const trimmedBody = contentText.trim();
+  const trimmedBodyLineCount = countTextLines(trimmedBody);
+  
+  // DIAGNOSTIC: Log image detection BEFORE classification
+  if (hasMedia) {
+    console.log(`[CARD-AUDIT] Image Detection for ${article.id.substring(0, 8)}:`, {
+      allImageUrls: allImageUrls,
+      imageCount: allImageUrls.length,
+      hasMultipleImages: hasMultipleImages,
+      hasLegacyImages: !!(article.images && article.images.length > 0),
+      hasPrimaryMedia: !!article.primaryMedia,
+      hasSupportingMedia: !!(article.supportingMedia && article.supportingMedia.length > 0),
+      primaryMediaType: article.primaryMedia?.type,
+      mediaType: article.media?.type,
+    });
+  }
+  
+  // Determine card type with promotion rule
+  let cardType: 'hybrid' | 'media-only';
+  let classificationReason = '';
+  
+  // ═══════════════════════════════════════════════════════════════════════
+  // ENFORCEMENT RULE: Long Text → MUST be Hybrid (regardless of media)
+  // ═══════════════════════════════════════════════════════════════════════
+  // If a card contains non-empty body text beyond the allowed preview line limit,
+  // it MUST be treated as a HYBRID card, and truncation + fade MUST apply.
+  // This applies to: single images, multiple images, any media type
+  // Do NOT treat cards with long text as media-only, even if they have media.
+  const hasLongText = Boolean(trimmedBody) && trimmedBodyLineCount > MAX_PREVIEW_LINES;
+  const isMultiImageWithLongText = hasMultipleImages && hasLongText;
+  
+  if (!hasMedia) {
+    // No media = always Hybrid (text-only is a subset of Hybrid without media)
+    cardType = 'hybrid';
+    classificationReason = 'no-media';
+  } else if (hasLongText) {
+    // ENFORCEMENT: Any media + long text → MUST be Hybrid
+    // This ensures truncation + fade apply for all cards with long text
+    // Special case: Multi-image gets specific reason for debugging
+    if (isMultiImageWithLongText) {
+      cardType = 'hybrid';
+      classificationReason = `multi-image-long-text (${allImageUrls.length} images, ${trimmedBodyLineCount} lines > ${MAX_PREVIEW_LINES})`;
+    } else {
+      cardType = 'hybrid';
+      classificationReason = `long-text (${trimmedBodyLineCount} lines > ${MAX_PREVIEW_LINES})`;
+    }
+  } else {
+    // Has media - check if qualifies for Media-Only
+    // CRITICAL: Use trimmedBodyLineCount consistently (same as enforcement rule)
+    const hasMinimalText = estimatedLength <= CAPTION_THRESHOLD && !contentText.trim().includes('\n\n');
+    const hasMinimalLines = trimmedBodyLineCount <= MAX_PREVIEW_LINES;
+    
+    // Media-Only ONLY if: minimal text AND no user-provided title (metadata titles don't count)
+    // Promotion rule: if text exceeds threshold or has user-provided title → Hybrid
+    // NOTE: Metadata titles are allowed for media-only cards (displayed in overlay, don't force hybrid)
+    // CRITICAL: hasUserProvidedTitle checks ONLY article.title (user-entered), NOT metadata titles
+    if (hasMinimalText && hasMinimalLines && !hasUserProvidedTitle) {
+      cardType = 'media-only';
+      classificationReason = 'minimal-text-no-user-title';
+    } else {
+      // Promotion to Hybrid: text exceeds caption length, has user-provided title, or has structured content
+      cardType = 'hybrid';
+      if (!hasMinimalText) {
+        classificationReason = `text-exceeds-threshold (${estimatedLength} > ${CAPTION_THRESHOLD})`;
+      } else if (!hasMinimalLines) {
+        classificationReason = `lines-exceed-preview (${trimmedBodyLineCount} > ${MAX_PREVIEW_LINES})`;
+      } else if (hasUserProvidedTitle) {
+        classificationReason = 'has-user-provided-title';
+      } else {
+        classificationReason = 'other';
+      }
+    }
+  }
+  
+  // ═══════════════════════════════════════════════════════════════════════
+  // COMPREHENSIVE DIAGNOSTICS: Log all card properties for debugging
+  // ═══════════════════════════════════════════════════════════════════════
+  
+  // Detect media variant (single image, gallery, embed, video, screenshot, etc.)
+  const { primaryMedia } = classifyArticleMedia(article);
+  let mediaVariant = 'none';
+  if (hasMedia) {
+    if (hasMultipleImages && allImageUrls.length >= 2) {
+      mediaVariant = `gallery (${allImageUrls.length} images)`;
+    } else if (primaryMedia) {
+      if (primaryMedia.type === 'youtube') {
+        mediaVariant = 'video-youtube';
+      } else if (primaryMedia.type === 'image') {
+        mediaVariant = 'single-image';
+      } else if (primaryMedia.type === 'twitter' || article.media?.type === 'twitter') {
+        mediaVariant = 'embed-twitter';
+      } else if (primaryMedia.type === 'linkedin' || article.media?.type === 'linkedin') {
+        mediaVariant = 'embed-linkedin';
+      } else if (primaryMedia.type === 'document' || primaryMedia.type === 'pdf') {
+        mediaVariant = 'document';
+      } else if (article.media?.type) {
+        mediaVariant = `embed-${article.media.type}`;
+      } else {
+        mediaVariant = `other-${primaryMedia.type || 'unknown'}`;
+      }
+    } else if (article.media) {
+      if (article.media.type === 'twitter') {
+        mediaVariant = 'embed-twitter';
+      } else if (article.media.type === 'linkedin') {
+        mediaVariant = 'embed-linkedin';
+      } else {
+        mediaVariant = `embed-${article.media.type}`;
+      }
+    } else if (hasLegacyImages) {
+      mediaVariant = hasMultipleImages ? `gallery (${allImageUrls.length} images)` : 'single-image';
+    } else if (hasLegacyVideo) {
+      mediaVariant = 'video';
+    }
+  }
+  
+  // Determine if card has body text (content or excerpt)
+  const hasBodyText = Boolean(trimmedBody && trimmedBody.length > 0);
+  
+  // For Media-Only cards, overlay text is rendered inside media container
+  // For Hybrid cards, body text is rendered in the content area
+  const hasOverlayText = cardType === 'media-only' && hasBodyText;
+  
+  // 🔍 AUDIT LOGGING - Card Classification (Enhanced with all diagnostics)
+  const auditData = {
+    id: article.id.substring(0, 8) + '...', // Shortened for readability
+    detectedCardType: cardType,
+    hasMedia,
+    mediaVariant,
+    hasPrimaryMedia,
+    hasSupportingMedia,
+    hasLegacyMedia,
+    hasLegacyImages,
+    hasLegacyVideo,
+    primaryMediaType: primaryMedia?.type || article.media?.type || 'none',
+    mediaCount: allImageUrls.length,
+    hasMultipleImages,
+    hasBodyText,
+    hasOverlayText,
+    contentLength: contentText.length,
+    estimatedLength,
+    actualLineCount,
+    trimmedBodyLineCount,
+    hasLongText,
+    isMultiImageWithLongText,
+    hasUserProvidedTitle,
+    hasMetadataTitle: !!article.media?.previewMetadata?.title?.trim(),
+    shouldShowTitle, // For display purposes (includes metadata titles)
+    classificationReason,
+    maxPreviewLines: MAX_PREVIEW_LINES,
+    contentPreview: contentText.substring(0, 80) + (contentText.length > 80 ? '...' : ''),
+  };
+  
+  // Log as table for better readability - use JSON.stringify to force visibility
+  console.log('[CARD-AUDIT] Classification:', JSON.stringify(auditData, null, 2));
+  console.log('[CARD-AUDIT] Classification (expanded):', auditData);
+  
+  // Also log the enforcement rule check separately for multi-image cards
+  if (hasMultipleImages) {
+    const multiImageCheck = {
+      id: article.id.substring(0, 8) + '...',
+      imageCount: allImageUrls.length,
+      hasText: Boolean(trimmedBody),
+      lineCount: trimmedBodyLineCount,
+      exceedsPreview: trimmedBodyLineCount > MAX_PREVIEW_LINES,
+      shouldBeHybrid: isMultiImageWithLongText,
+      finalCardType: cardType,
+    };
+    console.log(`[CARD-AUDIT] Multi-Image Card Check:`, JSON.stringify(multiImageCheck, null, 2));
+    console.log(`[CARD-AUDIT] Multi-Image Card Check (expanded):`, multiImageCheck);
+  }
+  
+  // CRITICAL: Log if long text should force hybrid
+  if (hasLongText) {
+    console.log(`[CARD-AUDIT] ⚠️ LONG TEXT DETECTED - Should be Hybrid:`, {
+      id: article.id.substring(0, 8) + '...',
+      lineCount: trimmedBodyLineCount,
+      maxPreview: MAX_PREVIEW_LINES,
+      cardType: cardType,
+      isHybrid: cardType === 'hybrid',
+    });
+  }
 
   // ────────────────────────────────────────
   // DATA (formatted/derived)
@@ -214,6 +474,7 @@ export const useNewsCard = ({
     media: article.media,
     images: article.images,
     video: article.video,
+    cardType, // Two-card architecture: 'hybrid' | 'media-only'
   };
 
   // ────────────────────────────────────────
@@ -249,13 +510,13 @@ export const useNewsCard = ({
   const handleMediaClick = (e: React.MouseEvent, imageIndex?: number) => {
     e?.stopPropagation();
     
-    // If clicking on media element, go to embedded URL or open lightbox
+    // Media acts as source citation - always try to open source URL if available
     const linkUrl = article.media?.previewMetadata?.url || article.media?.url;
-    if (article.source_type === 'link' && linkUrl) {
-      // Open URL in new tab
+    if (linkUrl) {
+      // Open source URL in new tab
       window.open(linkUrl, '_blank', 'noopener,noreferrer');
     } else {
-      // Open images in lightbox with article detail on the right
+      // Fallback: Open images in lightbox if no URL available
       if (article.media?.type === 'image' || (article.images && article.images.length > 0)) {
         // Store image index for initial display if provided
         if (imageIndex !== undefined) {
@@ -263,7 +524,7 @@ export const useNewsCard = ({
         }
         setShowLightbox(true);
       } else {
-        // For other media types, open full modal
+        // For other media types without URL, open full modal
         setShowFullModal(true);
       }
     }
