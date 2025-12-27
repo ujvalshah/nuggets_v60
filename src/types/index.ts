@@ -23,6 +23,9 @@ export interface PreviewMetadata {
   authorName?: string;
   publishDate?: string;
   mediaType?: MediaType;
+  // YouTube title persistence fields (backend as source of truth)
+  titleSource?: string; // e.g., "youtube-oembed"
+  titleFetchedAt?: string; // ISO timestamp
 }
 
 export interface NuggetMedia {
@@ -54,6 +57,46 @@ export interface DisplayAuthor {
   avatarUrl?: string;
 }
 
+/**
+ * ============================================================================
+ * MEDIA CLASSIFICATION: PRIMARY vs SUPPORTING
+ * ============================================================================
+ * 
+ * PRIMARY MEDIA:
+ * - Exactly ONE primary media item per nugget (or none)
+ * - Determines thumbnail representation in cards
+ * - Priority: YouTube > Image > Document
+ * - Explicitly selected OR inferred once and stored
+ * 
+ * SUPPORTING MEDIA:
+ * - Zero or more additional media items
+ * - Rendered in drawer only, never in cards
+ * - Includes: additional images, videos, documents
+ * - Never influences thumbnail or card layout
+ * 
+ * DETERMINISTIC THUMBNAIL LOGIC:
+ * - IF primaryMedia.type === "youtube" → use YouTube thumbnail
+ * - ELSE IF primaryMedia.type === "image" → use that image
+ * - ELSE → use system fallback
+ */
+
+export interface PrimaryMedia {
+  type: MediaType;
+  url: string;
+  thumbnail?: string; // Cached thumbnail URL (YouTube thumbnail or image URL)
+  aspect_ratio?: string;
+  previewMetadata?: PreviewMetadata;
+}
+
+export interface SupportingMediaItem {
+  type: MediaType;
+  url: string;
+  thumbnail?: string;
+  filename?: string;
+  title?: string;
+  previewMetadata?: PreviewMetadata;
+}
+
 export interface Article {
   id: string;
   title?: string;
@@ -73,8 +116,28 @@ export interface Article {
   readTime: number; 
   visibility?: 'public' | 'private';
   
-  // Media
+  // ============================================================================
+  // MEDIA FIELDS (NEW ARCHITECTURE)
+  // ============================================================================
+  
+  // Primary media - exactly one (or null)
+  // This is the SOURCE OF TRUTH for thumbnail and card representation
+  primaryMedia?: PrimaryMedia | null;
+  
+  // Supporting media - zero or more
+  // Rendered only in drawer, never in cards or inline expansion
+  supportingMedia?: SupportingMediaItem[];
+  
+  // ============================================================================
+  // LEGACY MEDIA FIELDS (BACKWARDS COMPATIBILITY)
+  // ============================================================================
+  // These fields are maintained for backwards compatibility
+  // New code should use primaryMedia/supportingMedia
+  
   media?: NuggetMedia | null;
+  // Media IDs array - explicit references to MongoDB Media documents
+  // CRITICAL: Never parse media IDs from content text. Media references are explicit.
+  mediaIds?: string[]; // Array of MongoDB Media document IDs (ObjectId as strings)
   // Legacy fields
   images?: string[]; 
   video?: string; 
