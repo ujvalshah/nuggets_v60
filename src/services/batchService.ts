@@ -1,3 +1,14 @@
+/**
+ * Batch Service - Fast & Boring Metadata Import
+ * 
+ * Handles bulk nugget creation from:
+ * - Pasted links
+ * - CSV files
+ * - Excel files
+ * 
+ * NO AI features - just metadata fetching and article creation.
+ */
+
 import { BatchRow } from '@/types/batch';
 import { storageService } from './storageService';
 import Papa from 'papaparse';
@@ -70,10 +81,6 @@ function extractUrls(text: string): string[] {
 
 /**
  * Transform Nugget metadata to Article format for preview
- * 
- * PHASE 2: Title is OPTIONAL and user-controlled only.
- * Metadata title is stored in media.previewMetadata.title for display/suggestion,
- * but NEVER used to populate article.title automatically.
  */
 function nuggetToArticle(
   url: string,
@@ -84,13 +91,9 @@ function nuggetToArticle(
   customContent?: string,
   categories: string[] = []
 ): Article {
-  // PHASE 2: Title comes ONLY from user input (customTitle)
-  // Metadata title is NEVER used to auto-populate article.title
-  // It remains in media.previewMetadata.title for display/suggestion purposes only
-  const title = customTitle || undefined; // Explicitly undefined if not provided
+  // Title comes ONLY from user input (customTitle)
+  const title = customTitle || undefined;
   
-  // Titles are optional - allow empty/null titles (no fallback)
-  // Display layer will handle empty titles gracefully
   const description = nuggetMedia?.previewMetadata?.description || '';
   const content = customContent || description || url;
   const excerpt = content.substring(0, 150) + (content.length > 150 ? '...' : '');
@@ -99,7 +102,6 @@ function nuggetToArticle(
   const wordCount = content.trim().split(/\s+/).length;
   const readTime = Math.max(1, Math.ceil(wordCount / 200));
   
-  // PHASE 4: Tags must match categories for consistency
   const previewTags = categories.filter((cat): cat is string => typeof cat === 'string' && cat.trim().length > 0);
   
   return {
@@ -113,7 +115,7 @@ function nuggetToArticle(
     },
     publishedAt: new Date().toISOString(),
     categories,
-    tags: previewTags, // FIX: Use categories as tags for consistency
+    tags: previewTags,
     readTime,
     visibility: 'public',
     source_type: 'link',
@@ -123,7 +125,6 @@ function nuggetToArticle(
 
 /**
  * Process URLs with concurrency limit
- * Uses Set to avoid race conditions when multiple promises complete simultaneously
  */
 async function processWithConcurrency<T>(
   items: T[],
@@ -144,7 +145,6 @@ async function processWithConcurrency<T>(
     }
   }
   
-  // Wait for all remaining promises
   await Promise.all(executing);
 }
 
@@ -156,8 +156,6 @@ export const batchService = {
 
   /**
    * Parse links from text input
-   * Extracts URLs robustly, validates protocol, deduplicates
-   * Validates input limits
    */
   async parseLinks(text: string): Promise<BatchRow[]> {
     if (!text || !text.trim()) {
@@ -166,7 +164,6 @@ export const batchService = {
     
     const urls = extractUrls(text);
     
-    // Validate limits
     if (urls.length === 0) {
       throw new Error('No valid URLs found. Please check your input.');
     }
@@ -175,7 +172,6 @@ export const batchService = {
       throw new Error(`Maximum ${MAX_URLS_PER_BATCH} URLs allowed per batch. Found ${urls.length}.`);
     }
     
-    // Validate URL lengths
     const invalidUrls = urls.filter(url => url.length > MAX_URL_LENGTH);
     if (invalidUrls.length > 0) {
       throw new Error(`Some URLs exceed maximum length of ${MAX_URL_LENGTH} characters.`);
@@ -184,7 +180,7 @@ export const batchService = {
     return urls.map(url => ({
       id: this.generateId(),
       url,
-      title: '', // Will be fetched via unfurl
+      title: '',
       content: '',
       categories: [],
       visibility: 'public',
@@ -196,7 +192,6 @@ export const batchService = {
   },
 
   async parseCSV(file: File): Promise<BatchRow[]> {
-    // Validate file size
     if (file.size > MAX_FILE_SIZE) {
       throw new Error(`File size exceeds maximum of ${MAX_FILE_SIZE / (1024 * 1024)}MB`);
     }
@@ -221,7 +216,6 @@ export const batchService = {
           
           const validRows = rows.filter(r => r.url);
           
-          // Validate limits
           if (validRows.length === 0) {
             reject(new Error('No valid URLs found in CSV file.'));
             return;
@@ -240,7 +234,6 @@ export const batchService = {
   },
 
   async parseExcel(file: File): Promise<BatchRow[]> {
-    // Validate file size
     if (file.size > MAX_FILE_SIZE) {
       throw new Error(`File size exceeds maximum of ${MAX_FILE_SIZE / (1024 * 1024)}MB`);
     }
@@ -270,7 +263,6 @@ export const batchService = {
           
           const validRows = rows.filter(r => r.url);
           
-          // Validate limits
           if (validRows.length === 0) {
             reject(new Error('No valid URLs found in Excel file.'));
             return;
@@ -294,10 +286,7 @@ export const batchService = {
   // --- Processing ---
 
   /**
-   * Fetch metadata for rows using the real unfurl service
-   * Uses concurrency control (3 requests at a time)
-   * Always returns a fallback if metadata fetch fails
-   * Aggregates errors for user feedback
+   * Fetch metadata for rows using the unfurl service
    */
   async fetchMetadataForRows(
     rows: BatchRow[],
@@ -322,7 +311,6 @@ export const batchService = {
     
     const errors: string[] = [];
     
-    // Process with concurrency limit (3 concurrent requests)
     await processWithConcurrency(
       rowsToFetch,
       async (row) => {
@@ -330,21 +318,18 @@ export const batchService = {
         if (index === -1) return;
         
         try {
-          // Call real unfurl service
           const nuggetMedia = await unfurlUrl(row.url);
           
-          // Create preview article from metadata
           const previewArticle = nuggetToArticle(
             row.url,
             nuggetMedia,
             currentUserId,
             authorName,
-            row.title || undefined, // Use custom title if provided
-            row.content || undefined, // Use custom content if provided
+            row.title || undefined,
+            row.content || undefined,
             row.categories
           );
           
-          // Update row with fetched data
           updatedRows[index] = {
             ...updatedRows[index],
             title: previewArticle.title,
@@ -354,16 +339,14 @@ export const batchService = {
             errorMessage: undefined,
           };
         } catch (error: any) {
-          // Track error for aggregation
           const errorMsg = error?.message || 'Failed to fetch metadata';
           errors.push(`${row.url}: ${errorMsg}`);
           
-          // Create fallback article even on error
           let siteName = 'unknown';
           try {
             siteName = new URL(row.url).hostname.replace('www.', '');
           } catch {
-            // URL parsing failed, use default
+            // URL parsing failed
           }
           
           const fallbackMedia: NuggetMedia = {
@@ -390,13 +373,13 @@ export const batchService = {
             ...updatedRows[index],
             title: fallbackArticle.title,
             content: row.content || fallbackArticle.content,
-            status: 'ready' as const, // Still ready, just with fallback data
+            status: 'ready' as const,
             previewArticle: fallbackArticle,
             errorMessage: errorMsg,
           };
         }
       },
-      3 // Concurrency limit: 3 requests at a time
+      3
     );
     
     return { rows: updatedRows, errors };
@@ -404,8 +387,6 @@ export const batchService = {
 
   /**
    * Create articles from batch rows
-   * Uses preview article data if available, otherwise constructs from row data
-   * Supports progress callback for UI updates
    */
   async createBatch(
     rows: BatchRow[],
@@ -419,7 +400,6 @@ export const batchService = {
 
     for (const row of rowsToCreate) {
       try {
-        // Use preview article if available, otherwise construct from row
         const articleData = row.previewArticle || nuggetToArticle(
           row.url,
           null,
@@ -430,26 +410,19 @@ export const batchService = {
           row.categories
         );
         
-        // PHASE 2: Title comes ONLY from user input (row.title)
-        // Metadata title is NEVER used to auto-populate article.title
-        // It remains in media.previewMetadata.title for display/suggestion purposes only
         const resolvedTitle = row.title && row.title.trim() ? row.title : undefined;
-        
-        // PHASE 4: Tags must match categories - backend requires non-empty tags array
         const batchTags = row.categories.map(c => normalizeCategoryLabel(c).replace('#', '')).filter(Boolean);
         
-        await storageService.createArticle({
+        const createdArticle = await storageService.createArticle({
           title: resolvedTitle,
           content: row.content || articleData.content,
           excerpt: articleData.excerpt,
           author: { id: currentUserId, name: authorName },
           categories: batchTags,
-          tags: batchTags, // FIX: Use categories as tags (same as CreateNuggetModal)
+          tags: batchTags,
           readTime: articleData.readTime,
-          visibility: row.visibility || 'public', // Ensure public visibility by default
+          visibility: row.visibility || 'public',
           source_type: 'link',
-          // Ensure media includes previewMetadata with title for display resolution
-          // For YouTube videos, ensure proper aspect ratio (16:9) to prevent cropping
           media: (() => {
             if (articleData.media) {
               return articleData.media;
@@ -465,7 +438,7 @@ export const batchService = {
               },
             };
             
-            // Set aspect ratio for YouTube videos to prevent cropping
+            // Set aspect ratio for video providers
             if (detectedType === 'youtube') {
               fallbackMedia.aspect_ratio = '16/9';
             }
@@ -474,15 +447,15 @@ export const batchService = {
           })(),
         });
 
+        row.articleId = createdArticle.id;
         row.status = 'success';
         completed++;
         
-        // Report progress
         if (onProgress) {
           onProgress(completed, rowsToCreate.length);
         }
         
-        await delay(100); // Small delay to visualize progress
+        await delay(100);
       } catch (e: any) {
         row.status = 'error';
         const errorMsg = e?.message || 'Creation failed';
@@ -490,7 +463,6 @@ export const batchService = {
         console.error(`Failed to create nugget for ${row.url}:`, errorMsg, e);
         completed++;
         
-        // Report progress even on error
         if (onProgress) {
           onProgress(completed, rowsToCreate.length);
         }
@@ -498,5 +470,48 @@ export const batchService = {
     }
 
     return results;
+  },
+
+  /**
+   * Publish multiple draft nuggets by setting their visibility to 'public'
+   */
+  async publishNuggets(ids: string[]): Promise<{ success: boolean; message: string; updatedCount: number }> {
+    if (!ids || ids.length === 0) {
+      throw new Error('Array of nugget IDs is required');
+    }
+
+    const API_BASE = import.meta.env.VITE_API_URL || '/api';
+    
+    // Extract token from localStorage (stored as JSON object)
+    let token = '';
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        const stored = localStorage.getItem('nuggets_auth_data_v2');
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          token = parsed.token || '';
+        }
+      }
+    } catch (e) {
+      console.warn('[BatchService] Failed to parse auth token from storage', e);
+    }
+    
+    const authHeader = token ? { Authorization: `Bearer ${token}` } : {};
+
+    const response = await fetch(`${API_BASE}/batch/publish`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...authHeader,
+      },
+      body: JSON.stringify({ ids }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ message: 'Failed to publish nuggets' }));
+      throw new Error(errorData.message || `HTTP ${response.status}`);
+    }
+
+    return await response.json();
   }
 };

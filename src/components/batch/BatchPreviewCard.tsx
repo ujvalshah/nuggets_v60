@@ -15,8 +15,11 @@ import { Article } from '@/types';
 import { X, RefreshCw, Loader2, AlertCircle } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 
+import { LayoutMode } from '@/components/admin/LayoutPreviewToggle';
+
 interface BatchPreviewCardProps {
   row: BatchRow;
+  layoutMode?: LayoutMode;
   onRemove: (id: string) => void;
   onRetry: (id: string) => void;
   onUpdate: (id: string, updates: Partial<BatchRow>) => void;
@@ -32,17 +35,16 @@ function createFallbackArticle(row: BatchRow, currentUserId: string, authorName:
   const wordCount = content.trim().split(/\s+/).length;
   const readTime = Math.max(1, Math.ceil(wordCount / 200));
   
-  // Safely extract site name
   let siteName = 'unknown';
   try {
     siteName = new URL(row.url).hostname.replace('www.', '');
   } catch {
-    // URL parsing failed, use default
+    // URL parsing failed
   }
   
   return {
     id: row.id,
-    title: row.title || undefined, // Preserve empty titles (display layer handles fallbacks)
+    title: row.title || undefined,
     excerpt,
     content,
     author: {
@@ -51,7 +53,7 @@ function createFallbackArticle(row: BatchRow, currentUserId: string, authorName:
     },
     publishedAt: new Date().toISOString(),
     categories: row.categories,
-    tags: row.categories.filter((cat): cat is string => typeof cat === 'string' && cat.trim().length > 0), // PHASE 4: Tags must match categories
+    tags: row.categories.filter((cat): cat is string => typeof cat === 'string' && cat.trim().length > 0),
     readTime,
     visibility: row.visibility,
     source_type: 'link',
@@ -69,6 +71,7 @@ function createFallbackArticle(row: BatchRow, currentUserId: string, authorName:
 
 export const BatchPreviewCard: React.FC<BatchPreviewCardProps> = ({
   row,
+  layoutMode = 'grid',
   onRemove,
   onRetry,
   onUpdate,
@@ -83,21 +86,14 @@ export const BatchPreviewCard: React.FC<BatchPreviewCardProps> = ({
     authorName
   );
   
-  // Handle card click - could open in new tab or do nothing
-  const handleCardClick = (article: Article) => {
-    // Open URL in new tab
+  // Handle card click - open URL in new tab
+  const handleCardClick = () => {
     window.open(row.url, '_blank', 'noopener,noreferrer');
   };
   
-  // Handle category click (no-op for batch preview)
-  const handleCategoryClick = () => {
-    // No-op: category navigation not applicable during batch upload
-  };
-  
-  // Handle tag click (no-op for batch preview)
-  const handleTagClick = () => {
-    // No-op: tag navigation not applicable during batch upload
-  };
+  // Handle category/tag click (no-op for batch preview)
+  const handleCategoryClick = () => {};
+  const handleTagClick = () => {};
   
   return (
     <div className="relative group">
@@ -158,11 +154,22 @@ export const BatchPreviewCard: React.FC<BatchPreviewCardProps> = ({
           </button>
         </div>
         
-        {/* Render NewsCard with utility viewMode for dense preview */}
-        <div className={row.selected ? '' : 'opacity-50'}>
+        {/* Render NewsCard with layoutMode-based styling */}
+        <div 
+          className={`
+            ${row.selected ? '' : 'opacity-50'}
+            ${
+              layoutMode === 'utility'
+                ? 'min-h-[400px]'
+                : layoutMode === 'feed'
+                ? 'max-w-2xl mx-auto'
+                : ''
+            }
+          `}
+        >
           <NewsCard
             article={previewArticle}
-            viewMode="utility"
+            viewMode={layoutMode}
             onCategoryClick={handleCategoryClick}
             onClick={handleCardClick}
             currentUserId={currentUserId}
@@ -174,4 +181,3 @@ export const BatchPreviewCard: React.FC<BatchPreviewCardProps> = ({
     </div>
   );
 };
-

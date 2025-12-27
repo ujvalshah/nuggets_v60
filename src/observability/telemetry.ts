@@ -2,6 +2,7 @@
 // These functions do not send data anywhere; consumers can register handlers later.
 
 import type React from 'react';
+import { captureException, captureMessage } from '../utils/sentry';
 
 export interface ErrorContext {
   error: Error;
@@ -37,6 +38,16 @@ export function configureTelemetry(next: Handlers) {
 }
 
 export function recordError(ctx: ErrorContext) {
+  // Automatically send to Sentry
+  captureException(ctx.error, {
+    route: window.location.pathname,
+    extra: {
+      source: ctx.source,
+      componentStack: ctx.info?.componentStack,
+    },
+  });
+  
+  // Call custom handlers if registered
   handlers.onError?.(ctx);
 }
 
@@ -53,6 +64,9 @@ export function markPagePerformance(mark: PageMark) {
   }
   handlers.onPageMark?.(mark);
 }
+
+
+
 
 
 
