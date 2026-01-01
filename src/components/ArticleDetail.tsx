@@ -14,6 +14,33 @@
  * - Internal scroll only (no body scroll)
  * - No auto-play, no sticky media
  * 
+ * MARKDOWN RENDERING PARITY FIX (Applied):
+ * ============================================================================
+ * This component now uses the EXACT same MarkdownRenderer as CardContent
+ * (Nugget/News Card preview) to ensure rendering consistency.
+ * 
+ * What was fixed:
+ * - Title: Previously rendered as plain text. Now uses MarkdownRenderer to
+ *   support markdown links, inline formatting, and embedded markdown.
+ * - Content: Previously had extensive className overrides that could interfere
+ *   with MarkdownRenderer's component styles. Now uses the same configuration
+ *   as CardContent (no prose prop, simplified className structure).
+ * 
+ * Renderer reused: MarkdownRenderer from @/components/MarkdownRenderer
+ * - Uses react-markdown with remarkGfm for GitHub-flavored markdown
+ * - Supports: links, tables, inline formatting (bold, italic, code), lists,
+ *   blockquotes, headers, and all GFM features
+ * 
+ * Why ArticleDetail previously failed to render markdown:
+ * 1. Title was plain text - no markdown parsing at all
+ * 2. Content had className overrides that could conflict with MarkdownRenderer's
+ *    internal component styles (e.g., [&_a]:text-primary-600 overriding link styles)
+ * 3. Both title and content now use identical MarkdownRenderer configuration
+ *    as CardContent, ensuring perfect parity
+ * 
+ * No global behavior or unrelated components were altered - only ArticleDetail
+ * drawer was updated to reuse the existing MarkdownRenderer.
+ * 
  * ============================================================================
  */
 
@@ -235,11 +262,18 @@ export const ArticleDetail: React.FC<ArticleDetailProps> = ({
                        </div>
                    )}
                    
-                   {/* Title - One size up from content (text-sm), black for clarity */}
+                   {/* Title - RENDERING PARITY FIX: Uses MarkdownRenderer to match CardContent behavior.
+                       This ensures markdown links, inline formatting, and embedded markdown render
+                       correctly in both preview and full view. Uses div with heading role for
+                       accessibility while allowing MarkdownRenderer to handle all markdown parsing. */}
                    {article?.title && (
-                       <h1 className="text-sm font-semibold text-slate-900 dark:text-white leading-snug mb-3">
-                           {article.title}
-                       </h1>
+                       <div 
+                           role="heading" 
+                           aria-level={1}
+                           className="text-sm font-semibold text-slate-900 dark:text-white leading-snug mb-3"
+                       >
+                           <MarkdownRenderer content={article.title} />
+                       </div>
                    )}
                    
                    {/* Meta Information */}
@@ -254,9 +288,13 @@ export const ArticleDetail: React.FC<ArticleDetailProps> = ({
                    </div>
                </div>
 
-              {/* Content - Matches card text size (text-xs) and black color for readability */}
-              <div className="text-xs text-slate-900 dark:text-white leading-relaxed [&_h1]:text-sm [&_h1]:font-semibold [&_h1]:text-slate-900 [&_h1]:dark:text-white [&_h1]:mt-5 [&_h1]:mb-2 [&_h2]:text-sm [&_h2]:font-semibold [&_h2]:text-slate-900 [&_h2]:dark:text-white [&_h2]:mt-5 [&_h2]:mb-2 [&_h3]:text-xs [&_h3]:font-semibold [&_h3]:text-slate-900 [&_h3]:dark:text-white [&_h3]:mt-4 [&_h3]:mb-1.5 [&_p]:mb-3 [&_p:last-child]:mb-0 [&_ul]:mb-3 [&_ol]:mb-3 [&_li]:mb-1 [&_blockquote]:my-3 [&_blockquote]:pl-3 [&_blockquote]:border-l-2 [&_blockquote]:border-slate-300 [&_blockquote]:dark:border-slate-600 [&_blockquote]:italic [&_strong]:text-slate-900 [&_strong]:dark:text-white [&_strong]:font-semibold [&_a]:text-primary-600 [&_a]:dark:text-primary-400 [&_a]:hover:underline">
-                  <MarkdownRenderer content={article?.content ?? article?.excerpt ?? ''} prose={false} />
+              {/* Content - RENDERING PARITY FIX: Uses exact same MarkdownRenderer configuration
+                  as CardContent (no prose prop, same className structure). Removed extensive
+                  className overrides that could interfere with MarkdownRenderer's component styles.
+                  This ensures GitHub-style markdown (links, tables, inline formatting) renders
+                  identically to the card preview. */}
+              <div className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
+                  <MarkdownRenderer content={article?.content ?? article?.excerpt ?? ''} />
               </div>
 
                {/* Primary Media Embed */}
