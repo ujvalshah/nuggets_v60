@@ -14,8 +14,10 @@ router.get('/reports', authenticateToken, moderationController.getReports);
 // Admin-only routes - require admin role
 router.post('/reports/:id/resolve', requireAdmin, moderationController.resolveReport);
 router.post('/reports/:id/dismiss', requireAdmin, moderationController.dismissReport);
+router.get('/content/:targetType/:targetId', requireAdmin, moderationController.getReportedContent);
 
 export default router;
+
 
 
 

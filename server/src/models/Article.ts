@@ -48,7 +48,8 @@ export interface IArticle extends Document {
   authorId: string;
   authorName: string;
   category: string; // Single category (legacy)
-  categories?: string[]; // Array of categories (new)
+  categories?: string[]; // Array of categories (new) - display names
+  categoryIds?: string[]; // Array of Tag ObjectIds for stable references
   publishedAt: string;
   tags: string[];
   readTime?: number; // Estimated read time in minutes
@@ -69,6 +70,8 @@ export interface IArticle extends Document {
   source_type?: string; // 'link' | 'video' | 'note' | 'idea' | etc
   created_at?: string;
   updated_at?: string;
+  // Admin-only: Flag to indicate if createdAt was manually set
+  isCustomCreatedAt?: boolean;
 }
 
 const NuggetMediaSchema = new Schema<INuggetMedia>({
@@ -119,7 +122,8 @@ const ArticleSchema = new Schema<IArticle>({
   authorId: { type: String, required: true },
   authorName: { type: String, required: true },
   category: { type: String, required: true }, // Keep for backward compatibility
-  categories: { type: [String], default: [] }, // New field
+  categories: { type: [String], default: [] }, // Display names
+  categoryIds: { type: [String], default: [] }, // Tag ObjectIds for stable matching
   publishedAt: { type: String, required: true },
   tags: { type: [String], default: [] },
   readTime: { type: Number }, // Optional read time
@@ -139,7 +143,9 @@ const ArticleSchema = new Schema<IArticle>({
   // System
   source_type: { type: String },
   created_at: { type: String },
-  updated_at: { type: String }
+  updated_at: { type: String },
+  // Admin-only: Flag to indicate if createdAt was manually set
+  isCustomCreatedAt: { type: Boolean, default: false }
 }, {
   timestamps: false // We manage our own timestamps
 });

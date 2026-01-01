@@ -35,3 +35,4 @@ export const LegalPage = mongoose.model<ILegalPage>('LegalPage', LegalPageSchema
 
 
 
+

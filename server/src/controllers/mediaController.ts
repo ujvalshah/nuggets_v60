@@ -153,22 +153,68 @@ export const uploadMedia = async (req: Request, res: Response) => {
     const isVideo = file.mimetype.startsWith('video/');
     const resourceType: 'image' | 'video' | 'raw' = isImage ? 'image' : isVideo ? 'video' : 'raw';
 
+    // CRITICAL: Check for existing media by public_id hash or file content
+    // For now, we rely on Cloudinary's overwrite: false to prevent duplicates
+    // But we should check MongoDB first to avoid unnecessary Cloudinary calls
+    
     // Upload to Cloudinary
     let cloudinaryResult;
     try {
+      console.log(`[Media] Uploading ${resourceType} to Cloudinary:`, {
+        fileName: file.originalname,
+        size: file.size,
+        mimeType: file.mimetype,
+        folder,
+        purpose
+      });
+      
       const uploadOptions: UploadOptions = {
         folder,
         resourceType,
-        overwrite: false,
+        overwrite: false, // CRITICAL: Don't overwrite existing assets
         invalidate: true
       };
 
       cloudinaryResult = await uploadToCloudinary(file.buffer, uploadOptions);
+      
+      console.log(`[Media] Cloudinary upload successful:`, {
+        publicId: cloudinaryResult.publicId,
+        secureUrl: cloudinaryResult.secureUrl,
+        width: cloudinaryResult.width,
+        height: cloudinaryResult.height
+      });
     } catch (cloudinaryError: any) {
       console.error('[Media] Cloudinary upload failed:', cloudinaryError);
       return res.status(500).json({
         error: 'Upload Failed',
         message: `Failed to upload to Cloudinary: ${cloudinaryError.message}`
+      });
+    }
+
+    // CRITICAL: Check if media with this publicId already exists (idempotency guard)
+    // This prevents duplicate Media records even if Cloudinary allows the upload
+    let existingMedia = await Media.findOne({
+      'cloudinary.publicId': cloudinaryResult.publicId,
+      status: 'active'
+    });
+
+    if (existingMedia) {
+      console.log(`[Media] Media with publicId ${cloudinaryResult.publicId} already exists, returning existing record`);
+      
+      // ROLLBACK: Delete the duplicate Cloudinary asset (best effort)
+      await deleteFromCloudinary(cloudinaryResult.publicId, cloudinaryResult.resourceType);
+      
+      // Return existing media record
+      return res.status(200).json({
+        mediaId: existingMedia._id.toString(),
+        secureUrl: existingMedia.cloudinary.secureUrl,
+        publicId: existingMedia.cloudinary.publicId,
+        width: existingMedia.cloudinary.width,
+        height: existingMedia.cloudinary.height,
+        duration: existingMedia.cloudinary.duration,
+        resourceType: existingMedia.cloudinary.resourceType,
+        purpose: existingMedia.purpose,
+        status: existingMedia.status
       });
     }
 
@@ -204,7 +250,9 @@ export const uploadMedia = async (req: Request, res: Response) => {
         };
       }
 
+      console.log(`[Media] Creating MongoDB record for publicId: ${cloudinaryResult.publicId}`);
       mediaDoc = await Media.create(mediaData);
+      console.log(`[Media] MongoDB record created successfully: ${mediaDoc._id}`);
     } catch (mongoError: any) {
       // ROLLBACK: Delete from Cloudinary if MongoDB insert fails
       console.error('[Media] MongoDB insert failed, rolling back Cloudinary upload:', mongoError);
@@ -212,6 +260,22 @@ export const uploadMedia = async (req: Request, res: Response) => {
       
       // Check for duplicate publicId error
       if (mongoError.code === 11000) {
+        console.log('[Media] Duplicate publicId detected (unique constraint violation)');
+        // Try to find existing media
+        const existing = await Media.findOne({ 'cloudinary.publicId': cloudinaryResult.publicId });
+        if (existing) {
+          return res.status(200).json({
+            mediaId: existing._id.toString(),
+            secureUrl: existing.cloudinary.secureUrl,
+            publicId: existing.cloudinary.publicId,
+            width: existing.cloudinary.width,
+            height: existing.cloudinary.height,
+            duration: existing.cloudinary.duration,
+            resourceType: existing.cloudinary.resourceType,
+            purpose: existing.purpose,
+            status: existing.status
+          });
+        }
         return sendValidationError(res, 'Media already exists', []);
       }
       

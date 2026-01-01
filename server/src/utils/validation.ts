@@ -70,6 +70,15 @@ const baseArticleSchema = z.object({
     name: z.string(),
     avatarUrl: z.string().optional(),
   }).optional(),
+  // Admin-only: Custom creation date (optional ISO string)
+  customCreatedAt: z.string().refine(
+    (val) => {
+      if (!val) return true; // Optional field
+      const date = new Date(val);
+      return !isNaN(date.getTime());
+    },
+    { message: 'Invalid date format' }
+  ).optional(),
 });
 
 // Create schema with refinement: at least one of content/media/images/documents must be present

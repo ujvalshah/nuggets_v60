@@ -4,6 +4,7 @@ import { Article } from '../models/Article.js';
 import { normalizeDoc, normalizeDocs } from '../utils/db.js';
 import { createCollectionSchema, updateCollectionSchema, addEntrySchema, flagEntrySchema } from '../utils/validation.js';
 import { getCommunityCollections, getCommunityCollectionsCount, CollectionQueryFilters } from '../utils/collectionQueryHelpers.js';
+import { createSearchRegex, createExactMatchRegex } from '../utils/escapeRegExp.js';
 
 export const getCollections = async (req: Request, res: Response) => {
   try {
@@ -28,10 +29,14 @@ export const getCollections = async (req: Request, res: Response) => {
     const query: any = {};
     if (type) query.type = type;
     if (creatorId) query.creatorId = creatorId;
+    // SECURITY: createSearchRegex escapes user input to prevent ReDoS
+    // Search by canonicalName (case-insensitive) and rawName (for display matching)
     if (searchQuery) {
-      const searchRegex = new RegExp(searchQuery, 'i');
+      const searchRegex = createSearchRegex(searchQuery);
+      const searchCanonical = searchQuery.toLowerCase().trim();
       query.$or = [
-        { name: searchRegex },
+        { canonicalName: { $regex: createSearchRegex(searchCanonical) } },
+        { rawName: searchRegex },
         { description: searchRegex }
       ];
     }
@@ -152,23 +157,29 @@ export const createCollection = async (req: Request, res: Response) => {
     }
 
     const { name, description, creatorId, type } = validationResult.data;
+    const trimmedName = name.trim();
+    const canonicalName = trimmedName.toLowerCase();
 
-    // Idempotency check: If creating a "General Bookmarks" private folder, check if it already exists
-    if (type === 'private' && name.toLowerCase().trim() === 'general bookmarks') {
-      const existingCollection = await Collection.findOne({
-        creatorId,
-        type: 'private',
-        name: { $regex: new RegExp(`^${name.trim()}$`, 'i') }
-      });
+    // Check if collection already exists by canonicalName
+    // For private collections: check per creator (same creator can't have duplicate canonicalName)
+    // For public collections: check globally (anyone can't create duplicate canonicalName)
+    const query: any = { canonicalName };
+    if (type === 'private') {
+      query.creatorId = creatorId;
+      query.type = 'private';
+    } else {
+      query.type = 'public';
+    }
 
-      if (existingCollection) {
-        // Return existing collection instead of creating duplicate
-        return res.status(200).json(normalizeDoc(existingCollection));
-      }
+    const existingCollection = await Collection.findOne(query);
+    if (existingCollection) {
+      // Return existing collection instead of creating duplicate
+      return res.status(200).json(normalizeDoc(existingCollection));
     }
 
     const newCollection = await Collection.create({
-      name,
+      rawName: trimmedName,
+      canonicalName: canonicalName,
       description: description || '',
       creatorId,
       type: type || 'public',
@@ -182,6 +193,26 @@ export const createCollection = async (req: Request, res: Response) => {
     res.status(201).json(normalizeDoc(newCollection));
   } catch (error: any) {
     console.error('[Collections] Create collection error:', error);
+    
+    // Handle duplicate key error (MongoDB unique constraint on canonicalName)
+    if (error.code === 11000) {
+      // Try to find and return existing collection
+      const trimmedName = (req.body.name || '').trim();
+      const canonicalName = trimmedName.toLowerCase();
+      const query: any = { canonicalName };
+      if (req.body.type === 'private' && req.body.creatorId) {
+        query.creatorId = req.body.creatorId;
+        query.type = 'private';
+      } else {
+        query.type = 'public';
+      }
+      const existingCollection = await Collection.findOne(query);
+      if (existingCollection) {
+        return res.status(200).json(normalizeDoc(existingCollection));
+      }
+      return res.status(409).json({ message: 'Collection already exists' });
+    }
+    
     res.status(500).json({ message: 'Internal server error' });
   }
 };
@@ -197,9 +228,32 @@ export const updateCollection = async (req: Request, res: Response) => {
       });
     }
 
+    const updateData: any = { ...validationResult.data, updatedAt: new Date().toISOString() };
+    
+    // If name is being updated, update both rawName and canonicalName
+    if (updateData.name !== undefined) {
+      const trimmedName = updateData.name.trim();
+      const canonicalName = trimmedName.toLowerCase();
+      
+      // Check if the new canonicalName would create a duplicate
+      const existingCollection = await Collection.findOne({
+        canonicalName,
+        _id: { $ne: req.params.id }, // Exclude current collection
+        ...(updateData.type === 'private' ? { creatorId: updateData.creatorId || (await Collection.findById(req.params.id))?.creatorId } : { type: 'public' })
+      });
+      
+      if (existingCollection) {
+        return res.status(409).json({ message: 'A collection with this name already exists' });
+      }
+      
+      updateData.rawName = trimmedName;
+      updateData.canonicalName = canonicalName;
+      delete updateData.name; // Remove legacy name field
+    }
+
     const collection = await Collection.findByIdAndUpdate(
       req.params.id,
-      { ...validationResult.data, updatedAt: new Date().toISOString() },
+      updateData,
       { new: true, runValidators: true }
     );
     
@@ -207,6 +261,12 @@ export const updateCollection = async (req: Request, res: Response) => {
     res.json(normalizeDoc(collection));
   } catch (error: any) {
     console.error('[Collections] Update collection error:', error);
+    
+    // Handle duplicate key error
+    if (error.code === 11000) {
+      return res.status(409).json({ message: 'A collection with this name already exists' });
+    }
+    
     res.status(500).json({ message: 'Internal server error' });
   }
 };

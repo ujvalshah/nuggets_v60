@@ -10,6 +10,9 @@ router.get('/', tagsController.getTags);
 // POST /api/categories - Add a new category (requires authentication)
 router.post('/', authenticateToken, tagsController.createTag);
 
+// PUT /api/categories/:id - Update a tag (requires authentication)
+router.put('/:id', authenticateToken, tagsController.updateTag);
+
 // DELETE /api/categories/:name - Delete a category (requires authentication)
 router.delete('/:name', authenticateToken, tagsController.deleteTag);
 

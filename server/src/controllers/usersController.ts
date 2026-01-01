@@ -3,6 +3,7 @@ import { User } from '../models/User.js';
 import { normalizeDoc, normalizeDocs } from '../utils/db.js';
 import { Article } from '../models/Article.js';
 import { updateUserSchema } from '../utils/validation.js';
+import { createSearchRegex } from '../utils/escapeRegExp.js';
 
 export const getUsers = async (req: Request, res: Response) => {
   try {
@@ -12,8 +13,9 @@ export const getUsers = async (req: Request, res: Response) => {
     const skip = (page - 1) * limit;
 
     const query: any = {};
+    // SECURITY: createSearchRegex escapes user input to prevent ReDoS
     if (q && typeof q === 'string' && q.trim().length > 0) {
-      const regex = new RegExp(q.trim(), 'i');
+      const regex = createSearchRegex(q);
       query.$or = [
         { 'profile.displayName': regex },
         { 'profile.username': regex },
@@ -147,6 +149,15 @@ export const updateUser = async (req: Request, res: Response) => {
     if (updateData.linkedin !== undefined) {
       updateObj['profile.linkedin'] = updateData.linkedin;
     }
+    if (updateData.youtube !== undefined) {
+      updateObj['profile.youtube'] = updateData.youtube;
+    }
+    if (updateData.instagram !== undefined) {
+      updateObj['profile.instagram'] = updateData.instagram;
+    }
+    if (updateData.facebook !== undefined) {
+      updateObj['profile.facebook'] = updateData.facebook;
+    }
     
     // Handle direct nested updates if provided
     if (updateData.profile) {
@@ -229,24 +240,34 @@ export const getPersonalizedFeed = async (req: Request, res: Response) => {
       : new Date(0);
     
     // Build MongoDB query for articles matching user's interests
+    // PRIVACY FIX: Only show public articles in personalized feed
+    // The $or was incorrectly structured - it would match ANY condition, including private articles
     const articleQuery: any = {
+      visibility: 'public', // Only public articles in personalized feed
       $or: [
         { categories: { $in: categories } },
-        { category: { $in: categories } },
-        { visibility: 'public' }
+        { category: { $in: categories } }
       ]
     };
     
-    // Find articles matching user's interests
+    // If user has no categories, show all public articles
+    if (categories.length === 0) {
+      delete articleQuery.$or;
+      articleQuery.visibility = 'public';
+    }
+    
+    // Find articles matching user's interests (only public)
     const articles = await Article.find(articleQuery)
       .sort({ publishedAt: -1 })
       .limit(50); // Limit to 50 articles
 
     // Count new articles since last feed visit using MongoDB query (more efficient)
-    const newCount = await Article.countDocuments({
+    // PRIVACY FIX: Ensure privacy filter is applied to count query
+    const countQuery = {
       ...articleQuery,
       publishedAt: { $gt: lastVisit.toISOString() }
-    });
+    };
+    const newCount = await Article.countDocuments(countQuery);
 
     // Update last feed visit using findByIdAndUpdate (atomic operation)
     await User.findByIdAndUpdate(

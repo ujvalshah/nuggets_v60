@@ -5,6 +5,7 @@ import { BookmarkFolderLink } from '../models/BookmarkFolderLink.js';
 import { normalizeDoc, normalizeDocs } from '../utils/db.js';
 import { ensureDefaultFolder, getOrCreateBookmark, getGeneralFolderId, ensureBookmarkInGeneralFolder } from '../utils/bookmarkHelpers.js';
 import { z } from 'zod';
+import { createExactMatchRegex } from '../utils/escapeRegExp.js';
 
 // Validation schemas
 const createFolderSchema = z.object({
@@ -72,9 +73,10 @@ export const createBookmarkFolder = async (req: Request, res: Response) => {
     const { name, order } = validationResult.data;
 
     // Check if folder name already exists for this user
+    // SECURITY: createExactMatchRegex escapes user input to prevent ReDoS
     const existing = await BookmarkFolder.findOne({
       userId,
-      name: { $regex: new RegExp(`^${name.trim()}$`, 'i') }
+      name: { $regex: createExactMatchRegex(name) }
     });
 
     if (existing) {

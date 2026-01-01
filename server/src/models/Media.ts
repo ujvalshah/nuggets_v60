@@ -186,3 +186,4 @@ MediaSchema.index({ 'cloudinary.publicId': 1 }, { unique: true });
 export const Media = mongoose.model<IMedia>('Media', MediaSchema);
 
 
+

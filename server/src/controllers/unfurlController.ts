@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { verifyToken } from '../utils/jwt.js';
 import { fetchUrlMetadata } from '../services/metadata.js';
+import { isUrlSafeForFetch } from '../utils/ssrfProtection.js';
 
 /**
  * POST /api/unfurl
@@ -43,6 +44,15 @@ export async function unfurlUrl(req: Request, res: Response) {
       return res.status(400).json({
         error: 'Invalid URL protocol',
         message: 'Only http and https URLs are allowed',
+      });
+    }
+
+    // SECURITY: SSRF Protection - Block internal/private IPs and cloud metadata endpoints
+    const ssrfCheck = isUrlSafeForFetch(url);
+    if (!ssrfCheck.safe) {
+      return res.status(400).json({
+        error: 'URL not allowed',
+        message: ssrfCheck.reason || 'URL validation failed',
       });
     }
 

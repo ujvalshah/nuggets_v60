@@ -79,6 +79,7 @@ app.use(compression({
 app.use(helmet());
 
 // CORS Configuration - Strict policy based on environment
+// CRITICAL: Must allow OPTIONS method and proper headers for DELETE requests with body
 const corsOptions = {
   origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
     // In production, only allow FRONTEND_URL
@@ -100,8 +101,9 @@ const corsOptions = {
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-  maxAge: 86400 // 24 hours
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  exposedHeaders: ['Content-Type', 'Authorization'],
+  maxAge: 86400 // 24 hours (preflight cache duration)
 };
 
 app.use(cors(corsOptions));

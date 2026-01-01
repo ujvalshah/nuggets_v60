@@ -1,4 +1,5 @@
 import { Collection } from '../models/Collection.js';
+import { createSearchRegex } from './escapeRegExp.js';
 
 /**
  * Shared query builder for collection queries
@@ -49,8 +50,9 @@ export async function getCommunityCollectionsCount(filters: CollectionQueryFilte
   // Build final query with search if provided (same logic as getCommunityCollections)
   const finalQuery: any = { ...baseQuery };
   
+  // SECURITY: createSearchRegex escapes user input to prevent ReDoS
   if (filters.searchQuery) {
-    const searchRegex = new RegExp(filters.searchQuery, 'i');
+    const searchRegex = createSearchRegex(filters.searchQuery);
     finalQuery.$or = [
       { name: searchRegex },
       { description: searchRegex }
@@ -72,8 +74,9 @@ export async function getCommunityCollections(
   // Build final query with search if provided
   const finalQuery: any = { ...baseQuery };
   
+  // SECURITY: createSearchRegex escapes user input to prevent ReDoS
   if (filters.searchQuery) {
-    const searchRegex = new RegExp(filters.searchQuery, 'i');
+    const searchRegex = createSearchRegex(filters.searchQuery);
     finalQuery.$or = [
       { name: searchRegex },
       { description: searchRegex }

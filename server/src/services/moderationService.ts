@@ -1,4 +1,5 @@
 import { Report } from '../models/Report.js';
+import { createSearchRegex } from '../utils/escapeRegExp.js';
 
 /**
  * Shared query builder for moderation reports
@@ -28,8 +29,9 @@ export function buildModerationQuery(filters: ModerationQueryFilters = {}): any 
   }
   
   // Search query (text search across multiple fields)
+  // SECURITY: createSearchRegex escapes user input to prevent ReDoS
   if (filters.searchQuery && filters.searchQuery.trim().length > 0) {
-    const regex = new RegExp(filters.searchQuery.trim(), 'i');
+    const regex = createSearchRegex(filters.searchQuery);
     query.$or = [
       { reason: regex },
       { description: regex },

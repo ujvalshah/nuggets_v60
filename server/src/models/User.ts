@@ -28,6 +28,9 @@ export interface IUserProfile {
   company?: string;
   twitter?: string;
   linkedin?: string;
+  youtube?: string;
+  instagram?: string;
+  facebook?: string;
 }
 
 export interface IUserSecurity {
@@ -95,7 +98,10 @@ const UserProfileSchema = new Schema<IUserProfile>({
   title: { type: String },
   company: { type: String },
   twitter: { type: String },
-  linkedin: { type: String }
+  linkedin: { type: String },
+  youtube: { type: String },
+  instagram: { type: String },
+  facebook: { type: String }
 }, { _id: false });
 
 const UserSecuritySchema = new Schema<IUserSecurity>({

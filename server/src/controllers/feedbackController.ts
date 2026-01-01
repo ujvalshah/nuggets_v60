@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { Feedback } from '../models/Feedback.js';
 import { normalizeDoc, normalizeDocs } from '../utils/db.js';
 import { z } from 'zod';
+import { createSearchRegex } from '../utils/escapeRegExp.js';
 
 // Validation schemas
 const createFeedbackSchema = z.object({
@@ -44,8 +45,9 @@ export const getFeedback = async (req: Request, res: Response) => {
     if (type) {
       query.type = type;
     }
+    // SECURITY: createSearchRegex escapes user input to prevent ReDoS
     if (q && typeof q === 'string' && q.trim().length > 0) {
-      const regex = new RegExp(q.trim(), 'i');
+      const regex = createSearchRegex(q);
       query.$or = [
         { content: regex },
         { email: regex },
@@ -158,6 +160,7 @@ export const deleteFeedback = async (req: Request, res: Response) => {
     res.status(500).json({ message: 'Internal server error' });
   }
 };
+
 
 
 
