@@ -55,6 +55,48 @@ body {
   scrollbar-width: none;  /* Firefox */
 }
 
+/* Tag scroll container: Clean horizontal scrollbar for category tags toolbar */
+.tag-scroll-container {
+  /* Single-row layout: prevent wrapping */
+  white-space: nowrap;
+  /* Thin scrollbar for Firefox */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.5) transparent;
+  /* Smooth touch scrolling on iOS */
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Improved desktop scrollbar appearance for tag container */
+.tag-scroll-container::-webkit-scrollbar {
+  height: 6px;
+}
+
+.tag-scroll-container::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.tag-scroll-container::-webkit-scrollbar-thumb {
+  background-color: rgba(148, 163, 184, 0.5);
+  border-radius: 8px;
+}
+
+.tag-scroll-container::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(148, 163, 184, 0.7);
+}
+
+/* Dark mode scrollbar for tag container */
+.dark .tag-scroll-container {
+  scrollbar-color: rgba(100, 116, 139, 0.5) transparent;
+}
+
+.dark .tag-scroll-container::-webkit-scrollbar-thumb {
+  background-color: rgba(100, 116, 139, 0.5);
+}
+
+.dark .tag-scroll-container::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(100, 116, 139, 0.7);
+}
+
 /* Header stability optimizations */
 header[class*="fixed"] {
   contain: layout style paint;

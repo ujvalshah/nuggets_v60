@@ -21,9 +21,26 @@
     "sanitize:dry-run": "tsx server/scripts/sanitizeDatabase.ts",
     "sanitize:execute": "cross-env DRY_RUN=false tsx server/scripts/sanitizeDatabase.ts",
     "sanitize:force": "cross-env DRY_RUN=false FORCE_EXECUTE=true tsx server/scripts/sanitizeDatabase.ts",
+    "migrate-canonical-names": "tsx server/src/scripts/runMigration.ts",
+    "migrate-categoryids": "tsx server/src/scripts/backfillCategoryIds.ts",
+    "update-tag-usage": "tsx server/src/scripts/updateTagUsageCounts.ts",
     "audit": "node scripts/audit-code.js",
     "lint": "eslint src --ext .ts,.tsx",
-    "lint:fix": "eslint src --ext .ts,.tsx --fix"
+    "lint:fix": "eslint src --ext .ts,.tsx --fix",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "test:ui": "vitest --ui",
+    "typecheck": "tsc --noEmit",
+    "prepare": "husky || true"
+  },
+  "lint-staged": {
+    "*.{ts,tsx}": [
+      "eslint --fix --max-warnings 0"
+    ],
+    "*.{json,md,yml,yaml}": [
+      "prettier --write"
+    ]
   },
   "dependencies": {
     "@google/genai": "^1.32.0",
