@@ -206,3 +206,4 @@ The implementation is minimal, focused, and maintains strict separation between:
 - Multi-images (new grid behavior)
 
 
+

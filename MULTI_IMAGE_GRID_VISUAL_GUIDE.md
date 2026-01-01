@@ -223,3 +223,4 @@ Currently uniform across all breakpoints:
 Card size adjusts via parent grid layout, but grid structure remains constant.
 
 
+
