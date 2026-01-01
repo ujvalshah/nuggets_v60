@@ -11,6 +11,7 @@ import { AdminDrawer } from '../components/AdminDrawer';
 import { ConfirmActionModal } from '@/components/settings/ConfirmActionModal';
 import { useAdminHeader } from '../layout/AdminLayout';
 import { useSearchParams } from 'react-router-dom';
+import { queryClient } from '@/queryClient';
 
 // --- Merge Modal Component ---
 const MergeModal: React.FC<{ isOpen: boolean; onClose: () => void; onConfirm: (name: string) => void; count: number }> = ({ isOpen, onClose, onConfirm, count }) => {
@@ -190,13 +191,83 @@ export const AdminTagsPage: React.FC = () => {
 
   const handleRename = async (newName: string) => {
       if (!renameTarget) return;
+      
+      const oldName = renameTarget.name;
+      const tagId = renameTarget.id;
+      
+      // Log rename attempt
+      console.log('[AdminTagsPage.handleRename] Starting rename:', { 
+        tagId, 
+        oldName, 
+        newName 
+      });
+      
+      // Optimistic update: update UI immediately
+      setTags(prev => prev.map(t => t.id === tagId ? { ...t, name: newName } : t));
+      
       try {
-          await adminTagsService.renameTag(renameTarget.id, newName);
-          setTags(prev => prev.map(t => t.id === renameTarget.id ? { ...t, name: newName } : t));
+          // Call backend API to persist the rename
+          const response = await adminTagsService.renameTag(tagId, newName);
+          
+          // Log successful response
+          console.log('[AdminTagsPage.handleRename] Backend response:', response);
+          
+          // Verify the response contains the updated name
+          if (response && response.name) {
+              console.log('[AdminTagsPage.handleRename] Confirmed updated name in response:', response.name);
+          }
+          
+          // Invalidate React Query cache for categories/tags to refresh homepage
+          // This ensures the category bar shows the new tag name
+          // Note: Homepage calculates categories from articles, so invalidating articles will refresh categories
+          // Wait a brief moment to ensure backend article updates have completed
+          await new Promise(resolve => setTimeout(resolve, 500));
+          
+          // Invalidate all article-related queries (including infinite queries)
+          // The query key structure is ['articles', 'infinite', ...] so invalidating ['articles'] will match all
+          await queryClient.invalidateQueries({ 
+              queryKey: ['articles'],
+              refetchType: 'all',
+              exact: false // Match all queries that start with ['articles']
+          });
+          
+          // Also invalidate categories query if it exists
+          await queryClient.invalidateQueries({ 
+              queryKey: ['categories'],
+              refetchType: 'all',
+              exact: false
+          });
+          
+          // Force refetch of active queries to ensure immediate update
+          // This will refetch all active queries that match ['articles']
+          await queryClient.refetchQueries({ 
+              queryKey: ['articles'],
+              type: 'active'
+          });
+          
+          console.log('[AdminTagsPage.handleRename] Cache invalidated and queries refetched');
+          
+          // Also trigger a manual refetch after a short delay to ensure data is fresh
+          setTimeout(() => {
+              queryClient.refetchQueries({ 
+                  queryKey: ['articles'],
+                  type: 'active'
+              });
+          }, 1000);
+          
           toast.success("Tag renamed successfully");
           setRenameTarget(null);
-      } catch (e) {
-          toast.error("Rename failed");
+          
+          // Reload tag list to ensure consistency
+          await loadData();
+      } catch (e: any) {
+          // Rollback optimistic update on error
+          console.error('[AdminTagsPage.handleRename] Rename failed, rolling back:', e);
+          setTags(prev => prev.map(t => t.id === tagId ? { ...t, name: oldName } : t));
+          
+          // Show user-friendly error message
+          const errorMessage = e?.response?.data?.message || e?.message || "Rename failed";
+          toast.error(errorMessage);
       }
   };
 

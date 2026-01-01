@@ -24,6 +24,10 @@ export const AdminModerationPage: React.FC = () => {
   
   const toast = useToast();
   const [searchParams, setSearchParams] = useSearchParams();
+  
+  // Request versioning: Track the current request to prevent stale updates
+  const requestVersionRef = React.useRef(0);
+  const isMountedRef = React.useRef(true);
 
   useEffect(() => {
     setPageHeader(
@@ -57,16 +61,33 @@ export const AdminModerationPage: React.FC = () => {
   }, []);
 
   // STATE-DRIVEN DATA LOADING: Loads whenever filter or dateFilter changes
-  // No initialization gates - data loads immediately based on state
+  // Uses request versioning to prevent stale updates and avoid cancelling in-flight requests
   const loadData = useCallback(async () => {
+    // Increment request version for this fetch
+    const currentVersion = ++requestVersionRef.current;
+    const activeFilter = filter || 'open';
+    
     setIsLoading(true);
+    setErrorMessage(null);
+    
     try {
-      const activeFilter = filter || 'open';
+      // Use unique cancelKeys that include filter value to prevent cancellation when filter changes
+      // This allows in-flight requests for different filters to complete independently
+      const cancelKeyReports = `adminModerationPage.listReports.${activeFilter}`;
+      const cancelKeyStats = 'adminModerationPage.getStats';
+      
+      console.log(`[AdminModeration] Loading data (v${currentVersion}): filter=${activeFilter}, dateFilter=${dateFilter || 'none'}`);
       
       const [reportsData, statsData] = await Promise.all([
-        adminModerationService.listReports(activeFilter),
-        adminModerationService.getStats()
+        adminModerationService.listReports(activeFilter, cancelKeyReports),
+        adminModerationService.getStats(cancelKeyStats)
       ]);
+      
+      // Only update state if this is still the latest request and component is mounted
+      if (currentVersion !== requestVersionRef.current || !isMountedRef.current) {
+        console.log(`[AdminModeration] Request v${currentVersion} completed but is stale or component unmounted. Ignoring.`);
+        return;
+      }
       
       let filteredReports = reportsData;
       if (dateFilter && dateFilter.trim() !== '') {
@@ -76,21 +97,46 @@ export const AdminModerationPage: React.FC = () => {
 
       setReports(filteredReports);
       setStats(statsData);
-      setErrorMessage(null);
+      console.log(`[AdminModeration] Data loaded successfully (v${currentVersion}): ${filteredReports.length} reports, stats=`, statsData);
     } catch (e: any) {
-      console.error('[AdminModeration] Error loading reports:', e);
-      if (e.message !== 'Request cancelled') {
-        setErrorMessage("Could not load reports. Please retry.");
+      // Only handle errors if this is still the latest request and component is mounted
+      if (currentVersion !== requestVersionRef.current || !isMountedRef.current) {
+        console.log(`[AdminModeration] Request v${currentVersion} error but is stale or component unmounted. Ignoring.`);
+        return;
       }
+      
+      // Silently ignore cancellation errors - they're expected when filters change or component unmounts
+      if (e.message === 'Request cancelled') {
+        // Don't log as error - cancellation is expected behavior
+        return;
+      }
+      
+      // Only log actual errors (not cancellations)
+      console.error(`[AdminModeration] Error loading reports (v${currentVersion}):`, e);
+      setErrorMessage("Could not load reports. Please retry.");
     } finally {
-      setIsLoading(false);
+      // Only update loading state if this is still the latest request
+      if (currentVersion === requestVersionRef.current && isMountedRef.current) {
+        setIsLoading(false);
+      }
     }
   }, [filter, dateFilter]);
 
-  // Load data whenever filter or dateFilter state changes
+  // Load data whenever filter or dateFilter changes
   useEffect(() => {
     loadData();
   }, [loadData]);
+  
+  // Cleanup on unmount: cancel in-flight requests
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      // Increment version to invalidate any pending requests
+      requestVersionRef.current++;
+      console.log('[AdminModeration] Component unmounting, invalidating pending requests');
+    };
+  }, []);
 
   // PASSIVE URL SYNC: Write-only side-effect that syncs state to URL
   // Never reads from URL - only writes state changes to URL
@@ -146,7 +192,7 @@ export const AdminModerationPage: React.FC = () => {
       }
       
       // If viewing resolved/dismissed tab, refresh list to show the new item
-      if (filter === action) {
+      if (filter === action && isMountedRef.current) {
         loadData();
       }
     } catch (e: any) {
@@ -243,7 +289,7 @@ export const AdminModerationPage: React.FC = () => {
     }
 
     // Refresh list if viewing target tab
-    if (filter === action) {
+    if (filter === action && isMountedRef.current) {
       loadData();
     }
   };
@@ -329,7 +375,7 @@ export const AdminModerationPage: React.FC = () => {
         <div className="flex items-center justify-between rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
           <span>{errorMessage}</span>
           <button
-            onClick={loadData}
+            onClick={() => isMountedRef.current && loadData()}
             className="px-3 py-1 rounded-md bg-amber-100 text-amber-900 font-semibold hover:bg-amber-200 transition-colors"
           >
             Retry
@@ -337,7 +383,48 @@ export const AdminModerationPage: React.FC = () => {
         </div>
       )}
 
-      <AdminSummaryBar items={[{label:'Open', value: stats.open}, {label: 'Resolved', value: stats.resolved}]} isLoading={isLoading} />
+      <AdminSummaryBar items={[{label:'Open', value: stats.open}, {label: 'Resolved', value: stats.resolved}, {label: 'Dismissed', value: stats.dismissed}]} isLoading={isLoading} />
+      
+      {/* Filter Options - Visible in page content */}
+      <div className="flex flex-wrap items-center gap-4 p-4 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Status:</span>
+          <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
+            {['open', 'resolved', 'dismissed'].map((status) => (
+              <button 
+                key={status}
+                onClick={() => setFilter(status as any)}
+                className={`px-3 py-1.5 text-xs font-bold rounded-lg capitalize transition-all ${
+                  filter === status 
+                    ? 'bg-white dark:bg-slate-700 shadow-sm text-slate-900 dark:text-white' 
+                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'
+                }`}
+              >
+                {status}
+              </button>
+            ))}
+          </div>
+        </div>
+        
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Date:</span>
+          <input 
+            type="date" 
+            value={dateFilter}
+            onChange={(e) => setDateFilter(e.target.value)}
+            className="pl-3 pr-2 py-1.5 text-xs font-bold bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-600 dark:text-slate-300 focus:outline-none focus:ring-1 focus:ring-primary-500"
+          />
+          {dateFilter && (
+            <button
+              onClick={() => setDateFilter('')}
+              className="px-2 py-1 text-xs font-bold text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+              title="Clear date filter"
+            >
+              ✕
+            </button>
+          )}
+        </div>
+      </div>
       
       <AdminTable 
         columns={columns} 
@@ -351,13 +438,13 @@ export const AdminModerationPage: React.FC = () => {
             <p className="text-xs text-slate-400">Try changing the status filter or date range.</p>
             <div className="flex gap-2 mt-2">
               <button
-                onClick={() => { setFilter('open'); setDateFilter(''); loadData(); }}
+                onClick={() => { setFilter('open'); setDateFilter(''); }}
                 className="px-3 py-1 text-xs font-bold rounded-md bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
               >
                 Clear filters
               </button>
               <button
-                onClick={loadData}
+                onClick={() => isMountedRef.current && loadData()}
                 className="px-3 py-1 text-xs font-bold rounded-md bg-primary-50 text-primary-700 hover:bg-primary-100 transition-colors"
               >
                 Retry
@@ -460,14 +547,6 @@ export const AdminModerationPage: React.FC = () => {
               </button>
             </div>
           )
-        }
-        filters={
-            <input 
-                type="date" 
-                value={dateFilter}
-                onChange={(e) => setDateFilter(e.target.value)}
-                className="pl-3 pr-2 py-1.5 text-[10px] font-bold bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-600 dark:text-slate-300 focus:outline-none focus:ring-1 focus:ring-primary-500"
-            />
         }
       />
 

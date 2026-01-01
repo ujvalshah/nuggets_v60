@@ -16,9 +16,12 @@ interface SubmitFeedbackPayload {
 }
 
 class AdminFeedbackService {
-  async listFeedback(filter: 'new' | 'read' | 'archived'): Promise<AdminFeedback[]> {
+  async listFeedback(filter: 'new' | 'read' | 'archived' | 'all'): Promise<AdminFeedback[]> {
     const params = new URLSearchParams();
-    params.append('status', filter);
+    // Only append status param if not 'all'
+    if (filter !== 'all') {
+      params.append('status', filter);
+    }
     
     const response = await apiClient.get<{ data: RawFeedback[] } | RawFeedback[]>(`/feedback?${params.toString()}`, undefined, 'adminFeedbackService.listFeedback');
     
@@ -33,7 +36,7 @@ class AdminFeedbackService {
     return feedback.map(mapFeedbackToAdminFeedback);
   }
 
-  async updateStatus(id: string, status: 'read' | 'archived'): Promise<void> {
+  async updateStatus(id: string, status: 'new' | 'read' | 'archived'): Promise<void> {
     await apiClient.patch(`/feedback/${id}/status`, { status });
   }
 

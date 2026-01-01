@@ -1,16 +1,19 @@
 
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { AdminTable, Column } from '../components/AdminTable';
 import { AdminSummaryBar } from '../components/AdminSummaryBar';
 import { AdminNugget } from '../types/admin';
 import { adminNuggetsService } from '../services/adminNuggetsService';
-import { AlertTriangle, Trash2, EyeOff, Globe, Lock, Video, Image as ImageIcon, Link as LinkIcon, StickyNote, CheckCircle2, FileText, PlusCircle, Edit2, Save, Layout } from 'lucide-react';
+import { AlertTriangle, Trash2, EyeOff, Globe, Lock, Video, Image as ImageIcon, Link as LinkIcon, StickyNote, CheckCircle2, FileText, PlusCircle, Edit2, Layout } from 'lucide-react';
 import { useToast } from '@/hooks/useToast';
 import { useAdminPermissions } from '../hooks/useAdminPermissions';
 import { AdminDrawer } from '../components/AdminDrawer';
 import { ConfirmActionModal } from '@/components/settings/ConfirmActionModal';
 import { useAdminHeader } from '../layout/AdminLayout';
 import { useSearchParams } from 'react-router-dom';
+import { CreateNuggetModal } from '@/components/CreateNuggetModal';
+import { storageService } from '@/services/storageService';
+import { Article } from '@/types';
 
 export const AdminNuggetsPage: React.FC = () => {
   const { setPageHeader } = useAdminHeader();
@@ -40,11 +43,9 @@ export const AdminNuggetsPage: React.FC = () => {
   const [itemToDelete, setItemToDelete] = useState<AdminNugget | null>(null);
   const [pendingDelete, setPendingDelete] = useState<{ nugget: AdminNugget; timeoutId: number } | null>(null);
   const [editMode, setEditMode] = useState(false);
-  
-  // Edit Form State
-  const [editTitle, setEditTitle] = useState('');
-  const [editExcerpt, setEditExcerpt] = useState('');
-  const [isSaving, setIsSaving] = useState(false);
+  const [articleToEdit, setArticleToEdit] = useState<Article | null>(null);
+  const [isLoadingArticle, setIsLoadingArticle] = useState(false);
+  const [articleLoadError, setArticleLoadError] = useState<string | null>(null);
 
   const toast = useToast();
   const { can } = useAdminPermissions();
@@ -74,29 +75,54 @@ export const AdminNuggetsPage: React.FC = () => {
     setSearchParams(params, { replace: true });
   }, [searchQuery, statusFilter, dateFilter, setSearchParams]);
 
-  const loadData = async () => {
+  // Memoize loadData to prevent recreation on every render
+  // This prevents infinite loops in useEffect dependencies
+  const loadData = useCallback(async () => {
     setIsLoading(true);
+    setErrorMessage(null);
     try {
       const [nuggetsData, statsData] = await Promise.all([
         adminNuggetsService.listNuggets(statusFilter === 'all' ? undefined : statusFilter as any),
         adminNuggetsService.getStats()
       ]);
+      
+      // Validate data before setting state
+      if (!Array.isArray(nuggetsData)) {
+        if (process.env.NODE_ENV === 'development') {
+          console.error('[AdminNuggetsPage] Invalid nuggets data:', nuggetsData);
+        }
+        setErrorMessage("Invalid data received from server. Please retry.");
+        return;
+      }
+      
+      if (!statsData || typeof statsData !== 'object') {
+        if (process.env.NODE_ENV === 'development') {
+          console.error('[AdminNuggetsPage] Invalid stats data:', statsData);
+        }
+        setErrorMessage("Invalid stats data received from server. Please retry.");
+        return;
+      }
+      
       setNuggets(nuggetsData);
       setStats(statsData);
       setErrorMessage(null);
     } catch (e: any) {
       if (e.message !== 'Request cancelled') {
-        setErrorMessage("Could not load nuggets. Please retry.");
+        if (process.env.NODE_ENV === 'development') {
+          console.error('[AdminNuggetsPage] Error loading data:', e);
+        }
+        setErrorMessage(`Could not load nuggets: ${e.message || 'Unknown error'}. Please retry.`);
       }
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [statusFilter]); // Only recreate when statusFilter changes
 
+  // Load data when statusFilter changes, with debounce
   useEffect(() => {
     const timer = setTimeout(loadData, 300);
     return () => clearTimeout(timer);
-  }, [statusFilter]);
+  }, [loadData]); // Now safe to include loadData since it's memoized
 
   // Derived state
   const processedNuggets = useMemo(() => {
@@ -138,12 +164,42 @@ export const AdminNuggetsPage: React.FC = () => {
     return result;
   }, [nuggets, searchQuery, dateFilter, sortKey, sortDirection]);
 
-  // Populate form when opening edit mode
+  // Fetch full article data when entering edit mode
   useEffect(() => {
-    if (selectedNugget && editMode) {
-      setEditTitle(selectedNugget.title);
-      setEditExcerpt(selectedNugget.excerpt);
-    }
+    const fetchArticleForEdit = async () => {
+      if (selectedNugget && editMode) {
+        setIsLoadingArticle(true);
+        setArticleLoadError(null);
+        try {
+          const article = await storageService.getArticleById(selectedNugget.id);
+          if (article) {
+            setArticleToEdit(article);
+            setArticleLoadError(null);
+          } else {
+            setArticleLoadError('Article not found');
+            setArticleToEdit(null);
+          }
+        } catch (error: any) {
+          // Don't show error for cancelled requests (they're expected during cleanup)
+          if (error?.message !== 'Request cancelled') {
+            console.error('[AdminNuggetsPage] Error fetching article:', error);
+            setArticleLoadError(error?.message || 'Failed to load nugget data for editing');
+            setArticleToEdit(null);
+          } else {
+            // Request was cancelled - clear error state
+            setArticleLoadError(null);
+            setArticleToEdit(null);
+          }
+        } finally {
+          setIsLoadingArticle(false);
+        }
+      } else {
+        setArticleToEdit(null);
+        setArticleLoadError(null);
+      }
+    };
+
+    fetchArticleForEdit();
   }, [selectedNugget, editMode]);
 
   const handleStatusChange = async (nugget: AdminNugget, newStatus: 'active' | 'hidden') => {
@@ -155,27 +211,6 @@ export const AdminNuggetsPage: React.FC = () => {
       toast.success(newStatus === 'active' ? 'Nugget Approved' : 'Nugget Hidden');
     } catch (e) {
       toast.error("Action failed");
-    }
-  };
-
-  const handleSaveChanges = async () => {
-    if (!selectedNugget) return;
-    setIsSaving(true);
-    try {
-      // Mock save delay
-      await new Promise(resolve => setTimeout(resolve, 800));
-      
-      // Update local state
-      const updated = { ...selectedNugget, title: editTitle, excerpt: editExcerpt };
-      setNuggets(prev => prev.map(n => n.id === selectedNugget.id ? updated : n));
-      
-      toast.success("Changes saved");
-      setEditMode(false);
-      setSelectedNugget(null);
-    } catch (e) {
-      toast.error("Failed to save changes");
-    } finally {
-      setIsSaving(false);
     }
   };
 
@@ -202,21 +237,25 @@ export const AdminNuggetsPage: React.FC = () => {
     setPendingDelete({ nugget, timeoutId });
   };
 
-  const handleBulkAction = (action: string) => {
+  // Memoize handleBulkAction to prevent recreation on every render
+  const handleBulkAction = useCallback((action: string) => {
       toast.info(`${action} ${selectedIds.length} items (Not implemented)`);
       setSelectedIds([]);
-  };
+  }, [selectedIds.length, toast]);
 
-  const getTypeIcon = (type: string) => {
+  // Memoize getTypeIcon to prevent recreation on every render
+  const getTypeIcon = useCallback((type: string) => {
     switch(type) {
         case 'video': return <Video size={14} />;
         case 'image': return <ImageIcon size={14} />;
         case 'link': return <LinkIcon size={14} />;
         default: return <StickyNote size={14} />;
     }
-  };
+  }, []);
 
-  const allColumns: Column<AdminNugget>[] = [
+  // Memoize columns array to prevent AdminTable re-renders
+  // Columns are stable and don't depend on component state
+  const allColumns: Column<AdminNugget>[] = useMemo(() => [
     {
       key: 'id',
       header: 'ID',
@@ -313,7 +352,10 @@ export const AdminNuggetsPage: React.FC = () => {
       render: (n) => (
         <div className="flex justify-end gap-2" onClick={(e) => e.stopPropagation()}>
           <button 
-            onClick={() => { setEditMode(true); setSelectedNugget(n); }}
+            onClick={() => { 
+              setSelectedNugget(n); 
+              setEditMode(true); 
+            }}
             className="flex items-center gap-1.5 px-2 py-1.5 bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 hover:border-slate-300 rounded-md text-[10px] font-bold transition-colors"
             title="Edit Nugget"
           >
@@ -342,11 +384,15 @@ export const AdminNuggetsPage: React.FC = () => {
         </div>
       )
     }
-  ];
+  ], [getTypeIcon, can]); // Memoize columns - only recreate if getTypeIcon or can changes
 
-  const activeColumns = allColumns.filter(c => visibleColumns.includes(c.key));
+  const activeColumns = useMemo(() => 
+    allColumns.filter(c => visibleColumns.includes(c.key)), 
+    [allColumns, visibleColumns]
+  );
 
-  const Filters = (
+  // Memoize Filters JSX to prevent re-renders
+  const Filters = useMemo(() => (
     <div className="flex items-center gap-2">
       <div className="bg-slate-100 dark:bg-slate-800 p-0.5 rounded-lg flex">
         <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as any)} className="text-[10px] bg-transparent font-bold text-slate-600 dark:text-slate-300 focus:outline-none cursor-pointer px-2 py-1">
@@ -397,16 +443,17 @@ export const AdminNuggetsPage: React.FC = () => {
         )}
       </div>
     </div>
-  );
+  ), [statusFilter, dateFilter, showColumnMenu, visibleColumns, allColumns]);
 
-  const BulkActions = selectedIds.length > 0 ? (
+  // Memoize BulkActions to prevent re-renders
+  const BulkActions = useMemo(() => selectedIds.length > 0 ? (
       <div className="flex items-center gap-2 animate-in fade-in slide-in-from-right-2 duration-200">
           <span className="text-xs font-bold text-slate-500">{selectedIds.length} selected</span>
           <button onClick={() => handleBulkAction('approve')} className="px-3 py-1.5 bg-green-50 text-green-700 hover:bg-green-100 rounded-lg text-[10px] font-bold transition-colors">Approve</button>
           <button onClick={() => handleBulkAction('hide')} className="px-3 py-1.5 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-lg text-[10px] font-bold transition-colors">Hide</button>
           <button onClick={() => handleBulkAction('delete')} className="px-3 py-1.5 bg-red-50 text-red-700 hover:bg-red-100 rounded-lg text-[10px] font-bold transition-colors">Delete</button>
       </div>
-  ) : null;
+  ) : null, [selectedIds.length, handleBulkAction]);
 
   return (
     <div className="space-y-4">
@@ -491,45 +538,17 @@ export const AdminNuggetsPage: React.FC = () => {
         }}
       />
       
+      {/* View-only drawer - only show when NOT in edit mode */}
       <AdminDrawer 
-        isOpen={!!selectedNugget} 
-        onClose={() => { setSelectedNugget(null); setEditMode(false); }} 
-        title={editMode ? "Edit Nugget" : "Nugget Details"} 
+        isOpen={!!selectedNugget && !editMode && !isLoadingArticle} 
+        onClose={() => { setSelectedNugget(null); setEditMode(false); setArticleToEdit(null); }} 
+        title="Nugget Details" 
         width="lg"
-        footer={editMode && (
-            <div className="flex justify-end gap-2 w-full">
-                <button 
-                    onClick={() => { setEditMode(false); }}
-                    className="px-4 py-2 bg-white border border-slate-200 text-slate-600 rounded-lg text-sm font-bold hover:bg-slate-50 transition-colors"
-                >
-                    Cancel
-                </button>
-                <button 
-                    onClick={handleSaveChanges}
-                    disabled={isSaving || !editTitle.trim()}
-                    className="flex items-center gap-2 px-6 py-2 bg-slate-900 text-white rounded-lg text-sm font-bold hover:bg-slate-800 transition-colors disabled:opacity-50"
-                >
-                    {isSaving ? 'Saving...' : <><Save size={16} /> Save Changes</>}
-                </button>
-            </div>
-        )}
       >
         {selectedNugget && (
             <div className="space-y-6">
                 <div>
-                    {editMode ? (
-                        <div className="space-y-2 mb-4">
-                            <label className="text-xs font-bold text-slate-500 uppercase">Title</label>
-                            <input 
-                                value={editTitle}
-                                onChange={(e) => setEditTitle(e.target.value)}
-                                className="w-full text-xl font-bold text-slate-900 dark:text-white bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500"
-                            />
-                        </div>
-                    ) : (
-                        <h2 className="text-xl font-bold text-slate-900 dark:text-white leading-tight mb-2">{selectedNugget.title || ''}</h2>
-                    )}
-                    
+                    <h2 className="text-xl font-bold text-slate-900 dark:text-white leading-tight mb-2">{selectedNugget.title || ''}</h2>
                     <div className="flex items-center gap-2 text-xs text-slate-500">
                         <span>Posted by {selectedNugget.author.name}</span>
                         <span>•</span>
@@ -538,35 +557,91 @@ export const AdminNuggetsPage: React.FC = () => {
                 </div>
 
                 <div>
-                    {editMode && <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">Excerpt / Content</label>}
-                    <div className={`rounded-xl border ${editMode ? 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900' : 'border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50'} p-4`}>
-                        {editMode ? (
-                            <textarea 
-                                value={editExcerpt}
-                                onChange={(e) => setEditExcerpt(e.target.value)}
-                                className="w-full h-48 bg-transparent focus:outline-none text-slate-700 dark:text-slate-300 leading-relaxed text-sm resize-none"
-                            />
-                        ) : (
-                            <p className="text-slate-700 dark:text-slate-300 leading-relaxed text-sm whitespace-pre-wrap">{selectedNugget.excerpt}</p>
-                        )}
+                    <div className="rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50 p-4">
+                        <p className="text-slate-700 dark:text-slate-300 leading-relaxed text-sm whitespace-pre-wrap">{selectedNugget.excerpt}</p>
                     </div>
                 </div>
 
-                {!editMode && (
-                    <div className="grid grid-cols-2 gap-4 text-xs">
-                        <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
-                            <span className="block text-slate-400 font-bold uppercase mb-1">Status</span>
-                            <span className="font-medium capitalize">{selectedNugget.status}</span>
-                        </div>
-                        <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
-                            <span className="block text-slate-400 font-bold uppercase mb-1">Reports</span>
-                            <span className="font-medium">{selectedNugget.reports}</span>
-                        </div>
+                <div className="grid grid-cols-2 gap-4 text-xs">
+                    <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
+                        <span className="block text-slate-400 font-bold uppercase mb-1">Status</span>
+                        <span className="font-medium capitalize">{selectedNugget.status}</span>
                     </div>
-                )}
+                    <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
+                        <span className="block text-slate-400 font-bold uppercase mb-1">Reports</span>
+                        <span className="font-medium">{selectedNugget.reports}</span>
+                    </div>
+                </div>
             </div>
         )}
       </AdminDrawer>
+
+      {/* Full-featured Edit Modal */}
+      {/* Only show modal when article is loaded AND not loading */}
+      {!isLoadingArticle && (
+        <CreateNuggetModal
+          isOpen={editMode && !!articleToEdit}
+          onClose={async () => {
+            // Refresh admin list after edit modal closes (handles both save and cancel)
+            // The modal already invalidates query cache, but admin page uses direct service calls
+            try {
+              await loadData();
+            } catch (error) {
+              console.error('[AdminNuggetsPage] Error refreshing after edit:', error);
+            }
+            setEditMode(false);
+            setSelectedNugget(null);
+            setArticleToEdit(null);
+          }}
+          mode="edit"
+          initialData={articleToEdit || undefined}
+        />
+      )}
+      
+      {/* Show loading/error state while fetching article */}
+      {editMode && (isLoadingArticle || articleLoadError) && (
+        <AdminDrawer
+          isOpen={true}
+          onClose={() => {
+            setEditMode(false);
+            setSelectedNugget(null);
+            setArticleToEdit(null);
+            setArticleLoadError(null);
+          }}
+          title={articleLoadError ? "Error" : "Loading..."}
+          width="lg"
+        >
+          <div className="flex items-center justify-center py-12">
+            <div className="text-center">
+              {articleLoadError ? (
+                <>
+                  <div className="text-red-500 mb-4">
+                    <AlertTriangle size={48} className="mx-auto" />
+                  </div>
+                  <p className="text-sm font-semibold text-slate-900 dark:text-white mb-2">Failed to load nugget</p>
+                  <p className="text-xs text-slate-500 mb-4">{articleLoadError}</p>
+                  <button
+                    onClick={() => {
+                      setEditMode(false);
+                      setSelectedNugget(null);
+                      setArticleToEdit(null);
+                      setArticleLoadError(null);
+                    }}
+                    className="px-4 py-2 bg-slate-900 text-white rounded-lg text-sm font-bold hover:bg-slate-800 transition-colors"
+                  >
+                    Close
+                  </button>
+                </>
+              ) : (
+                <>
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto mb-4"></div>
+                  <p className="text-sm text-slate-500">Loading nugget data for editing...</p>
+                </>
+              )}
+            </div>
+          </div>
+        </AdminDrawer>
+      )}
 
       <ConfirmActionModal isOpen={!!itemToDelete} onClose={() => setItemToDelete(null)} onConfirm={handleDelete} title="Delete Nugget?" description="Permanently remove this content." actionLabel="Delete" isDestructive />
     </div>

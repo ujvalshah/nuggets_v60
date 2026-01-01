@@ -1,5 +1,5 @@
 
-import React, { useRef } from 'react';
+import React, { useRef, useEffect, useMemo } from 'react';
 import { ChevronLeft, ChevronRight, Loader2, Search, ArrowUp, ArrowDown } from 'lucide-react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 
@@ -140,12 +140,75 @@ function AdminTableComponent<T extends { id: string }>({
 
   const rowHeight = 56; // px estimate for virtualization
 
-  const virtual = useVirtualizer({
+  // CRITICAL PERFORMANCE FIX: Optimize virtualizer to prevent scroll violations
+  // The virtualizer was causing 150-200ms violations because:
+  // 1. measureElement was calling getBoundingClientRect() during scroll (layout thrashing)
+  // 2. Too much work happening synchronously in scroll handler
+  // 3. Overscan was too high, rendering too many off-screen items
+  //
+  // Solution:
+  // 1. Remove measureElement - use fixed estimate to avoid layout reads during scroll
+  // 2. Reduce overscan to minimize DOM work
+  // 3. Disable virtualization for small datasets (< 50 items) - overhead not worth it
+  // 4. Let virtualizer handle measurements asynchronously
+  const shouldVirtualize = virtualized && data.length > 50; // Only virtualize large lists
+  
+  const virtualizerConfig = useMemo(() => ({
     count: data.length,
     getScrollElement: () => scrollContainerRef.current,
     estimateSize: () => rowHeight,
-    overscan: 5
+    overscan: 2, // Reduced from 5 to minimize work during scroll
+    // REMOVED measureElement - it was causing layout thrashing during scroll
+    // getBoundingClientRect() forces synchronous layout recalculation (expensive)
+    // Fixed estimate is faster and prevents scroll violations
+  }), [data.length, rowHeight]);
+
+  // CRITICAL: Always call hook, but only use virtualizer when shouldVirtualize is true
+  // React hooks must be called unconditionally
+  const virtual = useVirtualizer(shouldVirtualize ? virtualizerConfig : {
+    count: 0,
+    getScrollElement: () => null,
+    estimateSize: () => rowHeight,
+    overscan: 0
   });
+
+  // CRITICAL FIX: Prevent scroll position instability when data changes
+  // The virtualizer was causing scrollbar to jump/continuously move because:
+  // 1. Virtualizer recalculates total height when data changes
+  // 2. This can cause layout shifts that reset scroll position  
+  // 3. Multiple rapid recalculations create a feedback loop
+  // 
+  // Solution: Debounce remeasurements and prevent infinite loops
+  const remeasureTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  useEffect(() => {
+    if (!shouldVirtualize) return;
+    
+    // Clear any pending remeasure
+    if (remeasureTimeoutRef.current) {
+      clearTimeout(remeasureTimeoutRef.current);
+    }
+    
+    // Debounce remeasure to prevent rapid-fire recalculations
+    // This breaks the feedback loop that causes scrollbar to continuously move
+    remeasureTimeoutRef.current = setTimeout(() => {
+      try {
+        virtual.measure();
+      } catch (error) {
+        // Silently catch errors to prevent console spam
+        if (process.env.NODE_ENV === 'development') {
+          console.warn('[AdminTable] Virtualizer remeasure error:', error);
+        }
+      }
+      remeasureTimeoutRef.current = null;
+    }, 16); // ~1 frame delay to batch updates
+    
+    return () => {
+      if (remeasureTimeoutRef.current) {
+        clearTimeout(remeasureTimeoutRef.current);
+        remeasureTimeoutRef.current = null;
+      }
+    };
+  }, [data.length, virtualized]); // Only remeasure when count changes, NOT when virtual object changes
 
   // Improved sticky classes with solid backgrounds to cover content when scrolling
   const getStickyClass = (col: Column<T>, isHeader: boolean) => {
@@ -256,7 +319,18 @@ function AdminTableComponent<T extends { id: string }>({
           </div>
         )}
 
-        <div ref={scrollContainerRef} className="overflow-x-auto custom-scrollbar" style={{ maxHeight: virtualized ? virtualHeight : 'none', overflowY: virtualized ? 'auto' : 'visible' }}>
+        <div 
+          ref={scrollContainerRef} 
+          className="overflow-x-auto custom-scrollbar" 
+          style={{ 
+            maxHeight: virtualized ? virtualHeight : 'none', 
+            overflowY: virtualized ? 'auto' : 'auto', // Always allow scrolling when maxHeight is set
+            // CRITICAL: Enable hardware acceleration for smoother scrolling
+            transform: shouldVirtualize ? 'translateZ(0)' : 'none', // Force GPU acceleration
+            // CRITICAL: Optimize scroll performance (but don't use contain: paint as it can hide scrollbars)
+            contain: shouldVirtualize ? 'layout style' : 'none', // CSS containment (removed 'paint' to preserve scrollbar)
+          }}
+        >
           <table className="w-full text-left border-collapse">
             <thead className="bg-slate-50 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-800">
               <tr>
@@ -314,11 +388,13 @@ function AdminTableComponent<T extends { id: string }>({
                 ))}
               </tr>
             </thead>
-            {virtualized && !isLoading && data.length > 0 ? (
+            {shouldVirtualize && !isLoading && data.length > 0 ? (
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                 {virtual.getVirtualItems().map((item) => {
                   const row = data[item.index];
                   if (!row) return null;
+                  // CRITICAL: Use stable key to prevent React from remounting rows
+                  // This prevents layout shifts that cause scrollbar to jump
                   return <React.Fragment key={row.id}>{renderRow(row, item.index)}</React.Fragment>;
                 })}
               </tbody>

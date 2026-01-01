@@ -35,13 +35,15 @@ class AdminModerationService {
     return reports.find(r => r.id === id);
   }
 
-  async getStats(): Promise<{ open: number; resolved: number; dismissed: number }> {
+  async getStats(cancelKey?: string): Promise<{ open: number; resolved: number; dismissed: number }> {
     // Fetch all statuses separately for accurate counts
     // Use unique cancellation keys for each parallel request to prevent mutual cancellation
+    // If a cancelKey is provided, append it to make stats requests independent from list requests
+    const keyPrefix = cancelKey || 'adminModerationService.getStats';
     const [openReports, resolvedReports, dismissedReports] = await Promise.all([
-      this.listReports('open', 'adminModerationService.getStats.open'),
-      this.listReports('resolved', 'adminModerationService.getStats.resolved'),
-      this.listReports('dismissed', 'adminModerationService.getStats.dismissed')
+      this.listReports('open', `${keyPrefix}.open`),
+      this.listReports('resolved', `${keyPrefix}.resolved`),
+      this.listReports('dismissed', `${keyPrefix}.dismissed`)
     ]);
     
     return {
