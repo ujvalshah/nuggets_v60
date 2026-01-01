@@ -27,3 +27,8 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Temporary files and archives
+*.zip
+*_EXTRACT.txt
+*_EXTRACT*.txt
