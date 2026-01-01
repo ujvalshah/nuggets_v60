@@ -56,7 +56,9 @@ const InfiniteScrollTrigger: React.FC<{
   }, [onIntersect]);
 
   useEffect(() => {
-    if (!hasMore) return;
+    if (!hasMore) {
+      return;
+    }
     
     const observer = new IntersectionObserver(
       (entries) => {

@@ -134,6 +134,23 @@ export class LocalAdapter implements IAdapter {
     return articles.filter(a => a.author.id === authorId);
   }
 
+  async getMyArticleCounts(): Promise<import('./IAdapter').ArticleCountsResponse> {
+    // For LocalAdapter, get current user ID from localStorage or return mock data
+    // This is a simplified implementation since LocalAdapter doesn't have authentication
+    const articles = await this.getAllArticles();
+    // Since we don't have auth context in LocalAdapter, return counts for all articles
+    // In practice, LocalAdapter is mainly for development/testing
+    const total = articles.length;
+    const publicCount = articles.filter(a => (a.visibility ?? 'public') === 'public').length;
+    const privateCount = articles.filter(a => a.visibility === 'private').length;
+    
+    return {
+      total,
+      public: publicCount,
+      private: privateCount
+    };
+  }
+
   async createArticle(article: Omit<Article, 'id' | 'publishedAt'>): Promise<Article> {
     this.initStorage();
     const articles = await this.getAllArticles();

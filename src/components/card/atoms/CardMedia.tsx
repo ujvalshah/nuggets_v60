@@ -17,7 +17,7 @@
  * ============================================================================
  */
 
-import React, { useMemo, useEffect } from 'react';
+import React, { useMemo, useEffect, useState } from 'react';
 import { Article } from '@/types';
 import { Image } from '@/components/Image';
 import { Lock, Layers } from 'lucide-react';
@@ -42,6 +42,9 @@ export const CardMedia: React.FC<CardMediaProps> = React.memo(({
   className,
   isMediaOnly = false,
 }) => {
+  // Track image load errors for Media-only cards
+  const [imageError, setImageError] = useState(false);
+  
   // Classify media using deterministic rules
   const { primaryMedia, supportingMedia } = useMemo(() => 
     classifyArticleMedia(article), 
@@ -66,6 +69,11 @@ export const CardMedia: React.FC<CardMediaProps> = React.memo(({
     }
     return url;
   }, [article, allImageUrls]);
+  
+  // Reset error state when thumbnail URL changes
+  useEffect(() => {
+    setImageError(false);
+  }, [thumbnailUrl]);
 
   // Get count of supporting media for indicator
   const supportingCount = useMemo(() => 
@@ -249,7 +257,7 @@ export const CardMedia: React.FC<CardMediaProps> = React.memo(({
               
               This distinction is intentional and type-based (not heuristic).
           */}
-          {thumbnailUrl && (
+          {thumbnailUrl && !imageError && (
             <div className="w-full h-full flex items-center justify-center">
               <Image
                 src={thumbnailUrl}
@@ -264,6 +272,11 @@ export const CardMedia: React.FC<CardMediaProps> = React.memo(({
                     : // Hybrid cards with uploaded images: preserve full image with object-contain (no cropping)
                       "max-w-full max-h-full w-auto h-auto object-contain transition-transform duration-300 group-hover/media:scale-105"
                 }
+                onError={() => {
+                  if (isMediaOnly) {
+                    setImageError(true);
+                  }
+                }}
               />
               
               {/* YouTube video indicator - bottom overlay with logo and title (gradient background) */}
@@ -288,6 +301,13 @@ export const CardMedia: React.FC<CardMediaProps> = React.memo(({
             </div>
           )}
           
+          {/* Error placeholder for Media-only cards when image fails to load */}
+          {isMediaOnly && imageError && (
+            <div className="w-full h-full flex items-center justify-center opacity-60 text-sm text-slate-400 dark:text-slate-500">
+              Media unavailable
+            </div>
+          )}
+          
           {/* MODE 3: Fallback - No thumbnail available */}
           {!thumbnailUrl && primaryMedia && (
             <div className="w-full h-full flex items-center justify-center bg-slate-100 dark:bg-slate-800">
@@ -296,6 +316,13 @@ export const CardMedia: React.FC<CardMediaProps> = React.memo(({
                  primaryMedia.type === 'image' ? 'Image' :
                  primaryMedia.type === 'document' ? 'Document' : 'Media'}
               </div>
+            </div>
+          )}
+          
+          {/* Error placeholder for Media-only cards when no thumbnail URL exists */}
+          {isMediaOnly && !thumbnailUrl && !primaryMedia && (
+            <div className="w-full h-full flex items-center justify-center opacity-60 text-sm text-slate-400 dark:text-slate-500">
+              Media unavailable
             </div>
           )}
         </>

@@ -28,6 +28,7 @@
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { Article, SortOrder, Collection } from '@/types';
 import { useArticles } from '@/hooks/useArticles';
+import { useInfiniteArticles } from '@/hooks/useInfiniteArticles';
 import { Loader2, AlertCircle, TrendingUp, Folder, Hash } from 'lucide-react';
 import { ArticleModal } from '@/components/ArticleModal';
 import { ArticleGrid } from '@/components/ArticleGrid';
@@ -114,32 +115,97 @@ export const HomePage: React.FC<HomePageProps> = ({
     };
   }, []);
 
-  const { articles: allArticles = [], query } = useArticles({
+  // Determine active category from selectedCategories (needed for useInfiniteArticles)
+  const activeCategory = useMemo(() => {
+    if (selectedCategories.length === 0) return 'All';
+    if (selectedCategories.includes('Today')) return 'Today';
+    return selectedCategories[0] || 'All';
+  }, [selectedCategories]);
+
+  // CRITICAL FIX: Use infinite scroll for ALL view modes (grid, feed, masonry, utility)
+  // This ensures consistent pagination behavior and allows loading more than 25 items
+  const {
+    articles: allArticles = [],
+    isLoading: isLoadingArticles,
+    isFetchingNextPage,
+    hasNextPage,
+    fetchNextPage,
+    error: articlesError,
+    refetch: refetchArticles,
+  } = useInfiniteArticles({
     searchQuery,
-    selectedCategories: selectedCategories.length > 0 && selectedCategories[0] !== 'Today' ? selectedCategories : [],
-    selectedTag,
+    activeCategory,
     sortOrder,
-    userId: currentUserId,
-    limit: 25 // Increased from 6 to show more nuggets on homepage
+    limit: 25,
   });
 
-  // Calculate category counts from articles
+  // Create query-like object for backward compatibility with error handling
+  const query = {
+    isLoading: isLoadingArticles,
+    isError: !!articlesError,
+    error: articlesError,
+    refetch: refetchArticles,
+    data: null, // Not used for infinite query
+  };
+
+
+  // Fetch tags to get correct casing (rawName) for category display
+  const [tagNameMap, setTagNameMap] = useState<Map<string, string>>(new Map());
+  
+  useEffect(() => {
+    const loadTagNames = async () => {
+      try {
+        // Fetch tags with format=full to get rawName (correct casing)
+        // Use type assertion since method exists in RestAdapter
+        const adapter = storageService as any;
+        if (adapter.getCategoriesWithIds) {
+          const tags = await adapter.getCategoriesWithIds();
+          const map = new Map<string, string>();
+          
+          // Create mapping: canonicalName (lowercase) -> rawName (correct casing)
+          tags.forEach((tag: any) => {
+            const canonical = tag.canonicalName || tag.rawName?.toLowerCase() || '';
+            const rawName = tag.rawName || tag.name || '';
+            if (canonical && rawName) {
+              map.set(canonical, rawName);
+            }
+          });
+          
+          setTagNameMap(map);
+        }
+      } catch (error) {
+        console.warn('Failed to load tag names for casing correction:', error);
+      }
+    };
+    
+    loadTagNames();
+  }, []);
+
+  // Calculate category counts from articles with correct casing from tags
   const categoriesWithCounts = useMemo(() => {
     const categoryCountMap = new Map<string, number>();
     
     allArticles.forEach(article => {
       article.categories?.forEach(cat => {
-        const count = categoryCountMap.get(cat) || 0;
-        categoryCountMap.set(cat, count + 1);
+        // Use canonical name (lowercase) for counting to group case variants
+        const canonical = cat.toLowerCase().trim();
+        const count = categoryCountMap.get(canonical) || 0;
+        categoryCountMap.set(canonical, count + 1);
       });
     });
 
-    return Array.from(categoryCountMap.entries()).map(([label, count]) => ({
-      id: label.toLowerCase().replace(/\s+/g, '-'),
-      label,
-      count,
-    }));
-  }, [allArticles]);
+    // Map back to correct casing using tagNameMap
+    return Array.from(categoryCountMap.entries()).map(([canonical, count]) => {
+      // Get correct casing from tagNameMap, fallback to original if not found
+      const correctLabel = tagNameMap.get(canonical) || canonical;
+      
+      return {
+        id: canonical.replace(/\s+/g, '-'),
+        label: correctLabel, // Use correct casing from backend tags
+        count,
+      };
+    });
+  }, [allArticles, tagNameMap]);
 
   // Calculate tag counts from articles
   // NOTE: Tags are mandatory - all nuggets must have at least one tag
@@ -180,38 +246,13 @@ export const HomePage: React.FC<HomePageProps> = ({
       return publishedDate >= today && publishedDate <= todayEnd;
     }).length;
     
-    // Debug: Log count in development
-    if (process.env.NODE_ENV === 'development') {
-      console.log('[HomePage] Today\'s nuggets count:', count, 'from', allArticles.length, 'total articles');
-    }
-    
     return count;
   }, [allArticles]);
 
-  // Determine active category from selectedCategories
-  const activeCategory = useMemo(() => {
-    if (selectedCategories.length === 0) return 'All';
-    if (selectedCategories.includes('Today')) return 'Today';
-    return selectedCategories[0] || 'All';
-  }, [selectedCategories]);
-
-  // Handle "Today" filtering client-side
-  // Also handle tag filtering client-side (backend doesn't support tag filtering)
+  // Handle tag filtering client-side (backend doesn't support tag filtering)
+  // "Today" filter is now handled by backend - no client-side filtering needed
   const articles = useMemo(() => {
     let filtered = allArticles;
-    
-    // Apply "Today" filter if active
-    if (activeCategory === 'Today') {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const todayEnd = new Date(today);
-      todayEnd.setHours(23, 59, 59, 999);
-      
-      filtered = filtered.filter(article => {
-        const publishedDate = new Date(article.publishedAt);
-        return publishedDate >= today && publishedDate <= todayEnd;
-      });
-    }
     
     // Apply tag filter if selected
     // Tags are mandatory - filter for nuggets containing the selected tag
@@ -225,12 +266,15 @@ export const HomePage: React.FC<HomePageProps> = ({
     return filtered;
   }, [allArticles, activeCategory, selectedTag]);
 
-  // Handle category selection from CategoryFilterBar
+  // Handle category selection from CategoryFilterBar with toggle behavior
+  // TOGGLE LOGIC: Clicking the currently selected tag unselects it (sets to null/empty)
+  // Clicking an unselected tag selects it. Only one tag can be active at a time.
   const handleCategorySelect = (categoryLabel: string) => {
-    if (categoryLabel === 'All') {
-      setSelectedCategories([]);
+    // If clicking the currently active category, unselect it (toggle off)
+    if (activeCategory === categoryLabel) {
+      setSelectedCategories([]); // Clear selection - will show "All" as active
     } else {
-      // Single-select pattern: replace array with single category
+      // Select the clicked category (single-select pattern)
       setSelectedCategories([categoryLabel]);
     }
   };
@@ -460,17 +504,21 @@ export const HomePage: React.FC<HomePageProps> = ({
 
               </div>
             </div>
-        ) : (
+            ) : (
             // Grid/Masonry/Utility View: Full-width for maximum content density
             <div className="max-w-[1800px] mx-auto px-4 lg:px-6 pb-4">
                 <ArticleGrid 
                     articles={articles}
                     viewMode={viewMode}
-                    isLoading={query.isLoading}
+                    isLoading={isLoadingArticles}
                     onArticleClick={setSelectedArticle}
                     onTagClick={(t) => setSelectedTag(t)}
                     onCategoryClick={(c) => toggleCategory(c)}
                     currentUserId={currentUserId}
+                    // Infinite Scroll Props
+                    hasNextPage={hasNextPage}
+                    isFetchingNextPage={isFetchingNextPage}
+                    onLoadMore={fetchNextPage}
                 />
                 </div>
               )}

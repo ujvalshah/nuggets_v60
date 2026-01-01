@@ -1,6 +1,6 @@
 import React from 'react';
 import { Collection } from '@/types';
-import { formatDate, toSentenceCase } from '@/utils/formatters';
+import { formatDate } from '@/utils/formatters';
 import { Tooltip } from '../UI/Tooltip';
 import { Info, Lock, Folder, ChevronRight } from 'lucide-react';
 
@@ -42,7 +42,7 @@ export const TableView: React.FC<TableViewProps> = ({ collections, onClick }) =>
                                             {col.type === 'private' ? <Lock size={14} /> : <Folder size={14} />}
                                         </div>
                                         <div>
-                                            <div className="font-bold text-slate-900 dark:text-white group-hover:text-primary-600 transition-colors text-sm">{toSentenceCase(col.name)}</div>
+                                            <div className="font-bold text-slate-900 dark:text-white group-hover:text-primary-600 transition-colors text-sm">{col.name}</div>
                                             {col.description && <div className="text-[10px] text-slate-400 line-clamp-1 max-w-[250px]">{col.description}</div>}
                                         </div>
                                     </div>

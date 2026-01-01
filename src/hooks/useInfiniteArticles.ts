@@ -45,9 +45,10 @@ export const useInfiniteArticles = ({
     queryFn: async ({ pageParam = 1 }) => {
       // Build filters inside queryFn to avoid stale closures
       // Determine category parameter for backend
-      const categoryParam = activeCategory === 'All' || activeCategory === 'Today'
+      // "Today" is now handled by backend, so pass it through
+      const categoryParam = activeCategory === 'All'
         ? []
-        : [activeCategory];
+        : [activeCategory]; // Include "Today" or any other category
 
       // Build filter state
       const filters: FilterState = {
@@ -66,36 +67,26 @@ export const useInfiniteArticles = ({
     },
     initialPageParam: 1,
     staleTime: 1000 * 30, // 30 seconds
-    // Keep previous data during refetch to avoid flickering
-    placeholderData: (previousData) => previousData,
+    // CRITICAL FIX: Removed placeholderData - it interferes with page accumulation in infinite queries
+    // React Query handles data persistence naturally without placeholderData
   });
 
   // Accumulate all pages into a single articles array (memoized)
+  // Backend now handles all filtering (including "Today" date filter)
+  // No client-side filtering needed - pagination works correctly
   const articles = useMemo(() => {
-    return query.data?.pages.flatMap((page) => page.data) || [];
-  }, [query.data?.pages]);
-
-  // Filter "Today" client-side (backend doesn't support date filtering)
-  // Memoized to prevent unnecessary re-renders
-  const filteredArticles = useMemo(() => {
-    if (activeCategory !== 'Today') return articles;
+    if (!query.data?.pages) {
+      return [];
+    }
     
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const todayEnd = new Date(today);
-    todayEnd.setHours(23, 59, 59, 999);
-    
-    return articles.filter((article) => {
-      const publishedDate = new Date(article.publishedAt);
-      return publishedDate >= today && publishedDate <= todayEnd;
-    });
-  }, [articles, activeCategory]);
+    return query.data.pages.flatMap((page) => page.data);
+  }, [query.data]); // FIXED: Use query.data instead of query.data?.pages for more reliable updates
 
   return {
-    articles: filteredArticles,
+    articles, // Return articles directly - backend has already filtered them
     isLoading: query.isLoading,
     isFetchingNextPage: query.isFetchingNextPage,
-    hasNextPage: query.hasNextPage ?? false,
+    hasNextPage: query.hasNextPage ?? false, // Backend's hasMore is now accurate for filtered data
     fetchNextPage: () => query.fetchNextPage(),
     error: query.error as Error | null,
     refetch: () => query.refetch(),

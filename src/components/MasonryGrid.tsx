@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useRef, useEffect, useCallback } from 'react';
 import { Article } from '@/types';
 import { MasonryAtom } from './masonry/MasonryAtom';
 import { useMasonry } from '@/hooks/useMasonry';
+import { Loader2 } from 'lucide-react';
 
 interface MasonryGridProps {
   articles: Article[];
@@ -10,6 +11,10 @@ interface MasonryGridProps {
   onCategoryClick: (category: string) => void;
   currentUserId?: string;
   onTagClick?: (tag: string) => void;
+  // Infinite Scroll Props
+  hasNextPage?: boolean;
+  isFetchingNextPage?: boolean;
+  onLoadMore?: () => void;
 }
 
 /**
@@ -30,6 +35,60 @@ interface MasonryGridProps {
  * - NO card components
  * - NO card styling
  */
+// Infinite Scroll Trigger Component for Masonry
+const InfiniteScrollTrigger: React.FC<{
+  onIntersect: () => void;
+  isLoading: boolean;
+  hasMore: boolean;
+}> = ({ onIntersect, isLoading, hasMore }) => {
+  const triggerRef = useRef<HTMLDivElement>(null);
+  const callbackRef = useRef(onIntersect);
+  
+  // Keep callback ref updated without triggering effect
+  useEffect(() => {
+    callbackRef.current = onIntersect;
+  }, [onIntersect]);
+
+  useEffect(() => {
+    if (!hasMore) return;
+    
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const [entry] = entries;
+        if (entry.isIntersecting) {
+          callbackRef.current();
+        }
+      },
+      {
+        rootMargin: '300px', // Prefetch distance
+        threshold: 0,
+      }
+    );
+
+    const currentTrigger = triggerRef.current;
+    if (currentTrigger) {
+      observer.observe(currentTrigger);
+    }
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [hasMore]);
+
+  if (!hasMore) return null;
+
+  return (
+    <div ref={triggerRef} className="flex justify-center py-6 w-full">
+      {isLoading && (
+        <div className="flex items-center gap-2 text-gray-400">
+          <Loader2 size={18} className="animate-spin" />
+          <span className="text-sm font-medium">Loading more...</span>
+        </div>
+      )}
+    </div>
+  );
+};
+
 export const MasonryGrid: React.FC<MasonryGridProps> = ({
   articles,
   isLoading,
@@ -37,6 +96,10 @@ export const MasonryGrid: React.FC<MasonryGridProps> = ({
   onCategoryClick,
   currentUserId,
   onTagClick,
+  // Infinite Scroll Props
+  hasNextPage = false,
+  isFetchingNextPage = false,
+  onLoadMore,
 }) => {
   // Layer 1: Layout logic (delegated to hook)
   const { columns, columnCount } = useMasonry(articles, {
@@ -49,6 +112,13 @@ export const MasonryGrid: React.FC<MasonryGridProps> = ({
     defaultColumns: 1, // SSR-safe default (mobile-first, reduces CLS)
     debounceMs: 100,
   });
+
+  // Infinite Scroll Handler
+  const handleLoadMore = useCallback(() => {
+    if (!isFetchingNextPage && hasNextPage && onLoadMore) {
+      onLoadMore();
+    }
+  }, [isFetchingNextPage, hasNextPage, onLoadMore]);
 
   // Layer 2: Presentational rendering only
   if (isLoading) {
@@ -66,21 +136,29 @@ export const MasonryGrid: React.FC<MasonryGridProps> = ({
   }
 
   return (
-    <div className="flex gap-4 w-full">
-      {columns.map((columnArticles, colIdx) => (
-        <div key={colIdx} className="flex-1 flex flex-col gap-4">
-          {columnArticles.map((article) => (
-            <MasonryAtom
-              key={article.id}
-              article={article}
-              onArticleClick={onArticleClick}
-              onCategoryClick={onCategoryClick}
-              currentUserId={currentUserId}
-            />
-          ))}
-        </div>
-      ))}
-    </div>
+    <>
+      <div className="flex gap-4 w-full">
+        {columns.map((columnArticles, colIdx) => (
+          <div key={colIdx} className="flex-1 flex flex-col gap-4">
+            {columnArticles.map((article) => (
+              <MasonryAtom
+                key={article.id}
+                article={article}
+                onArticleClick={onArticleClick}
+                onCategoryClick={onCategoryClick}
+                currentUserId={currentUserId}
+              />
+            ))}
+          </div>
+        ))}
+      </div>
+      {/* Infinite Scroll Trigger for Masonry */}
+      <InfiniteScrollTrigger
+        onIntersect={handleLoadMore}
+        isLoading={isFetchingNextPage}
+        hasMore={hasNextPage}
+      />
+    </>
   );
 };
 

@@ -133,8 +133,11 @@ class ApiClient {
         // Attach response data for debugging
         error.response = { status: response.status, data: errorInfo };
         
+        // For 404, preserve the response data in the error
         if (response.status === 404) {
-          throw new Error('The requested resource was not found.');
+          const notFoundError: any = new Error(errorInfo.message || 'The requested resource was not found.');
+          notFoundError.response = { status: response.status, data: errorInfo };
+          throw notFoundError;
         }
         if (response.status === 403) {
           // Handle 403 Forbidden (often used for expired/invalid tokens)

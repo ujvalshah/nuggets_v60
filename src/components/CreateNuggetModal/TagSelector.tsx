@@ -3,6 +3,7 @@ import { Check } from 'lucide-react';
 import { SelectableDropdown, SelectableDropdownOption } from './SelectableDropdown';
 import { normalizeCategoryLabel } from '@/utils/formatters';
 import { storageService } from '@/services/storageService';
+import { removeTag } from '@/utils/tagUtils';
 
 interface TagSelectorProps {
   selected: string[];
@@ -50,11 +51,20 @@ export function TagSelector({
     .filter(c => typeof c === 'string' && c.trim() !== '')
     .map(cat => ({ id: cat, label: cat }));
 
+  /**
+   * Checks if a tag already exists (case-insensitive comparison)
+   */
+  const isDuplicate = (tag: string): boolean => {
+    const normalizedTag = tag.toLowerCase().trim();
+    return selected.some(selectedTag => selectedTag.toLowerCase().trim() === normalizedTag);
+  };
+
   const handleSelect = async (optionId: string) => {
     const normalized = normalizeCategoryLabel(optionId);
     if (normalized) {
       const cleanCat = normalized.replace(/^#/, '');
-      if (!selected.includes(cleanCat)) {
+      // Case-insensitive duplicate check
+      if (!isDuplicate(cleanCat)) {
         onSelectedChange([...selected, cleanCat]);
         setSearchValue('');
         if (!touched) onTouchedChange(true);
@@ -63,8 +73,11 @@ export function TagSelector({
           const newError = validateTags();
           onErrorChange(newError);
         }
-        // Add to available categories if missing
-        if (!availableCategories.includes(cleanCat)) {
+        // Add to available categories if missing (case-insensitive check)
+        const categoryExists = availableCategories.some(
+          cat => cat.toLowerCase().trim() === cleanCat.toLowerCase().trim()
+        );
+        if (!categoryExists) {
           await storageService.addCategory(cleanCat);
           onAvailableCategoriesChange([...availableCategories, cleanCat].sort());
         }
@@ -73,7 +86,8 @@ export function TagSelector({
   };
 
   const handleDeselect = (optionId: string) => {
-    onSelectedChange(selected.filter(id => id !== optionId));
+    // Use case-insensitive removal to handle rawName casing differences
+    onSelectedChange(removeTag(selected, optionId));
     if (!touched) onTouchedChange(true);
     // Validate tags when category is removed
     if (touched) {
@@ -83,7 +97,21 @@ export function TagSelector({
   };
 
   const handleCreateNew = async (searchValue: string) => {
-    await handleSelect(searchValue);
+    // Trim and validate: ignore empty or 1-char values
+    const trimmed = searchValue.trim();
+    if (!trimmed || trimmed.length <= 1) {
+      return;
+    }
+    
+    // Normalize the input
+    const normalized = normalizeCategoryLabel(trimmed);
+    if (normalized) {
+      const cleanCat = normalized.replace(/^#/, '');
+      // Case-insensitive duplicate check
+      if (!isDuplicate(cleanCat)) {
+        await handleSelect(cleanCat);
+      }
+    }
   };
 
   const filterOptions = (options: SelectableDropdownOption[], search: string): SelectableDropdownOption[] => {
@@ -95,11 +123,19 @@ export function TagSelector({
   };
 
   const canCreateNew = (search: string, options: SelectableDropdownOption[]): boolean => {
-    if (!search) return false;
-    const normalized = normalizeCategoryLabel(search);
+    // Never auto-create on empty string or 1-char values
+    const trimmed = search.trim();
+    if (!trimmed || trimmed.length <= 1) return false;
+    
+    const normalized = normalizeCategoryLabel(trimmed);
     if (!normalized) return false;
     const cleanCat = normalized.replace(/^#/, '');
-    return !options.some(opt => opt.label.toLowerCase() === cleanCat.toLowerCase());
+    
+    // Check against both options and selected items (case-insensitive)
+    const existsInOptions = options.some(opt => opt.label.toLowerCase().trim() === cleanCat.toLowerCase().trim());
+    const existsInSelected = isDuplicate(cleanCat);
+    
+    return !existsInOptions && !existsInSelected;
   };
 
   const handleBlur = () => {

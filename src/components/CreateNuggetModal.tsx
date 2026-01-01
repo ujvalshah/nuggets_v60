@@ -17,6 +17,7 @@ import type { NuggetMedia } from '@/types';
 import { formatApiError, getUserFriendlyMessage, logError } from '@/utils/errorHandler';
 import { processNuggetUrl, detectUrlChanges, getPrimaryUrl } from '@/utils/processNuggetUrl';
 import { useMediaUpload } from '@/hooks/useMediaUpload';
+import { getAllImageUrls } from '@/utils/mediaClassifier';
 import { SourceSelector } from './shared/SourceSelector';
 import { SourceBadge } from './shared/SourceBadge';
 import { TagSelector } from './CreateNuggetModal/TagSelector';
@@ -87,6 +88,9 @@ export const CreateNuggetModal: React.FC<CreateNuggetModalProps> = ({ isOpen, on
   const pastedImagesBufferRef = useRef<File[]>([]);
   const pasteBatchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
+  // Existing images from article (for edit mode)
+  const [existingImages, setExistingImages] = useState<string[]>([]);
+  
   // Media upload hook
   const mediaUpload = useMediaUpload({ purpose: 'nugget' });
   
@@ -108,6 +112,9 @@ export const CreateNuggetModal: React.FC<CreateNuggetModalProps> = ({ isOpen, on
   const [selectedAlias, setSelectedAlias] = useState('');
   const [customAlias, setCustomAlias] = useState('');
   const [availableAliases, setAvailableAliases] = useState<string[]>([]);
+  
+  // Admin-only: Custom creation date
+  const [customCreatedAt, setCustomCreatedAt] = useState<string>('');
   
   // Data Source State
   const [availableCategories, setAvailableCategories] = useState<string[]>([]);
@@ -144,6 +151,17 @@ export const CreateNuggetModal: React.FC<CreateNuggetModalProps> = ({ isOpen, on
         setSuggestedTitle(null); // PHASE 3: Clear suggestion in edit mode
         setContent(initialData.content || '');
         setCategories(initialData.categories || []);
+        // Initialize customCreatedAt if article has isCustomCreatedAt flag (admin only)
+        if (isAdmin && (initialData as any).isCustomCreatedAt && initialData.publishedAt) {
+          // Convert ISO string to datetime-local format (YYYY-MM-DDTHH:mm)
+          const date = new Date(initialData.publishedAt);
+          const year = date.getFullYear();
+          const month = String(date.getMonth() + 1).padStart(2, '0');
+          const day = String(date.getDate()).padStart(2, '0');
+          const hours = String(date.getHours()).padStart(2, '0');
+          const minutes = String(date.getMinutes()).padStart(2, '0');
+          setCustomCreatedAt(`${year}-${month}-${day}T${hours}:${minutes}`);
+        }
         setVisibility(initialData.visibility || 'public');
         
         // Extract URLs from media
@@ -165,6 +183,42 @@ export const CreateNuggetModal: React.FC<CreateNuggetModalProps> = ({ isOpen, on
         // Note: We don't pre-fill attachments or collections in edit mode
         // as they require file objects and collection membership is separate
         // MediaIds are preserved from initialData and will be included in update
+        
+        // CRITICAL FIX: Load existing images from ALL sources (not just images array)
+        // Cards use getAllImageUrls() which checks: primaryMedia, supportingMedia, images array, and media field
+        // We must do the same in edit mode to show all images that appear in cards
+        console.log('[CreateNuggetModal] AUDIT: InitialData received in edit mode:', {
+            articleId: initialData.id,
+            hasImagesArray: !!(initialData.images && initialData.images.length > 0),
+            imagesArray: initialData.images || [],
+            hasPrimaryMedia: !!initialData.primaryMedia,
+            primaryMedia: initialData.primaryMedia,
+            hasSupportingMedia: !!(initialData.supportingMedia && initialData.supportingMedia.length > 0),
+            supportingMedia: initialData.supportingMedia || [],
+            hasMedia: !!initialData.media,
+            media: initialData.media,
+            mediaType: initialData.media?.type,
+            mediaUrl: initialData.media?.url,
+            mediaImageUrl: initialData.media?.previewMetadata?.imageUrl
+        });
+        
+        const allExistingImages = getAllImageUrls(initialData);
+        console.log('[CreateNuggetModal] AUDIT: getAllImageUrls result:', {
+            imageCount: allExistingImages.length,
+            images: allExistingImages,
+            fromImagesArray: initialData.images || [],
+            fromGetAllImageUrls: allExistingImages
+        });
+        
+        if (allExistingImages.length === 0 && (initialData.images?.length > 0 || initialData.primaryMedia || initialData.supportingMedia?.length > 0)) {
+            console.error('[CreateNuggetModal] WARNING: Images exist in article but getAllImageUrls returned empty!', {
+                imagesArray: initialData.images,
+                primaryMedia: initialData.primaryMedia,
+                supportingMedia: initialData.supportingMedia
+            });
+        }
+        
+        setExistingImages(allExistingImages);
         
         initializedFromDataRef.current = initialData.id;
       } else if (mode === 'create') {
@@ -272,6 +326,7 @@ export const CreateNuggetModal: React.FC<CreateNuggetModalProps> = ({ isOpen, on
     setPostAs('me');
     setCustomAlias('');
     setCustomDomain(null);
+    setCustomCreatedAt('');
     setError(null);
     setIsAiLoading(false);
     // Reset field-level validation states
@@ -453,6 +508,8 @@ export const CreateNuggetModal: React.FC<CreateNuggetModalProps> = ({ isOpen, on
     const trimmed = urlInput.trim();
     if (!trimmed) return;
     
+    console.log('[CreateNuggetModal] Adding URL:', trimmed);
+    
     // Check if input contains multiple URLs (has newlines or multiple URLs)
     const hasMultipleUrls = trimmed.includes('\n') || 
                            trimmed.includes('\r') || 
@@ -462,32 +519,106 @@ export const CreateNuggetModal: React.FC<CreateNuggetModalProps> = ({ isOpen, on
       // Parse multiple URLs
       const parsedUrls = parseMultipleUrls(trimmed);
       if (parsedUrls.length > 0) {
-        setUrls([...urls, ...parsedUrls]);
-        setUrlInput('');
-        if (!contentTouched) setContentTouched(true);
-        // Clear content error immediately when URL is added
-        if (contentError) {
-          const error = validateContent();
-          setContentError(error);
-        }
-        if (parsedUrls.length > 1) {
-          toast.success(`Added ${parsedUrls.length} URLs`);
+        // CRITICAL FIX: Deduplicate URLs before adding (normalized comparison)
+        const normalizedUrls = urls.map(u => {
+          try {
+            let normalized = u.toLowerCase().trim();
+            if (!normalized.startsWith('http://') && !normalized.startsWith('https://')) {
+              normalized = `https://${normalized}`;
+            }
+            return normalized;
+          } catch {
+            return u.toLowerCase().trim();
+          }
+        });
+        
+        const uniqueUrls = parsedUrls.filter(url => {
+          try {
+            let normalized = url.toLowerCase().trim();
+            if (!normalized.startsWith('http://') && !normalized.startsWith('https://')) {
+              normalized = `https://${normalized}`;
+            }
+            return !normalizedUrls.includes(normalized);
+          } catch {
+            return !urls.includes(url); // Fallback to exact match
+          }
+        });
+        
+        if (uniqueUrls.length > 0) {
+          setUrls([...urls, ...uniqueUrls]);
+          setUrlInput('');
+          if (!contentTouched) setContentTouched(true);
+          // Clear content error immediately when URL is added
+          if (contentError) {
+            const error = validateContent();
+            setContentError(error);
+          }
+          if (uniqueUrls.length > 1) {
+            toast.success(`Added ${uniqueUrls.length} URLs`);
+          } else if (uniqueUrls.length < parsedUrls.length) {
+            toast.warning(`Added ${uniqueUrls.length} URL(s). ${parsedUrls.length - uniqueUrls.length} duplicate(s) skipped.`);
+          }
+          console.log(`[CreateNuggetModal] Added ${uniqueUrls.length} unique URL(s) (${parsedUrls.length - uniqueUrls.length} duplicates skipped)`);
+        } else {
+          toast.warning('All URLs are already added');
+          console.log('[CreateNuggetModal] All URLs were duplicates, none added');
         }
       }
     } else {
-      // Single URL
-      if (!urls.includes(trimmed)) {
-        try {
-          // Add protocol if missing
-          let urlToValidate = trimmed;
-          if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) {
-            urlToValidate = `https://${trimmed}`;
+      // Single URL - CRITICAL FIX: Prevent duplicates
+      try {
+        // Add protocol if missing
+        let urlToValidate = trimmed;
+        if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) {
+          urlToValidate = `https://${trimmed}`;
+        }
+        
+        new URL(urlToValidate);
+        const finalUrl = trimmed.startsWith('http://') || trimmed.startsWith('https://') 
+          ? trimmed 
+          : urlToValidate;
+        
+        // Check for duplicates (case-insensitive URL comparison)
+        // Also check against existing images in edit mode
+        const normalizedUrls = urls.map(u => {
+          try {
+            let normalized = u.toLowerCase().trim();
+            if (!normalized.startsWith('http://') && !normalized.startsWith('https://')) {
+              normalized = `https://${normalized}`;
+            }
+            return normalized;
+          } catch {
+            return u.toLowerCase().trim();
           }
-          
-          new URL(urlToValidate);
-          const finalUrl = trimmed.startsWith('http://') || trimmed.startsWith('https://') 
-            ? trimmed 
-            : urlToValidate;
+        });
+        
+        // In edit mode, also check against existing images
+        const normalizedExistingImages = mode === 'edit' && initialData
+          ? (initialData.images || []).map((img: string) => {
+              try {
+                let normalized = img.toLowerCase().trim();
+                if (!normalized.startsWith('http://') && !normalized.startsWith('https://')) {
+                  normalized = `https://${normalized}`;
+                }
+                return normalized;
+              } catch {
+                return img.toLowerCase().trim();
+              }
+            })
+          : [];
+        
+        const normalizedFinalUrl = (() => {
+          let normalized = finalUrl.toLowerCase().trim();
+          if (!normalized.startsWith('http://') && !normalized.startsWith('https://')) {
+            normalized = `https://${normalized}`;
+          }
+          return normalized;
+        })();
+        
+        const isDuplicate = normalizedUrls.includes(normalizedFinalUrl) || 
+                           normalizedExistingImages.includes(normalizedFinalUrl);
+        
+        if (!isDuplicate) {
           setUrls([...urls, finalUrl]);
           setUrlInput('');
           if (!contentTouched) setContentTouched(true);
@@ -496,9 +627,13 @@ export const CreateNuggetModal: React.FC<CreateNuggetModalProps> = ({ isOpen, on
             const error = validateContent();
             setContentError(error);
           }
-        } catch {
-          setError('Please enter a valid URL');
+          console.log('[CreateNuggetModal] URL added successfully:', finalUrl);
+        } else {
+          toast.warning('This URL is already added');
+          console.log('[CreateNuggetModal] Duplicate URL detected, not added:', finalUrl);
         }
+      } catch {
+        setError('Please enter a valid URL');
       }
     }
   };
@@ -515,9 +650,34 @@ export const CreateNuggetModal: React.FC<CreateNuggetModalProps> = ({ isOpen, on
       e.preventDefault();
       const parsedUrls = parseMultipleUrls(pastedText);
       if (parsedUrls.length > 0) {
-        setUrls([...urls, ...parsedUrls]);
-        setUrlInput('');
-        toast.success(`Added ${parsedUrls.length} URLs`);
+        // CRITICAL FIX: Deduplicate URLs before adding
+        const normalizedUrls = urls.map(u => u.toLowerCase().trim());
+        const uniqueUrls = parsedUrls.filter(url => {
+          try {
+            // Normalize URL for comparison
+            let urlToCheck = url.trim();
+            if (!urlToCheck.startsWith('http://') && !urlToCheck.startsWith('https://')) {
+              urlToCheck = `https://${urlToCheck}`;
+            }
+            const normalized = urlToCheck.toLowerCase().trim();
+            return !normalizedUrls.includes(normalized);
+          } catch {
+            return true; // Invalid URL, let addUrl handle it
+          }
+        });
+        
+        if (uniqueUrls.length > 0) {
+          setUrls([...urls, ...uniqueUrls]);
+          setUrlInput('');
+          if (!contentTouched) setContentTouched(true);
+          if (uniqueUrls.length < parsedUrls.length) {
+            toast.warning(`Added ${uniqueUrls.length} URL(s). ${parsedUrls.length - uniqueUrls.length} duplicate(s) skipped.`);
+          } else {
+            toast.success(`Added ${uniqueUrls.length} URLs`);
+          }
+        } else {
+          toast.warning('All URLs are already added');
+        }
       }
     }
     // If not multiple URLs, allow default paste behavior
@@ -530,6 +690,157 @@ export const CreateNuggetModal: React.FC<CreateNuggetModalProps> = ({ isOpen, on
     if (contentTouched) {
       const error = validateContent();
       setContentError(error);
+    }
+  };
+
+  // Delete an existing image from the article (edit mode only)
+  const deleteImage = async (imageUrl: string) => {
+    if (mode !== 'edit' || !initialData) {
+      console.warn('[CreateNuggetModal] deleteImage called but not in edit mode or missing initialData');
+      return;
+    }
+
+    console.log('[CreateNuggetModal] Delete image initiated:', {
+      imageUrl,
+      nuggetId: initialData.id,
+      currentImagesCount: existingImages.length
+    });
+
+    // Confirm deletion
+    if (!window.confirm('Are you sure you want to delete this image?')) {
+      console.log('[CreateNuggetModal] Delete cancelled by user');
+      return;
+    }
+
+    // Optimistic UI update - remove from state immediately
+    const previousImages = [...existingImages];
+    const normalizedImageUrl = imageUrl.toLowerCase().trim();
+    const optimisticImages = existingImages.filter(img => {
+      try {
+        const normalized = img.toLowerCase().trim();
+        return normalized !== normalizedImageUrl;
+      } catch {
+        return img !== imageUrl;
+      }
+    });
+    
+    setExistingImages(optimisticImages);
+    console.log('[CreateNuggetModal] Optimistic update: Removed image from state');
+
+    try {
+      console.log('[CreateNuggetModal] Calling DELETE endpoint:', `/api/articles/${initialData.id}/images`);
+
+      // Use apiClient instead of direct fetch to ensure proper proxy routing
+      // This avoids CORS issues by using Vite's /api proxy to localhost:5000
+      // Note: DELETE with body requires using request() directly since delete() doesn't support body
+      const { apiClient } = await import('@/services/apiClient');
+      const result = await (apiClient as any).request<{ success: boolean; message: string; images: string[] }>(
+        `/articles/${initialData.id}/images`,
+        {
+          method: 'DELETE',
+          body: JSON.stringify({ imageUrl }),
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          cancelKey: `delete-image-${initialData.id}`,
+        }
+      );
+      
+      console.log('[CreateNuggetModal] Image deleted successfully. Server response:', {
+        success: result.success,
+        remainingImages: result.images?.length || 0,
+        images: result.images
+      });
+      
+      // CRITICAL: Refresh article data to get updated state with all image sources
+      // The backend returns updated images array, but we need to recompute from all sources
+      // (primaryMedia, supportingMedia, images, media field) to match card behavior
+      // The query invalidation below will trigger a refetch, but we update optimistically here
+      try {
+        // Use queryClient to get fresh data
+        const queryData = queryClient.getQueryData<Article>(['article', initialData.id]);
+        if (queryData) {
+          // Recompute all images using getAllImageUrls (same as cards use)
+          const allImages = getAllImageUrls(queryData);
+          console.log('[CreateNuggetModal] Recomputing images from cached article:', {
+            fromGetAllImageUrls: allImages,
+            fromImagesArray: queryData.images || []
+          });
+          // Note: This is optimistic - the invalidation below will fetch fresh data
+          setExistingImages(allImages);
+        } else {
+          // Fallback to server response if cache miss
+          setExistingImages(result.images || []);
+        }
+      } catch (refreshError) {
+        console.warn('[CreateNuggetModal] Failed to recompute images, using server response:', refreshError);
+        // Fallback to server response
+        setExistingImages(result.images || []);
+      }
+      
+      // Also remove from URLs if it's there (normalized comparison)
+      setUrls(urls.filter(u => {
+        try {
+          const normalized = u.toLowerCase().trim();
+          return normalized !== normalizedImageUrl;
+        } catch {
+          return u !== imageUrl; // Fallback to exact match
+        }
+      }));
+      
+      toast.success('Image deleted successfully');
+      
+      // CRITICAL: Refetch the article to get updated state with all image sources
+      // This ensures we see the updated images after deletion from all locations
+      // (primaryMedia, supportingMedia, images array, media field)
+      try {
+        const refreshedArticle = await storageService.getArticleById(initialData.id);
+        
+        if (refreshedArticle) {
+          // Recompute all images using getAllImageUrls (same as cards use)
+          const allImages = getAllImageUrls(refreshedArticle);
+          console.log('[CreateNuggetModal] Refreshed images after deletion:', {
+            fromGetAllImageUrls: allImages,
+            imageCount: allImages.length,
+            fromImagesArray: refreshedArticle.images || []
+          });
+          setExistingImages(allImages);
+          
+          // Update query cache with refreshed article
+          queryClient.setQueryData(['article', initialData.id], refreshedArticle);
+        }
+      } catch (refreshError) {
+        console.warn('[CreateNuggetModal] Failed to refresh article after deletion:', refreshError);
+        // Fallback: use optimistic update which was already applied
+      }
+      
+      // Invalidate query cache to refresh the article in other components
+      await queryClient.invalidateQueries({ queryKey: ['article', initialData.id] });
+      await queryClient.invalidateQueries({ queryKey: ['articles'] });
+    } catch (error: any) {
+      console.error('[CreateNuggetModal] Failed to delete image:', error);
+      
+      // Rollback optimistic update on error
+      setExistingImages(previousImages);
+      console.log('[CreateNuggetModal] Rolled back optimistic update due to error');
+      
+      // Detect CORS errors and provide actionable error message
+      let errorMessage = error.message || 'Failed to delete image. Please try again.';
+      
+      // Check for CORS-related errors
+      if (error.message?.includes('CORS') || 
+          error.message?.includes('Access-Control') ||
+          error.message?.includes('preflight') ||
+          error.name === 'TypeError' && error.message?.includes('Failed to fetch')) {
+        errorMessage = 'Network error: Unable to connect to server. Please check your connection and try again.';
+        console.error('[CreateNuggetModal] CORS or network error detected:', {
+          error: error.message,
+          name: error.name,
+          stack: error.stack
+        });
+      }
+      
+      toast.error(errorMessage);
     }
   };
 
@@ -639,18 +950,25 @@ export const CreateNuggetModal: React.FC<CreateNuggetModalProps> = ({ isOpen, on
               // Upload image to Cloudinary immediately
               if (isImage) {
                   try {
+                      console.log('[CreateNuggetModal] Uploading image to Cloudinary:', file.name, `(${(file.size / 1024).toFixed(2)}KB)`);
                       const uploadResult = await mediaUpload.upload(file); // Use original file for upload
                       if (uploadResult) {
                           // Update attachment with mediaId and secureUrl
                           attachment.mediaId = uploadResult.mediaId;
                           attachment.secureUrl = uploadResult.secureUrl;
                           attachment.isUploading = false;
+                          console.log('[CreateNuggetModal] Image uploaded successfully:', {
+                              mediaId: uploadResult.mediaId,
+                              publicId: uploadResult.publicId,
+                              secureUrl: uploadResult.secureUrl
+                          });
                       } else {
                           attachment.uploadError = mediaUpload.error || 'Upload failed';
                           attachment.isUploading = false;
+                          console.error('[CreateNuggetModal] Image upload failed:', mediaUpload.error);
                       }
                   } catch (uploadError: any) {
-                      console.error('Upload error:', uploadError);
+                      console.error('[CreateNuggetModal] Image upload error:', uploadError);
                       attachment.uploadError = uploadError.message || 'Upload failed';
                       attachment.isUploading = false;
                   }
@@ -808,6 +1126,11 @@ export const CreateNuggetModal: React.FC<CreateNuggetModalProps> = ({ isOpen, on
                 visibility,
             };
             
+            // Admin-only: Custom creation date
+            if (isAdmin && customCreatedAt) {
+                (updatePayload as any).customCreatedAt = new Date(customCreatedAt).toISOString();
+            }
+            
             // Update excerpt if content changed
             const excerptText = content.trim() || finalTitle || '';
             updatePayload.excerpt = excerptText.length > 150 ? excerptText.substring(0, 150) + '...' : excerptText;
@@ -886,9 +1209,36 @@ export const CreateNuggetModal: React.FC<CreateNuggetModalProps> = ({ isOpen, on
             }
             
             // CRITICAL: Add Cloudinary URLs to images array for display
-            // Combine: existing images + URL input images + uploaded Cloudinary images
-            const existingImages = initialData.images || [];
-            const allImages = [...existingImages, ...imageUrls, ...uploadedImageUrls];
+            // Combine: existing images (from state, already filtered) + URL input images + uploaded Cloudinary images
+            // FIX: Deduplicate to prevent multiple entries of the same image
+            console.log('[CreateNuggetModal] Edit mode - Combining images:', {
+                existingImages: existingImages.length,
+                imageUrls: imageUrls.length,
+                uploadedImageUrls: uploadedImageUrls.length
+            });
+            
+            const allImagesRaw = [...existingImages, ...imageUrls, ...uploadedImageUrls];
+            
+            // Deduplicate by URL (case-insensitive, normalized)
+            const imageMap = new Map<string, string>();
+            let duplicatesRemoved = 0;
+            for (const img of allImagesRaw) {
+                if (img && typeof img === 'string' && img.trim()) {
+                    const normalized = img.toLowerCase().trim();
+                    if (!imageMap.has(normalized)) {
+                        imageMap.set(normalized, img); // Keep original casing
+                    } else {
+                        duplicatesRemoved++;
+                        console.log(`[CreateNuggetModal] Edit mode - Duplicate image removed: ${img}`);
+                    }
+                }
+            }
+            const allImages = Array.from(imageMap.values());
+            
+            if (duplicatesRemoved > 0) {
+                console.log(`[CreateNuggetModal] Edit mode - Removed ${duplicatesRemoved} duplicate image(s)`);
+            }
+            
             if (allImages.length > 0) {
                 updatePayload.images = allImages;
             }
@@ -1057,7 +1407,33 @@ export const CreateNuggetModal: React.FC<CreateNuggetModalProps> = ({ isOpen, on
         }
         
         // Combine image URLs: from URL input + uploaded Cloudinary images
-        const allImageUrls = [...imageUrls, ...uploadedImageUrls];
+        // FIX: Deduplicate to prevent multiple entries of the same image
+        console.log('[CreateNuggetModal] Create mode - Combining images:', {
+            imageUrls: imageUrls.length,
+            uploadedImageUrls: uploadedImageUrls.length
+        });
+        
+        const allImageUrlsRaw = [...imageUrls, ...uploadedImageUrls];
+        
+        // Deduplicate by URL (case-insensitive, normalized)
+        const imageMap = new Map<string, string>();
+        let duplicatesRemoved = 0;
+        for (const img of allImageUrlsRaw) {
+            if (img && typeof img === 'string' && img.trim()) {
+                const normalized = img.toLowerCase().trim();
+                if (!imageMap.has(normalized)) {
+                    imageMap.set(normalized, img); // Keep original casing
+                } else {
+                    duplicatesRemoved++;
+                    console.log(`[CreateNuggetModal] Create mode - Duplicate image removed: ${img}`);
+                }
+            }
+        }
+        const allImageUrls = Array.from(imageMap.values());
+        
+        if (duplicatesRemoved > 0) {
+            console.log(`[CreateNuggetModal] Create mode - Removed ${duplicatesRemoved} duplicate image(s)`);
+        }
         
         const newArticle = await storageService.createArticle({
             title: finalTitle,
@@ -1072,6 +1448,8 @@ export const CreateNuggetModal: React.FC<CreateNuggetModalProps> = ({ isOpen, on
             images: allImageUrls.length > 0 ? allImageUrls : undefined, // CRITICAL: Cloudinary URLs for display
             documents: uploadedDocs,
             visibility,
+            // Admin-only: Custom creation date
+            ...(isAdmin && customCreatedAt ? { customCreatedAt: new Date(customCreatedAt).toISOString() } : {}),
             // Store multiple URLs in a custom field if supported, or use first URL for media
             // For now, using first URL for media compatibility
             // Also create media object for text nuggets if customDomain is set (for source badge display)
@@ -1306,6 +1684,8 @@ export const CreateNuggetModal: React.FC<CreateNuggetModalProps> = ({ isOpen, on
                         availableCollections={allCollections}
                         visibility={visibility}
                         onSelectedChange={setSelectedCollections}
+                        onAvailableCollectionsChange={setAllCollections}
+                        currentUserId={currentUserId}
                         comboboxRef={collectionsComboboxRef}
                         listboxRef={collectionsListboxRef}
                     />
@@ -1479,6 +1859,72 @@ export const CreateNuggetModal: React.FC<CreateNuggetModalProps> = ({ isOpen, on
                     onError={setError}
                 />
 
+                {/* CRITICAL FIX: Existing images must render independently of URLs input */}
+                {/* Show existing images from article (edit mode only) - OUTSIDE of URL conditional */}
+                {/* This ensures images are visible even when no URLs are in the input field */}
+                {(() => {
+                    const shouldRender = mode === 'edit' && existingImages.length > 0;
+                    console.log('[CreateNuggetModal] AUDIT: Rendering check for existing images:', {
+                        mode: mode,
+                        existingImagesCount: existingImages.length,
+                        existingImages: existingImages,
+                        shouldRender: shouldRender,
+                        isEditMode: mode === 'edit',
+                        hasImages: existingImages.length > 0
+                    });
+                    
+                    if (!shouldRender) {
+                        if (mode === 'edit' && existingImages.length === 0) {
+                            console.warn('[CreateNuggetModal] WARNING: Edit mode but no existing images found. Check getAllImageUrls() result.');
+                        }
+                        return null;
+                    }
+                    
+                    return (
+                    <div className="space-y-2 mb-4">
+                        <div className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                            Existing Images ({existingImages.length})
+                        </div>
+                        <div className={`grid gap-2 ${existingImages.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                            {existingImages.map((imageUrl, idx) => {
+                                const detectedType = detectProviderFromUrl(imageUrl);
+                                const isCloudinaryUrl = imageUrl.includes('cloudinary.com') || imageUrl.includes('res.cloudinary.com');
+                                console.log(`[CreateNuggetModal] Rendering existing image ${idx}:`, {
+                                    url: imageUrl,
+                                    type: detectedType,
+                                    isCloudinary: isCloudinaryUrl,
+                                    mode: mode
+                                });
+                                return (
+                                    <div key={`existing-${idx}`} className="relative group rounded-lg overflow-hidden border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50 shadow-sm">
+                                        <button 
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                e.preventDefault();
+                                                console.log(`[CreateNuggetModal] Delete button clicked for image ${idx}:`, imageUrl);
+                                                deleteImage(imageUrl);
+                                            }} 
+                                            className="absolute top-2 right-2 bg-red-600 text-white p-1.5 rounded-full opacity-90 hover:opacity-100 transition-opacity z-10 hover:bg-red-700 shadow-lg"
+                                            title="Delete image"
+                                            aria-label="Delete image"
+                                        >
+                                            <X size={14} />
+                                        </button>
+                                        <div className="max-h-[160px] overflow-hidden">
+                                            <GenericLinkPreview 
+                                                url={imageUrl} 
+                                                metadata={{ url: imageUrl }} 
+                                                type={detectedType} 
+                                            />
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                    );
+                })()}
+
                 {/* Link Preview */}
                 {(urls.length > 0 || detectedLink) && (() => {
                     // Separate image URLs from regular URLs for display
@@ -1490,19 +1936,19 @@ export const CreateNuggetModal: React.FC<CreateNuggetModalProps> = ({ isOpen, on
                     
                     return (
                         <div className="space-y-3">
-                            {/* Show all image URLs */}
+                            {/* Show all image URLs (newly added) */}
                             {imageUrls.length > 0 && (
                                 <div className="space-y-2">
                                     {hasMultipleImages && (
                                         <div className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                                            {imageUrls.length} Image{imageUrls.length > 1 ? 's' : ''} Added
+                                            {imageUrls.length} New Image{imageUrls.length > 1 ? 's' : ''} Added
                                         </div>
                                     )}
                                     <div className={`grid gap-2 ${hasMultipleImages ? 'grid-cols-2' : 'grid-cols-1'}`}>
                                         {imageUrls.map((imageUrl, idx) => {
                                             const detectedType = detectProviderFromUrl(imageUrl);
                                             return (
-                                                <div key={idx} className="relative group rounded-lg overflow-hidden border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50 shadow-sm">
+                                                <div key={`new-${idx}`} className="relative group rounded-lg overflow-hidden border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50 shadow-sm">
                                                     <button 
                                                         onClick={() => removeUrl(imageUrl)} 
                                                         className="absolute top-2 right-2 bg-slate-900/80 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity z-10 hover:bg-slate-900"
@@ -1600,6 +2046,25 @@ export const CreateNuggetModal: React.FC<CreateNuggetModalProps> = ({ isOpen, on
                                 <div className="text-[11px] opacity-90">{error}</div>
                             </div>
                         </div>
+                    </div>
+                )}
+
+                {/* Admin-only: Custom Posting Date - Moved to bottom of form */}
+                {isAdmin && (
+                    <div className="space-y-1.5">
+                        <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase">
+                            Date
+                        </label>
+                        <input
+                            type="datetime-local"
+                            value={customCreatedAt}
+                            onChange={(e) => setCustomCreatedAt(e.target.value)}
+                            className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                            placeholder="Leave empty to use current automatic timestamp"
+                        />
+                        <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                            Leave empty to use current automatic timestamp.
+                        </p>
                     </div>
                 )}
             </div>

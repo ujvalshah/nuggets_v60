@@ -55,25 +55,48 @@ export const CollectionPopover: React.FC<CollectionPopoverProps> = ({
   };
 
   // Handle clicking outside & scroll
+  // PERFORMANCE FIX: Throttle scroll handler to prevent performance violations
+  // Closing on scroll is intentional UX, but we throttle it to avoid blocking scroll
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
         if (modalRef.current && !modalRef.current.contains(e.target as Node)) {
             handleCloseInternal();
         }
     };
+    
     if (isOpen) {
+        let rafId: number | null = null;
+        let isScheduled = false;
+
+        // Throttled scroll handler - batches close action to next paint cycle
+        const handleScrollThrottled = () => {
+          if (isScheduled) return;
+          
+          isScheduled = true;
+          rafId = requestAnimationFrame(() => {
+            handleCloseInternal();
+            isScheduled = false;
+            rafId = null;
+          });
+        };
+
         // slight delay to prevent immediate close if the click that opened it bubbles
         setTimeout(() => {
             window.addEventListener('mousedown', handleClickOutside);
-            window.addEventListener('scroll', handleCloseInternal, { capture: true });
+            // Mark as passive for better scroll performance
+            window.addEventListener('scroll', handleScrollThrottled, { passive: true, capture: true });
             window.addEventListener('resize', handleCloseInternal);
         }, 100);
+        
+        return () => {
+            window.removeEventListener('mousedown', handleClickOutside);
+            window.removeEventListener('scroll', handleScrollThrottled, true);
+            window.removeEventListener('resize', handleCloseInternal);
+            if (rafId !== null) {
+              cancelAnimationFrame(rafId);
+            }
+        };
     }
-    return () => {
-        window.removeEventListener('mousedown', handleClickOutside);
-        window.removeEventListener('scroll', handleCloseInternal, { capture: true });
-        window.removeEventListener('resize', handleCloseInternal);
-    };
   }, [isOpen, onClose, collections]); 
 
   const loadCollections = async () => {

@@ -143,13 +143,13 @@ export const GridVariant: React.FC<GridVariantProps> = ({
         /* TYPE B: MEDIA-ONLY CARD - Media fills card body, optional short caption, footer */
         /* CRITICAL: No text wrapper block, no hybrid spacing/padding - image fills available space */
         <div 
-          className="flex-1 flex flex-col relative overflow-hidden rounded-t-xl cursor-pointer min-h-0"
+          className="flex-1 flex flex-col relative overflow-hidden rounded-t-xl cursor-pointer min-h-[240px]"
           onClick={handleCardClick}
         >
           {/* Media fills full available card body space (no padding wrapper like hybrid cards) */}
           {/* For Media-Only cards: image click opens lightbox (same as hybrid cards) */}
           {data.hasMedia && (
-            <div className="absolute inset-0 pt-2 px-2 pb-2">
+            <div className="absolute inset-0 pt-2 px-2 pb-2 min-h-[240px] bg-slate-100 dark:bg-slate-800">
               <CardMedia
                 article={data}
                 visibility={data.visibility}
@@ -165,11 +165,12 @@ export const GridVariant: React.FC<GridVariantProps> = ({
               {/* Optional short caption with compact bottom-band gradient - only render when caption exists */}
               {/* Positioned absolutely within the media container */}
               {((data.content || data.excerpt || '').trim().length > 0) && (
-                <div className="absolute bottom-2 left-2 right-2 pointer-events-none z-10 rounded-lg overflow-hidden">
+                <div className="absolute bottom-2 left-2 right-2 z-10 rounded-lg overflow-hidden">
                   {/* Compact bottom-band gradient - height auto, sized to caption content - matches YouTube gradient intensity */}
-                  <div className="bg-gradient-to-t from-black/80 via-black/60 to-transparent dark:from-black/80 dark:via-black/60 dark:to-transparent">
+                  <div className="bg-gradient-to-t from-black/80 via-black/60 to-transparent dark:from-black/80 dark:via-black/60 dark:to-transparent pointer-events-none">
                     {/* Caption container - bottom-left aligned, small padding */}
-                    <div className="px-2 py-1 text-white drop-shadow-sm line-clamp-3 [&_*]:text-white">
+                    {/* Allow pointer events on content so links are clickable */}
+                    <div className="px-2 py-1 text-white drop-shadow-sm line-clamp-3 [&_*]:text-white pointer-events-auto [&_a]:pointer-events-auto">
                       <CardContent
                         excerpt={data.excerpt}
                         content={data.content}

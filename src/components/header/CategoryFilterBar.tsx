@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useEffect, useState } from 'react';
+import React, { useMemo, useRef } from 'react';
 import { LAYOUT_CLASSES } from '@/constants/layout';
 
 export interface Category {
@@ -64,27 +64,8 @@ export const CategoryFilterBar: React.FC<CategoryFilterBarProps> = ({
     onSelect(label);
   };
 
-  // Detect overflow for conditional fade
+  // Ref for scroll container (available for future scroll button logic if needed)
   const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const [hasOverflow, setHasOverflow] = useState(false);
-
-  useEffect(() => {
-    const checkOverflow = () => {
-      if (scrollContainerRef.current) {
-        const { scrollWidth, clientWidth } = scrollContainerRef.current;
-        setHasOverflow(scrollWidth > clientWidth);
-      }
-    };
-
-    // Check after DOM updates
-    const timeoutId = setTimeout(checkOverflow, 0);
-    window.addEventListener('resize', checkOverflow);
-    
-    return () => {
-      clearTimeout(timeoutId);
-      window.removeEventListener('resize', checkOverflow);
-    };
-  }, [sortedCategories]);
 
   return (
     <div
@@ -93,16 +74,25 @@ export const CategoryFilterBar: React.FC<CategoryFilterBarProps> = ({
       {/* Full-bleed category bar - matches YouTube's unified toolbar approach */}
       {/* REGRESSION CHECK: Category filter pills must be text-[12px] font-medium - do not change */}
       <div className={`${LAYOUT_CLASSES.TOOLBAR_PADDING} flex items-center py-1`}>
+        {/* 
+          Horizontal scroll container for tag chips:
+          - Single-row layout only (flex with no-wrap)
+          - Horizontal scroll enabled (overflow-x-auto)
+          - No vertical scroll (overflow-y-hidden)
+          - Thin scrollbar for clean appearance
+          - Smooth touch scrolling on iOS (-webkit-overflow-scrolling: touch)
+          - Fixed height prevents layout shifts
+        */}
         <div 
           ref={scrollContainerRef}
-          className="flex gap-1.5 overflow-x-auto items-center [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']"
+          className="tag-scroll-container flex flex-nowrap gap-1.5 overflow-x-auto overflow-y-hidden items-center scroll-smooth"
           style={{
-            maskImage: hasOverflow 
-              ? 'linear-gradient(to right, black 0%, black 95%, rgba(0,0,0,0.3) 98%, transparent 100%)'
-              : 'none',
-            WebkitMaskImage: hasOverflow
-              ? 'linear-gradient(to right, black 0%, black 95%, rgba(0,0,0,0.3) 98%, transparent 100%)'
-              : 'none',
+            // Thin scrollbar for Firefox
+            scrollbarWidth: 'thin',
+            // Smooth touch scrolling on iOS
+            WebkitOverflowScrolling: 'touch',
+            // Fixed height to prevent layout shifts
+            minHeight: 'fit-content',
           }}
         >
           {sortedCategories.map((category, index) => {

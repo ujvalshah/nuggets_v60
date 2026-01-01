@@ -1,4 +1,4 @@
-import { IAdapter, PaginatedArticlesResponse } from './IAdapter';
+import { IAdapter, PaginatedArticlesResponse, ArticleCountsResponse } from './IAdapter';
 import { Article, User, Collection } from '@/types';
 import { apiClient } from '@/services/apiClient';
 
@@ -41,6 +41,10 @@ export class RestAdapter implements IAdapter {
       });
   }
 
+  getMyArticleCounts(): Promise<ArticleCountsResponse> {
+    return apiClient.get<ArticleCountsResponse>('/articles/my/counts');
+  }
+
   createArticle(article: Omit<Article, 'id' | 'publishedAt'>): Promise<Article> {
     // Transform frontend format to server API format
     
@@ -78,6 +82,8 @@ export class RestAdapter implements IAdapter {
         ? article.categories[0] 
         : 'General',
       categories: article.categories || [],
+      // Phase 2: Include categoryIds if present (for stable ID references)
+      ...(article.categoryIds && article.categoryIds.length > 0 && { categoryIds: article.categoryIds }),
       tags: tags, // Use validated tags array
       readTime: article.readTime,
       visibility: article.visibility || 'public',
@@ -91,6 +97,8 @@ export class RestAdapter implements IAdapter {
       ...(article.mediaIds && article.mediaIds.length > 0 && { mediaIds: article.mediaIds }),
       ...(article.source_type && { source_type: article.source_type }),
       ...(article.displayAuthor && { displayAuthor: article.displayAuthor }),
+      // Admin-only: Custom creation date (if provided)
+      ...((article as any).customCreatedAt && { customCreatedAt: (article as any).customCreatedAt }),
     };
     
     return apiClient.post('/articles', payload);
@@ -111,6 +119,8 @@ export class RestAdapter implements IAdapter {
         ? updates.categories[0] 
         : 'General';
     }
+    // Phase 2: Include categoryIds if present
+    if (updates.categoryIds !== undefined) payload.categoryIds = updates.categoryIds;
     if (updates.visibility !== undefined) payload.visibility = updates.visibility;
     if (updates.media !== undefined) payload.media = updates.media;
     if (updates.images !== undefined) payload.images = updates.images;
@@ -119,6 +129,8 @@ export class RestAdapter implements IAdapter {
     if (updates.mediaIds !== undefined) payload.mediaIds = updates.mediaIds;
     if (updates.source_type !== undefined) payload.source_type = updates.source_type;
     if (updates.displayAuthor !== undefined) payload.displayAuthor = updates.displayAuthor;
+    // Admin-only: Custom creation date (if provided)
+    if ((updates as any).customCreatedAt !== undefined) payload.customCreatedAt = (updates as any).customCreatedAt;
     
     // Use PATCH for partial updates (more RESTful)
     return apiClient.patch<Article>(`/articles/${id}`, payload);
@@ -160,6 +172,38 @@ export class RestAdapter implements IAdapter {
   }
 
   // --- Categories ---
+  /**
+   * Phase 2: Get full tag objects with IDs
+   * Returns array of Tag objects for stable ID-based matching
+   */
+  async getCategoriesWithIds(): Promise<import('@/types').Tag[]> {
+    try {
+      const response = await apiClient.get<any>('/categories?format=full', undefined, 'restAdapter.getCategoriesWithIds');
+      
+      // Handle paginated response: extract data array
+      if (response && typeof response === 'object' && 'data' in response) {
+        return response.data || [];
+      }
+      
+      // Legacy: handle plain array response
+      if (Array.isArray(response)) {
+        return response;
+      }
+      
+      return [];
+    } catch (error: any) {
+      // Handle cancelled requests gracefully
+      if (error?.message === 'Request cancelled') {
+        return [];
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * LEGACY: Get category names only (backward compatibility)
+   * Use getCategoriesWithIds() for new code
+   */
   async getCategories(): Promise<string[]> {
     // Backend returns paginated response: { data: string[], total, page, limit, hasMore }
     // Use ?format=simple to get array of tag names in data field

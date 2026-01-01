@@ -136,11 +136,12 @@ export const UtilityVariant: React.FC<UtilityVariantProps> = ({
           
           {/* Optional short caption with compact bottom-band gradient - only render when caption exists */}
           {((data.content || data.excerpt || '').trim().length > 0) && (
-            <div className="absolute bottom-0 left-0 right-0 pointer-events-none z-10">
+            <div className="absolute bottom-0 left-0 right-0 z-10">
               {/* Compact bottom-band gradient - height auto, sized to caption content - matches YouTube gradient intensity */}
-              <div className="bg-gradient-to-t from-black/80 via-black/60 to-transparent dark:from-black/80 dark:via-black/60 dark:to-transparent">
+              <div className="bg-gradient-to-t from-black/80 via-black/60 to-transparent dark:from-black/80 dark:via-black/60 dark:to-transparent pointer-events-none">
                 {/* Caption container - bottom-left aligned, small padding */}
-                <div className="px-2 py-1 text-white drop-shadow-sm line-clamp-3 [&_*]:text-white">
+                {/* Allow pointer events on content so links are clickable */}
+                <div className="px-2 py-1 text-white drop-shadow-sm line-clamp-3 [&_*]:text-white pointer-events-auto [&_a]:pointer-events-auto">
                   <CardContent
                     excerpt={data.excerpt}
                     content={data.content}

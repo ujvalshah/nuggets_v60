@@ -92,17 +92,38 @@ export const DropdownPortal: React.FC<DropdownPortalProps> = ({
   }, [isOpen, updatePosition]);
 
   // Update position on scroll/resize
+  // PERFORMANCE FIX: Throttle position updates using requestAnimationFrame
+  // getBoundingClientRect() forces layout recalculation, so we batch updates
+  // to the next paint cycle to prevent scroll jank and "Violation" warnings.
   useEffect(() => {
     if (!isOpen) return;
 
-    const handleUpdate = () => updatePosition();
+    let rafId: number | null = null;
+    let isScheduled = false;
 
-    window.addEventListener('scroll', handleUpdate, true);
+    const handleUpdate = () => {
+      // Throttle: only schedule one RAF per frame
+      if (isScheduled) return;
+      
+      isScheduled = true;
+      rafId = requestAnimationFrame(() => {
+        updatePosition();
+        isScheduled = false;
+        rafId = null;
+      });
+    };
+
+    // Mark scroll listener as passive for better scroll performance
+    // We use capture phase to catch scroll events in nested containers
+    window.addEventListener('scroll', handleUpdate, { passive: true, capture: true });
     window.addEventListener('resize', handleUpdate);
 
     return () => {
       window.removeEventListener('scroll', handleUpdate, true);
       window.removeEventListener('resize', handleUpdate);
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+      }
     };
   }, [isOpen, updatePosition]);
 

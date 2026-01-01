@@ -412,6 +412,18 @@ export function hasAnyMedia(article: Article): boolean {
  */
 export function getAllImageUrls(article: Article): string[] {
   const imageUrls: string[] = [];
+  const seenUrls = new Set<string>(); // Deduplicate URLs
+  
+  // Helper to add URL if not seen
+  const addImageUrl = (url: string | undefined) => {
+    if (url && typeof url === 'string' && url.trim()) {
+      const normalized = url.toLowerCase().trim();
+      if (!seenUrls.has(normalized)) {
+        seenUrls.add(normalized);
+        imageUrls.push(url); // Keep original casing
+      }
+    }
+  };
   
   // Check if article has classified media
   const hasClassifiedMedia = article.primaryMedia !== undefined || article.supportingMedia !== undefined;
@@ -419,14 +431,14 @@ export function getAllImageUrls(article: Article): string[] {
   if (hasClassifiedMedia) {
     // Add primary media if it's an image
     if (article.primaryMedia?.type === 'image' && article.primaryMedia.url) {
-      imageUrls.push(article.primaryMedia.url);
+      addImageUrl(article.primaryMedia.url);
     }
     
     // Add supporting images
     if (article.supportingMedia) {
       article.supportingMedia.forEach(media => {
         if (media.type === 'image' && media.url) {
-          imageUrls.push(media.url);
+          addImageUrl(media.url);
         }
       });
     }
@@ -436,15 +448,31 @@ export function getAllImageUrls(article: Article): string[] {
     
     // Add primary media if it's an image
     if (classified.primaryMedia?.type === 'image' && classified.primaryMedia.url) {
-      imageUrls.push(classified.primaryMedia.url);
+      addImageUrl(classified.primaryMedia.url);
     }
     
     // Add supporting images
     classified.supportingMedia.forEach(media => {
       if (media.type === 'image' && media.url) {
-        imageUrls.push(media.url);
+        addImageUrl(media.url);
       }
     });
+  }
+  
+  // CRITICAL: Also include legacy images array (for backward compatibility)
+  // This ensures images stored in the images array are always included
+  if (article.images && Array.isArray(article.images)) {
+    article.images.forEach(url => addImageUrl(url));
+  }
+  
+  // Also check media field if it's an image type
+  if (article.media?.type === 'image' && article.media.url) {
+    addImageUrl(article.media.url);
+  }
+  
+  // Check media.previewMetadata.imageUrl (for OG image URLs)
+  if (article.media?.previewMetadata?.imageUrl) {
+    addImageUrl(article.media.previewMetadata.imageUrl);
   }
   
   return imageUrls;

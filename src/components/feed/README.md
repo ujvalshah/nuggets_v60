@@ -137,3 +137,4 @@ const {
 - Graceful fallbacks (media placeholder, safe defaults)
 - Never collapses container on error
 
+

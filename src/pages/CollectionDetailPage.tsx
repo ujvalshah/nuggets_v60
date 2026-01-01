@@ -9,7 +9,6 @@ import { ArticleModal } from '@/components/ArticleModal';
 import { getCollectionTheme } from '@/constants/theme';
 import { ShareMenu } from '@/components/shared/ShareMenu';
 import { useAuth } from '@/hooks/useAuth';
-import { toSentenceCase } from '@/utils/formatters';
 import { HeaderSpacer } from '@/components/layouts/HeaderSpacer';
 import { LAYOUT_CLASSES } from '@/constants/layout';
 import { Z_INDEX } from '@/constants/zIndex';
@@ -170,7 +169,7 @@ export const CollectionDetailPage: React.FC = () => {
                     </div>
                     <div>
                         <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
-                          {toSentenceCase(collection.name)}
+                          {collection.name}
                         </h1>
                         <p className="text-gray-500 dark:text-slate-400 max-w-2xl leading-relaxed">{collection.description || "No description provided."}</p>
                         <div className="flex items-center gap-6 mt-4 text-sm text-gray-500 dark:text-slate-400 font-medium">
@@ -185,7 +184,7 @@ export const CollectionDetailPage: React.FC = () => {
                         data={{
                             type: 'collection',
                             id: collection.id,
-                            title: toSentenceCase(collection.name),
+                            title: collection.name,
                             shareUrl: `${window.location.origin}/#/collections/${collection.id}`
                         }}
                         meta={{

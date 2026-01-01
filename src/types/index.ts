@@ -58,6 +58,20 @@ export interface DisplayAuthor {
 }
 
 /**
+ * Tag interface for Phase 2 implementation
+ * Tags have stable IDs that don't change when renamed
+ */
+export interface Tag {
+  id: string; // MongoDB ObjectId
+  rawName: string; // Display name (user-entered casing)
+  canonicalName: string; // Normalized lowercase for matching
+  usageCount: number;
+  type: 'category' | 'tag';
+  status: 'active' | 'pending' | 'deprecated';
+  isOfficial: boolean;
+}
+
+/**
  * ============================================================================
  * MEDIA CLASSIFICATION: PRIMARY vs SUPPORTING
  * ============================================================================
@@ -111,7 +125,8 @@ export interface Article {
   displayAuthor?: DisplayAuthor;
   
   publishedAt: string; // ISO date string
-  categories: string[]; 
+  categories: string[]; // Display names (user-facing)
+  categoryIds?: string[]; // Phase 2: Tag ObjectIds for stable references
   tags: string[];
   readTime: number; 
   visibility?: 'public' | 'private';

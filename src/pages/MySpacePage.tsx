@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef, useCallback } from 'react';
+import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { User, Article, Collection } from '@/types';
 import { storageService } from '@/services/storageService';
@@ -14,8 +14,9 @@ import { ConfirmActionModal } from '@/components/settings/ConfirmActionModal';
 import { Tooltip } from '@/components/UI/Tooltip';
 import { queryClient } from '@/queryClient';
 import { HeaderSpacer } from '@/components/layouts/HeaderSpacer';
-import { LAYOUT_CLASSES } from '@/constants/layout';
-import { Z_INDEX } from '@/constants/zIndex';
+import { useInfiniteQuery } from '@tanstack/react-query';
+import { PaginatedArticlesResponse } from '@/services/adapters/IAdapter';
+import { apiClient } from '@/services/apiClient';
 
 interface MySpacePageProps {
   currentUserId: string;
@@ -32,6 +33,64 @@ const getDescription = (tab: string, visibility: 'public' | 'private') => {
   return "";
 };
 
+// Infinite Scroll Trigger Component for container-based scrolling
+// Modified from Feed.tsx to support custom scroll container root
+const InfiniteScrollTrigger: React.FC<{
+  onIntersect: () => void;
+  isLoading: boolean;
+  hasMore: boolean;
+  scrollContainerRef: React.RefObject<HTMLDivElement | null>;
+}> = ({ onIntersect, isLoading, hasMore, scrollContainerRef }) => {
+  const triggerRef = useRef<HTMLDivElement>(null);
+  const callbackRef = useRef(onIntersect);
+  
+  useEffect(() => {
+    callbackRef.current = onIntersect;
+  }, [onIntersect]);
+
+  useEffect(() => {
+    if (!hasMore) {
+      return;
+    }
+    
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const [entry] = entries;
+        if (entry.isIntersecting) {
+          callbackRef.current();
+        }
+      },
+      {
+        root: scrollContainerRef.current, // Use container as root instead of viewport
+        rootMargin: '300px',
+        threshold: 0,
+      }
+    );
+
+    const currentTrigger = triggerRef.current;
+    if (currentTrigger) {
+      observer.observe(currentTrigger);
+    }
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [hasMore, scrollContainerRef]);
+
+  if (!hasMore) return null;
+
+  return (
+    <div ref={triggerRef} className="flex justify-center py-6">
+      {isLoading && (
+        <div className="flex items-center gap-2 text-gray-400">
+          <Loader2 size={18} className="animate-spin" />
+          <span className="text-sm font-medium">Loading more...</span>
+        </div>
+      )}
+    </div>
+  );
+};
+
 export const MySpacePage: React.FC<MySpacePageProps> = ({ currentUserId }) => {
   const { userId } = useParams<{ userId: string }>();
   const navigate = useNavigate();
@@ -41,6 +100,8 @@ export const MySpacePage: React.FC<MySpacePageProps> = ({ currentUserId }) => {
   const [profileUser, setProfileUser] = useState<User | null>(null);
   const [articles, setArticles] = useState<Article[]>([]);
   const [collections, setCollections] = useState<Collection[]>([]);
+  // Counts state - independent from articles array to support pagination
+  const [articleCounts, setArticleCounts] = useState<{ total: number; public: number; private: number } | null>(null);
   
   // UI State
   const [activeTab, setActiveTab] = useState('nuggets');
@@ -68,6 +129,48 @@ export const MySpacePage: React.FC<MySpacePageProps> = ({ currentUserId }) => {
   const getVisibility = (article: Article): 'public' | 'private' => {
     return article.visibility ?? 'private';
   };
+
+  // Ref for the scrollable nuggets container
+  const nuggetsScrollContainerRef = useRef<HTMLDivElement>(null);
+
+  // Local infinite scroll hook for author-filtered articles (same pattern as useInfiniteArticles)
+  // Uses the existing API endpoint with authorId parameter
+  const infiniteArticlesQuery = useInfiniteQuery<PaginatedArticlesResponse>({
+    queryKey: ['articles', 'myspace', targetUserId, nuggetVisibility],
+    queryFn: async ({ pageParam = 1 }) => {
+      const queryParams = new URLSearchParams();
+      queryParams.set('authorId', targetUserId);
+      queryParams.set('page', (pageParam as number).toString());
+      queryParams.set('limit', '25');
+      
+      return apiClient.get<PaginatedArticlesResponse>(`/articles?${queryParams}`);
+    },
+    getNextPageParam: (lastPage) => {
+      return lastPage.hasMore ? lastPage.page + 1 : undefined;
+    },
+    initialPageParam: 1,
+    staleTime: 1000 * 30, // 30 seconds
+    enabled: activeTab === 'nuggets', // Only fetch when nuggets tab is active
+  });
+
+  // Accumulate all pages and filter by visibility
+  const infiniteArticles = useMemo(() => {
+    if (!infiniteArticlesQuery.data?.pages) {
+      return [];
+    }
+    
+    const allArticles = infiniteArticlesQuery.data.pages.flatMap((page) => page.data);
+    
+    // Filter by visibility on client-side (backend returns all for owner)
+    return allArticles.filter((a: Article) => getVisibility(a) === nuggetVisibility);
+  }, [infiniteArticlesQuery.data, nuggetVisibility]);
+
+  // Infinite scroll handler (same pattern as Feed.tsx)
+  const handleLoadMore = useCallback(() => {
+    if (!infiniteArticlesQuery.isFetchingNextPage && infiniteArticlesQuery.hasNextPage) {
+      infiniteArticlesQuery.fetchNextPage();
+    }
+  }, [infiniteArticlesQuery]);
 
   useEffect(() => {
     const isMounted = { current: true };
@@ -99,15 +202,34 @@ export const MySpacePage: React.FC<MySpacePageProps> = ({ currentUserId }) => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [isActionMenuOpen]);
 
+  // Helper function to refresh counts independently
+  const refreshCounts = async () => {
+    if (!isOwner) return; // Only fetch counts for owner
+    
+    try {
+      const counts = await storageService.getMyArticleCounts();
+      setArticleCounts(counts);
+    } catch (e: any) {
+      console.error("Failed to refresh article counts", e);
+      // On error, keep existing counts (don't reset to null)
+    }
+  };
+
   const loadData = async (isMounted: { current: boolean } = { current: true }) => {
     setLoading(true);
     
     try {
-      const [user, userArticles, allCollections, allArticles] = await Promise.all([
+      // Fetch counts independently (only for owner)
+      const fetchCounts = isOwner ? storageService.getMyArticleCounts().catch((e) => {
+        console.error("Failed to fetch article counts", e);
+        return null; // Return null on error, counts will be undefined
+      }) : Promise.resolve(null);
+
+      const [user, userArticles, allCollections, counts] = await Promise.all([
         storageService.getUserById(targetUserId),
         storageService.getArticlesByAuthor(targetUserId),
         storageService.getCollections(),
-        storageService.getAllArticles()
+        fetchCounts
       ]);
 
       // Only update state if component is still mounted
@@ -116,11 +238,15 @@ export const MySpacePage: React.FC<MySpacePageProps> = ({ currentUserId }) => {
       // Defensive checks: ensure arrays are always arrays
       const safeUserArticles = Array.isArray(userArticles) ? userArticles : [];
       const safeAllCollections = Array.isArray(allCollections) ? allCollections : [];
-      const safeAllArticles = Array.isArray(allArticles) ? allArticles : [];
 
       setProfileUser(user || null);
       setArticles(safeUserArticles);
       setCollections(safeAllCollections.filter(c => c.creatorId === targetUserId));
+      
+      // Set counts if fetched successfully (only for owner)
+      if (counts && isMounted.current) {
+        setArticleCounts(counts);
+      }
       
 
     } catch (e: any) {
@@ -142,21 +268,22 @@ export const MySpacePage: React.FC<MySpacePageProps> = ({ currentUserId }) => {
   };
 
   // Defensive checks: ensure arrays before calling filter
-  const safeArticles = Array.isArray(articles) ? articles : [];
   const safeCollections = Array.isArray(collections) ? collections : [];
-  
-  const publicNuggets = safeArticles.filter(a => getVisibility(a) === 'public');
-  const privateNuggets = safeArticles.filter(a => getVisibility(a) === 'private');
   
   // SEGREGATION LOGIC
   const publicCollections = safeCollections.filter(c => c.type === 'public');
 
   // Hierarchy: Top Level Tabs - Updated per requirements
+  // Use counts from API endpoint (independent of pagination) - always use server-provided counts
+  const nuggetCount = isOwner 
+    ? (articleCounts?.total ?? 0)
+    : (articleCounts?.public ?? 0);
+  
   const tabs: { id: string; label: string; count?: number }[] = [
     { 
         id: 'nuggets', 
         label: 'My Nuggets', 
-        count: isOwner ? (publicNuggets.length + privateNuggets.length) : publicNuggets.length 
+        count: nuggetCount
     },
     { 
         id: 'collections', 
@@ -204,13 +331,8 @@ export const MySpacePage: React.FC<MySpacePageProps> = ({ currentUserId }) => {
       
       setIsUpdatingVisibility(true);
       
-      // Compute current list based on active tab and visibility
-      let currentListForUpdate: Article[] = [];
-      if (nuggetVisibility === 'public') {
-          currentListForUpdate = publicNuggets;
-      } else {
-          currentListForUpdate = privateNuggets;
-      }
+      // Use infinite scroll data (already filtered by visibility)
+      const currentListForUpdate = infiniteArticles;
       
       // Filter out nuggets already in target state
       const nuggetsToUpdate = currentListForUpdate.filter((item: Article) => 
@@ -226,43 +348,24 @@ export const MySpacePage: React.FC<MySpacePageProps> = ({ currentUserId }) => {
       }
       
       // Snapshot previous state for rollback
-      const previousArticles = [...articles];
+      const previousArticles = [...infiniteArticles];
       const failedIds: string[] = [];
       
-      // Optimistic update: update local state immediately
-      setArticles(prev => prev.map(a => {
-          if (nuggetsToUpdate.some(n => n.id === a.id)) {
-              return { ...a, visibility };
-          }
-          return a;
-      }));
-      
-      // Optimistic cache update
-      queryClient.setQueryData(['articles'], (oldData: any) => {
-          if (!oldData) return oldData;
-          
-          // Handle paginated response
-          if (oldData.data && Array.isArray(oldData.data)) {
-              return {
-                  ...oldData,
-                  data: oldData.data.map((a: Article) => 
-                      nuggetsToUpdate.some(n => n.id === a.id) 
-                          ? { ...a, visibility }
-                          : a
-                  )
-              };
-          }
-          
-          // Handle array response
-          if (Array.isArray(oldData)) {
-              return oldData.map((a: Article) => 
-                  nuggetsToUpdate.some(n => n.id === a.id) 
-                      ? { ...a, visibility }
-                      : a
-              );
-          }
-          
-          return oldData;
+      // Optimistic cache update for infinite query
+      queryClient.setQueryData(['articles', 'myspace', targetUserId, nuggetVisibility], (oldData: any) => {
+        if (!oldData?.pages) return oldData;
+        
+        return {
+          ...oldData,
+          pages: oldData.pages.map((page: PaginatedArticlesResponse) => ({
+            ...page,
+            data: page.data.map((a: Article) => 
+              nuggetsToUpdate.some(n => n.id === a.id) 
+                ? { ...a, visibility }
+                : a
+            )
+          }))
+        };
       });
       
       try {
@@ -285,43 +388,23 @@ export const MySpacePage: React.FC<MySpacePageProps> = ({ currentUserId }) => {
           const failureCount = results.filter(r => !r.success).length;
           
           if (failureCount > 0) {
-              // Rollback failed IDs
-              setArticles(prev => prev.map(a => {
-                  if (failedIds.includes(a.id)) {
-                      const original = previousArticles.find(pa => pa.id === a.id);
-                      return original || a;
-                  }
-                  return a;
-              }));
-              
-              // Rollback cache for failed IDs
-              queryClient.setQueryData(['articles'], (oldData: any) => {
-                  if (!oldData) return oldData;
-                  
-                  if (oldData.data && Array.isArray(oldData.data)) {
-                      return {
-                          ...oldData,
-                          data: oldData.data.map((a: Article) => {
-                              if (failedIds.includes(a.id)) {
-                                  const original = previousArticles.find(pa => pa.id === a.id);
-                                  return original || a;
-                              }
-                              return a;
-                          })
-                      };
-                  }
-                  
-                  if (Array.isArray(oldData)) {
-                      return oldData.map((a: Article) => {
-                          if (failedIds.includes(a.id)) {
-                              const original = previousArticles.find(pa => pa.id === a.id);
-                              return original || a;
-                          }
-                          return a;
-                      });
-                  }
-                  
-                  return oldData;
+              // Rollback failed IDs in React Query cache
+              queryClient.setQueryData(['articles', 'myspace', targetUserId, nuggetVisibility], (oldData: any) => {
+                if (!oldData?.pages) return oldData;
+                
+                return {
+                  ...oldData,
+                  pages: oldData.pages.map((page: PaginatedArticlesResponse) => ({
+                    ...page,
+                    data: page.data.map((a: Article) => {
+                      if (failedIds.includes(a.id)) {
+                        const original = previousArticles.find(pa => pa.id === a.id);
+                        return original || a;
+                      }
+                      return a;
+                    })
+                  }))
+                };
               });
               
               if (successCount > 0) {
@@ -330,38 +413,11 @@ export const MySpacePage: React.FC<MySpacePageProps> = ({ currentUserId }) => {
                   toast.error(`Failed to update ${failureCount} nugget${failureCount > 1 ? 's' : ''}`);
               }
           } else {
-              // All succeeded - update cache with server responses
-              const successfulUpdates = results.filter(r => r.success && r.article) as Array<{ id: string; article: Article }>;
+              // All succeeded - invalidate query to refetch with updated visibility
+              await queryClient.invalidateQueries({ queryKey: ['articles', 'myspace', targetUserId] });
               
-              queryClient.setQueryData(['articles'], (oldData: any) => {
-                  if (!oldData) return oldData;
-                  
-                  if (oldData.data && Array.isArray(oldData.data)) {
-                      return {
-                          ...oldData,
-                          data: oldData.data.map((a: Article) => {
-                              const update = successfulUpdates.find(u => u.id === a.id);
-                              return update ? update.article : a;
-                          })
-                      };
-                  }
-                  
-                  if (Array.isArray(oldData)) {
-                      return oldData.map((a: Article) => {
-                          const update = successfulUpdates.find(u => u.id === a.id);
-                          return update ? update.article : a;
-                      });
-                  }
-                  
-                  return oldData;
-              });
-              
-              // Invalidate to ensure consistency
-              await queryClient.invalidateQueries({ queryKey: ['articles'] });
-              
-              // Refresh local articles state to update filtered lists (public/private)
-              const refreshedArticles = await storageService.getArticlesByAuthor(targetUserId);
-              setArticles(Array.isArray(refreshedArticles) ? refreshedArticles : []);
+              // Refresh counts after visibility change
+              await refreshCounts();
               
               toast.success(`Updated ${successCount} nugget${successCount > 1 ? 's' : ''} to ${visibility}`);
           }
@@ -370,8 +426,21 @@ export const MySpacePage: React.FC<MySpacePageProps> = ({ currentUserId }) => {
           setSelectedIds([]);
           setIsActionMenuOpen(false);
       } catch (error: any) {
-          // Full rollback on unexpected error
-          setArticles(previousArticles);
+          // Full rollback on unexpected error - restore React Query cache
+          queryClient.setQueryData(['articles', 'myspace', targetUserId, nuggetVisibility], (oldData: any) => {
+            if (!oldData?.pages) return oldData;
+            
+            return {
+              ...oldData,
+              pages: oldData.pages.map((page: PaginatedArticlesResponse) => ({
+                ...page,
+                data: page.data.map((a: Article) => {
+                  const original = previousArticles.find(pa => pa.id === a.id);
+                  return original || a;
+                })
+              }))
+            };
+          });
           
           queryClient.setQueryData(['articles'], (oldData: any) => {
               if (!oldData) return oldData;
@@ -477,11 +546,12 @@ export const MySpacePage: React.FC<MySpacePageProps> = ({ currentUserId }) => {
 
   // --- HIERARCHY LOGIC ---
   // Determine what list to show based on Tab + Sub-Filter
+  // For nuggets, use infinite scroll data; for collections, use regular array
   let currentList: any[] = [];
   
   if (activeTab === 'nuggets') {
-      if (nuggetVisibility === 'public') currentList = publicNuggets;
-      else currentList = privateNuggets;
+      // Use infinite scroll data for nuggets
+      currentList = infiniteArticles;
   } else if (activeTab === 'collections') {
       currentList = publicCollections;
   }
@@ -500,7 +570,7 @@ export const MySpacePage: React.FC<MySpacePageProps> = ({ currentUserId }) => {
           <div className="w-full lg:w-[270px] flex-shrink-0 mb-8 lg:mb-0">
             <ProfileCard 
                 user={profileUser} 
-                nuggetCount={publicNuggets.length} 
+                nuggetCount={isOwner ? (articleCounts?.public ?? 0) : 0} 
                 isOwner={isOwner}
                 onUpdate={handleUpdateProfile}
             />
@@ -647,13 +717,13 @@ export const MySpacePage: React.FC<MySpacePageProps> = ({ currentUserId }) => {
                                     onClick={() => setNuggetVisibility('public')}
                                     className={`px-4 py-1.5 text-xs font-bold rounded-lg flex items-center gap-2 transition-all ${nuggetVisibility === 'public' ? 'bg-white dark:bg-slate-700 text-gray-900 dark:text-white shadow-sm' : 'text-gray-500 hover:text-gray-700 dark:hover:text-slate-300'}`}
                                 >
-                                    <Globe size={12} /> Public <span className="opacity-60 text-[10px]">{publicNuggets.length}</span>
+                                    <Globe size={12} /> Public <span className="opacity-60 text-[10px]">{articleCounts?.public ?? 0}</span>
                                 </button>
                                 <button
                                     onClick={() => setNuggetVisibility('private')}
                                     className={`px-4 py-1.5 text-xs font-bold rounded-lg flex items-center gap-2 transition-all ${nuggetVisibility === 'private' ? 'bg-white dark:bg-slate-700 text-gray-900 dark:text-white shadow-sm' : 'text-gray-500 hover:text-gray-700 dark:hover:text-slate-300'}`}
                                 >
-                                    <Lock size={12} /> Private <span className="opacity-60 text-[10px]">{privateNuggets.length}</span>
+                                    <Lock size={12} /> Private <span className="opacity-60 text-[10px]">{articleCounts?.private ?? 0}</span>
                                 </button>
                             </div>
                         )}
@@ -668,20 +738,33 @@ export const MySpacePage: React.FC<MySpacePageProps> = ({ currentUserId }) => {
             </div>
 
             {/* Content Grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                {activeTab === 'collections' ? (
-                    <div className="col-span-full">
-                        <CollectionsGrid 
-                          collections={currentList} 
-                          onCollectionClick={(id) => selectionMode ? handleSelect(id) : navigate(`/collections/${id}`)}
-                          selectionMode={selectionMode}
-                          selectedIds={selectedIds}
-                          onSelect={handleSelect}
-                          onCollectionUpdate={handleCollectionUpdate}
-                        />
+              {activeTab === 'collections' ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                  <div className="col-span-full">
+                    <CollectionsGrid 
+                      collections={currentList} 
+                      onCollectionClick={(id) => selectionMode ? handleSelect(id) : navigate(`/collections/${id}`)}
+                      selectionMode={selectionMode}
+                      selectedIds={selectedIds}
+                      onSelect={handleSelect}
+                      onCollectionUpdate={handleCollectionUpdate}
+                    />
+                  </div>
+                  {currentList.length === 0 && (
+                    <div className="col-span-full py-16 text-center border-2 border-dashed border-gray-200 dark:border-slate-800 rounded-2xl">
+                      <p className="text-gray-400 text-sm">Nothing to see here yet.</p>
                     </div>
-                ) : (
-                    currentList.map(item => (
+                  )}
+                </div>
+              ) : (
+                // Scrollable container for nuggets grid with infinite scroll
+                <div 
+                  ref={nuggetsScrollContainerRef}
+                  className="overflow-y-auto"
+                  style={{ maxHeight: 'calc(100vh - 400px)' }}
+                >
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 pr-2">
+                    {currentList.map(item => (
                       <NewsCard 
                         key={item.id} 
                         article={item as Article}
@@ -694,15 +777,28 @@ export const MySpacePage: React.FC<MySpacePageProps> = ({ currentUserId }) => {
                         isSelected={selectedIds.includes(item.id)}
                         onSelect={handleSelect}
                       />
-                    ))
-                )}
-
-                {currentList.length === 0 && (
-                  <div className="col-span-full py-16 text-center border-2 border-dashed border-gray-200 dark:border-slate-800 rounded-2xl">
-                    <p className="text-gray-400 text-sm">Nothing to see here yet.</p>
+                    ))}
+                    
+                    {/* Infinite Scroll Trigger - inside container */}
+                    {currentList.length > 0 && (
+                      <div className="col-span-full">
+                        <InfiniteScrollTrigger
+                          onIntersect={handleLoadMore}
+                          isLoading={infiniteArticlesQuery.isFetchingNextPage}
+                          hasMore={infiniteArticlesQuery.hasNextPage ?? false}
+                          scrollContainerRef={nuggetsScrollContainerRef}
+                        />
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
+
+                  {currentList.length === 0 && !infiniteArticlesQuery.isLoading && (
+                    <div className="py-16 text-center border-2 border-dashed border-gray-200 dark:border-slate-800 rounded-2xl">
+                      <p className="text-gray-400 text-sm">Nothing to see here yet.</p>
+                    </div>
+                  )}
+                </div>
+              )}
 
           </div>
         </div>

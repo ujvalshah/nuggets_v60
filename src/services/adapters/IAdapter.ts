@@ -8,12 +8,19 @@ export interface PaginatedArticlesResponse {
   hasMore: boolean;
 }
 
+export interface ArticleCountsResponse {
+  total: number;
+  public: number;
+  private: number;
+}
+
 export interface IAdapter {
   // Articles
   getAllArticles(params?: { q?: string; page?: number; limit?: number }): Promise<Article[]>;
   getArticlesPaginated(params: { q?: string; page: number; limit: number; category?: string; sort?: string }): Promise<PaginatedArticlesResponse>;
   getArticleById(id: string): Promise<Article | undefined>;
   getArticlesByAuthor(authorId: string): Promise<Article[]>;
+  getMyArticleCounts(): Promise<ArticleCountsResponse>;
   createArticle(article: Omit<Article, 'id' | 'publishedAt'>): Promise<Article>;
   updateArticle(id: string, updates: Partial<Article>): Promise<Article | null>;
   deleteArticle(id: string): Promise<boolean>;
@@ -31,6 +38,7 @@ export interface IAdapter {
 
   // Categories
   getCategories(): Promise<string[]>;
+  getCategoriesWithIds?(): Promise<import('@/types').Tag[]>; // Phase 2: Returns full Tag objects with IDs
   addCategory(category: string): Promise<void>;
   deleteCategory(category: string): Promise<void>;
 

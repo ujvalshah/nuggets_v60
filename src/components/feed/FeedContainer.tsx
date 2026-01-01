@@ -158,30 +158,48 @@ export const FeedContainer: React.FC<FeedContainerProps> = ({
   }, [virtualizer, cardHeight]);
   
   // Save scroll state on scroll events
-  // Debounce to avoid excessive state updates
+  // PERFORMANCE FIX: Use requestAnimationFrame + debounce for optimal performance
+  // Previous implementation used setTimeout which could cause scroll jank.
+  // Now we:
+  // 1. Batch DOM reads (scrollTop, virtualItems) in RAF to avoid layout thrashing
+  // 2. Debounce state saves to avoid excessive context updates
+  // 3. Keep listener passive for browser scroll optimizations
   const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const rafIdRef = useRef<number | null>(null);
   const handleScroll = useCallback(() => {
     if (!parentRef.current) return;
     
-    // Clear existing timeout
-    if (scrollTimeoutRef.current) {
-      clearTimeout(scrollTimeoutRef.current);
+    // Cancel any pending RAF to avoid multiple queued updates
+    if (rafIdRef.current !== null) {
+      cancelAnimationFrame(rafIdRef.current);
     }
     
-    // Debounce scroll state saving (save after 100ms of no scrolling)
-    scrollTimeoutRef.current = setTimeout(() => {
+    // Batch DOM reads in requestAnimationFrame to avoid layout thrashing
+    rafIdRef.current = requestAnimationFrame(() => {
       if (!parentRef.current) return;
       
+      // Clear existing timeout
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current);
+      }
+      
+      // Read DOM values in RAF (after browser has painted)
       const scrollTop = parentRef.current.scrollTop;
       const virtualItems = virtualizer.getVirtualItems();
       const firstVisibleIndex = virtualItems.length > 0 ? virtualItems[0].index : 0;
       
-      saveScrollState({
-        scrollOffset: scrollTop,
-        virtualIndex: firstVisibleIndex,
-        activeItemId: null, // Set when article is clicked
-      });
-    }, 100);
+      // Debounce state saving (save after 100ms of no scrolling)
+      // This prevents excessive context updates during fast scrolling
+      scrollTimeoutRef.current = setTimeout(() => {
+        saveScrollState({
+          scrollOffset: scrollTop,
+          virtualIndex: firstVisibleIndex,
+          activeItemId: null, // Set when article is clicked
+        });
+      }, 100);
+      
+      rafIdRef.current = null;
+    });
   }, [virtualizer, saveScrollState]);
   
   // Attach scroll listener
@@ -189,12 +207,16 @@ export const FeedContainer: React.FC<FeedContainerProps> = ({
     const scrollElement = parentRef.current;
     if (!scrollElement) return;
     
+    // Already marked as passive - good for performance
     scrollElement.addEventListener('scroll', handleScroll, { passive: true });
     
     return () => {
       scrollElement.removeEventListener('scroll', handleScroll);
       if (scrollTimeoutRef.current) {
         clearTimeout(scrollTimeoutRef.current);
+      }
+      if (rafIdRef.current !== null) {
+        cancelAnimationFrame(rafIdRef.current);
       }
     };
   }, [handleScroll]);

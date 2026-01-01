@@ -120,17 +120,65 @@ export const CardContent: React.FC<CardContentProps> = React.memo(({
       return;
     }
 
-    // Use requestAnimationFrame to ensure CSS (max-height) is applied before measuring
-    const rafId = requestAnimationFrame(() => {
-      if (!contentRef.current) return;
+    // Wait for layout to stabilize - use double RAF to ensure fonts and layout are fully rendered
+    const rafId1 = requestAnimationFrame(() => {
+      const rafId2 = requestAnimationFrame(() => {
+        if (!contentRef.current || isExpanded) return;
+        
+        const el = contentRef.current;
+        
+        // Get computed styles for line height calculation
+        const computedStyle = window.getComputedStyle(el);
+        const lineHeight = parseFloat(computedStyle.lineHeight) || parseFloat(computedStyle.fontSize) * 1.5;
+        const fontSize = parseFloat(computedStyle.fontSize) || 12;
+        
+        // Measurement-based overflow detection (collapsed state only)
+        // scrollHeight = full content height (including clipped content)
+        // clientHeight = visible height (respects max-height)
+        // offsetHeight = visible height including borders
+        const scrollHeight = el.scrollHeight;
+        const clientHeight = el.clientHeight;
+        const offsetHeight = el.offsetHeight;
+        
+        // Calculate approximate line count
+        const approximateLineCount = scrollHeight / lineHeight;
+        const visibleLineCount = clientHeight / lineHeight;
+        
+        // MINIMUM THRESHOLD: Require at least 2-3 visible lines before truncation triggers
+        // This prevents truncation for very short content that fits in 1-2 lines
+        const MIN_VISIBLE_LINES = 2.5; // Require at least 2.5 lines visible before truncation
+        const hasMinimumContent = visibleLineCount >= MIN_VISIBLE_LINES;
+        
+        // Overflow detection: content overflows if scrollHeight exceeds clientHeight
+        // Add 1px tolerance to account for rounding/subpixel rendering
+        const isOverflowing = scrollHeight > clientHeight + 1;
+        
+        // Only show truncation if:
+        // 1. Content actually overflows AND
+        // 2. There's enough visible content (minimum threshold)
+        const shouldTruncate = isOverflowing && hasMinimumContent;
+        
+        // 🔍 DETAILED LOGGING for debugging
+        console.log('[TRUNCATION-DEBUG] Overflow Detection:', {
+          textLength: displayContent.length,
+          lineHeight: `${lineHeight}px`,
+          fontSize: `${fontSize}px`,
+          scrollHeight: `${scrollHeight}px`,
+          clientHeight: `${clientHeight}px`,
+          offsetHeight: `${offsetHeight}px`,
+          approximateLineCount: approximateLineCount.toFixed(2),
+          visibleLineCount: visibleLineCount.toFixed(2),
+          hasMinimumContent,
+          isOverflowing,
+          shouldTruncate,
+          maxHeight: el.style.maxHeight || 'none',
+        });
+        
+        setHadOverflowWhenCollapsed(shouldTruncate);
+        setMeasured(true);
+      });
       
-      // Measurement-based overflow detection (collapsed state only)
-      // scrollHeight = full content height (including clipped content)
-      // clientHeight = visible height (respects max-height)
-      const isOverflowing = contentRef.current.scrollHeight > contentRef.current.clientHeight;
-      
-      setHadOverflowWhenCollapsed(isOverflowing);
-      setMeasured(true);
+      return () => cancelAnimationFrame(rafId2);
     });
 
     // Set up ResizeObserver for layout changes with debouncing (collapsed state only)
@@ -144,16 +192,29 @@ export const CardContent: React.FC<CardContentProps> = React.memo(({
       }
       debounceTimeout = window.setTimeout(() => {
         if (!contentRef.current || isExpanded) return;
-        const isOverflowing = contentRef.current.scrollHeight > contentRef.current.clientHeight;
+        
+        const el = contentRef.current;
+        const computedStyle = window.getComputedStyle(el);
+        const lineHeight = parseFloat(computedStyle.lineHeight) || parseFloat(computedStyle.fontSize) * 1.5;
+        
+        const scrollHeight = el.scrollHeight;
+        const clientHeight = el.clientHeight;
+        const visibleLineCount = clientHeight / lineHeight;
+        const MIN_VISIBLE_LINES = 2.5;
+        
+        const hasMinimumContent = visibleLineCount >= MIN_VISIBLE_LINES;
+        const isOverflowing = scrollHeight > clientHeight + 1;
+        const shouldTruncate = isOverflowing && hasMinimumContent;
+        
         // Only update if value actually changed
-        setHadOverflowWhenCollapsed(prev => prev !== isOverflowing ? isOverflowing : prev);
+        setHadOverflowWhenCollapsed(prev => prev !== shouldTruncate ? shouldTruncate : prev);
       }, 100); // 100ms debounce to prevent flicker
     });
 
     resizeObserver.observe(element);
 
     return () => {
-      cancelAnimationFrame(rafId);
+      cancelAnimationFrame(rafId1);
       if (debounceTimeout) {
         window.clearTimeout(debounceTimeout);
       }
@@ -178,15 +239,28 @@ export const CardContent: React.FC<CardContentProps> = React.memo(({
   }, []);
 
   // TRUNCATION LOGIC (Two-Card Architecture):
-  // - Hybrid cards: Apply truncation + fade + expand/collapse
+  // - Hybrid cards: Apply truncation + fade + expand/collapse ONLY when content overflows
   // - Media-Only cards: NO truncation, NO fade, NO expand/collapse (just render content)
   // NOTE: Tables use a different max-height (200px vs 180px) but still get truncation + fade
   const isHybridCard = cardType === 'hybrid';
-  // Allow truncation for hybrid cards even with tables (tables use special max-height handling)
-  const shouldClamp = isHybridCard && allowExpansion && !isExpanded;
   
-  // Show collapse control when: Hybrid card, expanded, AND allowExpansion
-  const showCollapse = isHybridCard && allowExpansion && isExpanded;
+  // CRITICAL FIX: We need max-height APPLIED to measure overflow correctly.
+  // The flow is:
+  // 1. Apply max-height constraint (always, until measurement completes)
+  // 2. Measure scrollHeight vs clientHeight
+  // 3. If overflow detected → keep max-height, show "Read more"
+  // 4. If no overflow → remove max-height, hide "Read more"
+  
+  // shouldApplyMaxHeight: Apply constraint during measurement OR when overflow confirmed
+  // This breaks the circular dependency by ensuring max-height exists for measurement
+  const shouldApplyMaxHeight = isHybridCard && allowExpansion && !isExpanded && (!measured || hadOverflowWhenCollapsed);
+  
+  // shouldClamp: Show fade + "Read more" button only when:
+  // - Measurement is complete AND overflow was detected
+  const shouldClamp = isHybridCard && allowExpansion && !isExpanded && hadOverflowWhenCollapsed && measured;
+  
+  // Show collapse control when: Hybrid card, expanded, AND allowExpansion, AND content had overflow
+  const showCollapse = isHybridCard && allowExpansion && isExpanded && hadOverflowWhenCollapsed;
   
   // 🔍 AUDIT LOGGING - Truncation Application
   // Calculate approximate line count for body text
@@ -197,34 +271,64 @@ export const CardContent: React.FC<CardContentProps> = React.memo(({
   }, [displayContent]);
   
   useEffect(() => {
+    // Get current measurements for runtime audit
+    const el = contentRef.current;
+    const scrollHeight = el?.scrollHeight ?? 0;
+    const clientHeight = el?.clientHeight ?? 0;
+    const offsetHeight = el?.offsetHeight ?? 0;
+    const computedStyle = el ? window.getComputedStyle(el) : null;
+    const lineHeight = computedStyle 
+      ? parseFloat(computedStyle.lineHeight) || parseFloat(computedStyle.fontSize) * 1.5 
+      : 0;
+    const visibleLines = lineHeight > 0 ? Math.floor(clientHeight / lineHeight) : 0;
+    const MIN_VISIBLE_LINES = 2.5;
+    
     const truncationData = {
+      // State values
+      isExpanded,
+      allowExpansion,
+      hadOverflowWhenCollapsed,
+      measured,
+      // Measurements
+      scrollHeight,
+      clientHeight,
+      offsetHeight,
+      lineHeight: lineHeight.toFixed(2),
+      visibleLines,
+      MIN_VISIBLE_LINES,
+      // Computed values
+      shouldApplyMaxHeight,
+      shouldClamp,
+      showCollapse,
+      computedMaxHeightApplied: shouldApplyMaxHeight,
+      // Metadata
       cardType,
       isHybridCard,
-      allowExpansion,
       hasTable,
-      isExpanded,
-      shouldClamp,
       bodyLineCount,
       displayContentLength: displayContent.length,
-      truncationApplied: shouldClamp,
-      maxHeight: shouldClamp ? '180px' : 'none',
-      willShowFade: shouldClamp,
+      // Decision reason
+      reason: !isHybridCard ? 'not-hybrid-card' :
+               !allowExpansion ? 'expansion-not-allowed' :
+               isExpanded ? 'content-expanded' :
+               !measured ? 'measuring-with-max-height' :
+               !hadOverflowWhenCollapsed ? 'no-overflow-detected' :
+               'truncation-applied',
     };
-    console.log('[CARD-AUDIT] Truncation Application:', JSON.stringify(truncationData, null, 2));
-    console.log('[CARD-AUDIT] Truncation Application (expanded):', truncationData);
     
-    // CRITICAL: Warn if hybrid card but truncation not applied (should never happen now)
-    if (isHybridCard && allowExpansion && !shouldClamp && !isExpanded) {
-      console.warn('[CARD-AUDIT] ⚠️ HYBRID CARD BUT TRUNCATION NOT APPLIED!', {
-        cardType,
-        isHybridCard,
-        allowExpansion,
-        hasTable,
-        isExpanded,
-        shouldClamp,
+    console.log('[TRUNCATION-AUDIT-RUNTIME]', JSON.stringify(truncationData, null, 2));
+    
+    // Warn if measurement might be wrong (scrollHeight === clientHeight with long content)
+    if (measured && !hadOverflowWhenCollapsed && displayContent.length > 200) {
+      console.warn('[TRUNCATION-AUDIT-RUNTIME] ⚠️ Long content but no overflow detected!', {
+        contentLength: displayContent.length,
+        scrollHeight,
+        clientHeight,
+        areEqual: scrollHeight === clientHeight,
+        maxHeightApplied: shouldApplyMaxHeight,
       });
     }
-  }, [cardType, isHybridCard, allowExpansion, hasTable, isExpanded, shouldClamp, bodyLineCount, displayContent.length]);
+  }, [cardType, isHybridCard, allowExpansion, hasTable, isExpanded, shouldApplyMaxHeight, shouldClamp, showCollapse, hadOverflowWhenCollapsed, measured, bodyLineCount, displayContent.length]);
 
   return (
     <div 
@@ -243,16 +347,14 @@ export const CardContent: React.FC<CardContentProps> = React.memo(({
           // EXPANDED STATE: No max-height, content fills naturally
           // Card height MUST NOT expand unless manually expanded
           // Media-Only cards: NO max-height constraints
-          ...(isHybridCard && hasTable && !isExpanded && allowExpansion ? { 
-            maxHeight: '200px', 
+          // 
+          // CRITICAL: Apply max-height BEFORE measurement to enable overflow detection!
+          // Flow: Apply constraint → Measure → Keep if overflow, remove if not
+          ...(shouldApplyMaxHeight ? { 
+            // Tables get taller max-height (200px), regular content gets 180px
+            maxHeight: hasTable ? '200px' : '180px',
             overflow: 'hidden',
-            position: 'relative'
-          } : shouldClamp ? {
-            // Fixed max-height for consistent card heights - increased to show more content before truncation
-            // ~180px = ~9-10 lines at 12px with line-height 1.4
-            maxHeight: '180px',
-            overflow: 'hidden',
-            position: 'relative'
+            position: 'relative' as const
           } : undefined)
         }}
       >

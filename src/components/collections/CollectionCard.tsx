@@ -3,7 +3,6 @@ import { Collection } from '@/types';
 import { getCollectionTheme } from '@/constants/theme';
 import { Folder, Lock, Check, Plus, Layers, Users, ArrowRight } from 'lucide-react';
 import { ShareMenu } from '../shared/ShareMenu';
-import { toSentenceCase } from '@/utils/formatters';
 import { useAuth } from '@/hooks/useAuth';
 import { storageService } from '@/services/storageService';
 import { useToast } from '@/hooks/useToast';
@@ -157,7 +156,7 @@ export const CollectionCard: React.FC<CollectionCardProps> = ({
             </div>
 
             <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-2 truncate group-hover:text-primary-600 transition-colors">
-                {toSentenceCase(collection.name)}
+                {collection.name}
             </h3>
             
             <div className="flex-1 mb-5 relative" title={collection.description}>
@@ -187,7 +186,7 @@ export const CollectionCard: React.FC<CollectionCardProps> = ({
                             data={{
                                 type: 'collection',
                                 id: collection.id,
-                                title: toSentenceCase(collection.name),
+                                title: collection.name,
                                 shareUrl: `${window.location.origin}/#/collections/${collection.id}`
                             }}
                             meta={{

@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { ChevronDown, Check } from 'lucide-react';
 import { Badge } from '../UI/Badge';
+import { tagsInclude } from '@/utils/tagUtils';
 
 export interface SelectableDropdownOption {
   id: string;
@@ -68,6 +69,7 @@ export function SelectableDropdown<T extends SelectableDropdownOption>({
   const [focusedIndex, setFocusedIndex] = useState<number>(-1);
   const internalComboboxRef = useRef<HTMLDivElement>(null);
   const internalListboxRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const comboboxRef = externalComboboxRef || internalComboboxRef;
   const listboxRef = externalListboxRef || internalListboxRef;
 
@@ -81,6 +83,29 @@ export function SelectableDropdown<T extends SelectableDropdownOption>({
 
   const totalOptions = filteredOptions.length + (showCreateOption ? 1 : 0);
 
+  /**
+   * Handles selection of an item and maintains UX flow:
+   * - Clears the input field
+   * - Keeps focus in the input
+   * - Re-opens the dropdown for continued adding
+   */
+  const handleItemSelected = () => {
+    onSearchChange('');
+    setFocusedIndex(-1);
+    // Use setTimeout to ensure state updates complete before refocusing
+    setTimeout(() => {
+      inputRef.current?.focus();
+      setIsOpen(true);
+    }, 0);
+  };
+
+  /**
+   * Handles keyboard navigation and actions
+   * - Arrow Up/Down: Navigate through options
+   * - Enter: Select highlighted item or create new if no match
+   * - Escape: Close dropdown without clearing input
+   * - Backspace: Remove last chip when input is empty
+   */
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (!isOpen) {
       if (e.key === 'Enter' || e.key === ' ' || e.key === 'ArrowDown') {
@@ -102,26 +127,62 @@ export function SelectableDropdown<T extends SelectableDropdownOption>({
         break;
       case 'Enter':
         e.preventDefault();
+        const trimmedSearch = searchValue.trim();
+        
+        // If a dropdown item is highlighted, select it
         if (focusedIndex >= 0 && focusedIndex < filteredOptions.length) {
           const option = filteredOptions[focusedIndex];
           const optionId = getOptionId(option);
-          if (selected.includes(optionId)) {
-            onDeselect(optionId);
-          } else {
+          // Use case-insensitive comparison for tag matching
+          if (!tagsInclude(selected, optionId)) {
             onSelect(optionId);
+            handleItemSelected();
           }
-          setFocusedIndex(-1);
-        } else if (focusedIndex === filteredOptions.length && showCreateOption && onCreateNew) {
-          onCreateNew(searchValue);
-          setFocusedIndex(-1);
+        } 
+        // If "Create new" option is highlighted, create it
+        else if (focusedIndex === filteredOptions.length && showCreateOption && onCreateNew) {
+          if (trimmedSearch && trimmedSearch.length > 1) {
+            onCreateNew(trimmedSearch);
+            handleItemSelected();
+          }
+        }
+        // If no item is highlighted but text exists, try to create new
+        else if (focusedIndex === -1 && trimmedSearch && trimmedSearch.length > 1) {
+          // Check if we can create new (not a duplicate)
+          const canCreate = canCreateNew 
+            ? canCreateNew(trimmedSearch, options)
+            : !options.some(opt => getOptionLabel(opt).toLowerCase() === trimmedSearch.toLowerCase());
+          
+          if (canCreate && onCreateNew) {
+            onCreateNew(trimmedSearch);
+            handleItemSelected();
+          } else if (!canCreate && filteredOptions.length > 0) {
+            // If it's a duplicate, select the first matching option
+            const matchingOption = filteredOptions[0];
+            const optionId = getOptionId(matchingOption);
+            // Use case-insensitive comparison for tag matching
+            if (!tagsInclude(selected, optionId)) {
+              onSelect(optionId);
+              handleItemSelected();
+            }
+          }
         }
         break;
       case 'Escape':
         e.preventDefault();
         e.stopPropagation();
+        // Close dropdown but do NOT clear input
         setIsOpen(false);
         setFocusedIndex(-1);
         comboboxRef.current?.focus();
+        break;
+      case 'Backspace':
+        // If input is empty and there are selected items, remove the last one
+        if (!searchValue.trim() && selected.length > 0) {
+          e.preventDefault();
+          const lastSelected = selected[selected.length - 1];
+          onDeselect(lastSelected);
+        }
         break;
       case 'Tab':
         setIsOpen(false);
@@ -223,6 +284,7 @@ export function SelectableDropdown<T extends SelectableDropdownOption>({
         >
           <div className="fixed inset-0 -z-10" onClick={() => { setIsOpen(false); setFocusedIndex(-1); }} />
           <input
+            ref={inputRef}
             autoFocus
             id={`${id}-search-input`}
             className="w-full text-xs border-b border-slate-200 dark:border-slate-600 pb-2 mb-2 focus:outline-none focus:border-primary-500 bg-transparent px-2 text-slate-900 dark:text-white placeholder-slate-500 font-medium"
@@ -235,6 +297,7 @@ export function SelectableDropdown<T extends SelectableDropdownOption>({
             onKeyDown={(e) => {
               if (e.key === 'Escape') {
                 e.stopPropagation();
+                // Close dropdown but do NOT clear input
                 setIsOpen(false);
                 setFocusedIndex(-1);
                 comboboxRef.current?.focus();
@@ -249,7 +312,8 @@ export function SelectableDropdown<T extends SelectableDropdownOption>({
           <div className="max-h-32 overflow-y-auto custom-scrollbar flex flex-col gap-1">
             {filteredOptions.map((option, idx) => {
               const optionId = getOptionId(option);
-              const isSelected = selected.includes(optionId);
+              // Use case-insensitive comparison for tag matching
+              const isSelected = tagsInclude(selected, optionId);
               const isFocused = focusedIndex === idx;
               
               return (
@@ -268,10 +332,11 @@ export function SelectableDropdown<T extends SelectableDropdownOption>({
                     e.stopPropagation();
                     if (isSelected) {
                       onDeselect(optionId);
+                      setFocusedIndex(-1);
                     } else {
                       onSelect(optionId);
+                      handleItemSelected();
                     }
-                    setFocusedIndex(-1);
                   }}
                   className={`text-left text-[11px] px-2 py-1.5 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-lg transition-colors font-medium flex items-center justify-between focus:outline-none focus:ring-2 focus:ring-primary-500 ${
                     isSelected
@@ -302,7 +367,11 @@ export function SelectableDropdown<T extends SelectableDropdownOption>({
                 }}
                 onClick={(e) => {
                   e.stopPropagation();
-                  onCreateNew(searchValue);
+                  const trimmedSearch = searchValue.trim();
+                  if (trimmedSearch && trimmedSearch.length > 1) {
+                    onCreateNew(trimmedSearch);
+                    handleItemSelected();
+                  }
                   setFocusedIndex(-1);
                 }}
                 onKeyDown={(e) => {

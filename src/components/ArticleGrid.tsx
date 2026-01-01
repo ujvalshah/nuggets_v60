@@ -1,9 +1,9 @@
-import React from 'react';
+import React, { useRef, useEffect, useCallback } from 'react';
 import { Article } from '@/types';
 import { NewsCard } from './NewsCard';
 import { MasonryGrid } from './MasonryGrid';
 import { EmptyState } from './UI/EmptyState';
-import { SearchX } from 'lucide-react';
+import { SearchX, Loader2 } from 'lucide-react';
 import { useRowExpansion } from '@/hooks/useRowExpansion';
 import { ErrorBoundary } from './UI/ErrorBoundary';
 import { sanitizeArticle } from '@/utils/errorHandler';
@@ -22,7 +22,65 @@ interface ArticleGridProps {
   selectedIds?: string[];
   onSelect?: (id: string) => void;
   onTagClick?: (tag: string) => void;
+  // Infinite Scroll Props
+  hasNextPage?: boolean;
+  isFetchingNextPage?: boolean;
+  onLoadMore?: () => void;
 }
+
+// Infinite Scroll Trigger Component (reused from Feed.tsx pattern)
+const InfiniteScrollTrigger: React.FC<{
+  onIntersect: () => void;
+  isLoading: boolean;
+  hasMore: boolean;
+}> = ({ onIntersect, isLoading, hasMore }) => {
+  const triggerRef = useRef<HTMLDivElement>(null);
+  const callbackRef = useRef(onIntersect);
+  
+  // Keep callback ref updated without triggering effect
+  useEffect(() => {
+    callbackRef.current = onIntersect;
+  }, [onIntersect]);
+
+  useEffect(() => {
+    if (!hasMore) return;
+    
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const [entry] = entries;
+        if (entry.isIntersecting) {
+          callbackRef.current();
+        }
+      },
+      {
+        rootMargin: '300px', // Prefetch distance
+        threshold: 0,
+      }
+    );
+
+    const currentTrigger = triggerRef.current;
+    if (currentTrigger) {
+      observer.observe(currentTrigger);
+    }
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [hasMore]);
+
+  if (!hasMore) return null;
+
+  return (
+    <div ref={triggerRef} className="flex justify-center py-6 col-span-full">
+      {isLoading && (
+        <div className="flex items-center gap-2 text-gray-400">
+          <Loader2 size={18} className="animate-spin" />
+          <span className="text-sm font-medium">Loading more...</span>
+        </div>
+      )}
+    </div>
+  );
+};
 
 export const ArticleGrid: React.FC<ArticleGridProps> = ({
   articles,
@@ -37,8 +95,19 @@ export const ArticleGrid: React.FC<ArticleGridProps> = ({
   selectedIds = [],
   onSelect,
   onTagClick,
+  // Infinite Scroll Props
+  hasNextPage = false,
+  isFetchingNextPage = false,
+  onLoadMore,
 }) => {
   const { expandedId, toggleExpansion, registerCard } = useRowExpansion();
+
+  // Infinite Scroll Handler
+  const handleLoadMore = useCallback(() => {
+    if (!isFetchingNextPage && hasNextPage && onLoadMore) {
+      onLoadMore();
+    }
+  }, [isFetchingNextPage, hasNextPage, onLoadMore]);
 
   // FIX #2: Remove duplicate masonry loading logic
   // MasonryGrid handles its own loading state with correct column count
@@ -79,6 +148,10 @@ export const ArticleGrid: React.FC<ArticleGridProps> = ({
         onCategoryClick={onCategoryClick}
         currentUserId={currentUserId}
         onTagClick={onTagClick}
+        // Infinite Scroll Props
+        hasNextPage={hasNextPage}
+        isFetchingNextPage={isFetchingNextPage}
+        onLoadMore={onLoadMore}
       />
     );
   }
@@ -119,6 +192,15 @@ export const ArticleGrid: React.FC<ArticleGridProps> = ({
           </ErrorBoundary>
         );
       })}
+
+      {/* Infinite Scroll Trigger - Only show for grid/utility views (not masonry, which has its own) */}
+      {viewMode !== 'masonry' && (
+        <InfiniteScrollTrigger
+          onIntersect={handleLoadMore}
+          isLoading={isFetchingNextPage}
+          hasMore={hasNextPage}
+        />
+      )}
     </div>
   );
 };
