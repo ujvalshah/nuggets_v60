@@ -14,7 +14,13 @@ const envSchema = z.object({
   }),
   
   // Optional variables with defaults
-  PORT: z.string().optional().default('5000'),
+  PORT: z.string().optional().default('5000').refine((val) => {
+    // Audit Phase-3 Fix: Validate PORT is numeric and in valid range 1-65535, preserve defaults
+    const portNum = parseInt(val, 10);
+    return !isNaN(portNum) && portNum >= 1 && portNum <= 65535;
+  }, {
+    message: 'PORT must be a number between 1 and 65535'
+  }),
   
   // Optional variables with validation
   FRONTEND_URL: z.string().url('FRONTEND_URL must be a valid URL').optional(),

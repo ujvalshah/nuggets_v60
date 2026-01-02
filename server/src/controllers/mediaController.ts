@@ -11,6 +11,8 @@ import {
 import { sendInternalError, sendValidationError, sendNotFoundError, sendUnauthorizedError } from '../utils/errorResponse.js';
 import { getUserStorageStats } from '../services/mediaCleanupService.js';
 import mongoose from 'mongoose';
+import { createRequestLogger } from '../utils/logger.js';
+import { captureException } from '../utils/sentry.js';
 
 // Security limits (configurable via env in production)
 const MAX_FILES_PER_USER = 1000; // Maximum total files per user
@@ -118,7 +120,19 @@ export const uploadMedia = async (req: Request, res: Response) => {
         });
       }
     } catch (quotaError: any) {
-      console.error('[Media] Quota check failed:', quotaError);
+      // Audit Phase-1 Fix: Use structured logging and Sentry capture
+      const requestLogger = createRequestLogger(req.id || 'unknown', (req as any)?.user?.userId, req.path);
+      requestLogger.error({
+        msg: '[Media] Quota check failed',
+        error: {
+          message: quotaError.message,
+          stack: quotaError.stack,
+        },
+      });
+      captureException(quotaError instanceof Error ? quotaError : new Error(String(quotaError)), {
+        requestId: req.id,
+        route: req.path,
+      });
       // Don't block upload if quota check fails, but log it
     }
 
@@ -184,7 +198,19 @@ export const uploadMedia = async (req: Request, res: Response) => {
         height: cloudinaryResult.height
       });
     } catch (cloudinaryError: any) {
-      console.error('[Media] Cloudinary upload failed:', cloudinaryError);
+      // Audit Phase-1 Fix: Use structured logging and Sentry capture
+      const requestLogger = createRequestLogger(req.id || 'unknown', (req as any)?.user?.userId, req.path);
+      requestLogger.error({
+        msg: '[Media] Cloudinary upload failed',
+        error: {
+          message: cloudinaryError.message,
+          stack: cloudinaryError.stack,
+        },
+      });
+      captureException(cloudinaryError instanceof Error ? cloudinaryError : new Error(String(cloudinaryError)), {
+        requestId: req.id,
+        route: req.path,
+      });
       return res.status(500).json({
         error: 'Upload Failed',
         message: `Failed to upload to Cloudinary: ${cloudinaryError.message}`
@@ -255,7 +281,21 @@ export const uploadMedia = async (req: Request, res: Response) => {
       console.log(`[Media] MongoDB record created successfully: ${mediaDoc._id}`);
     } catch (mongoError: any) {
       // ROLLBACK: Delete from Cloudinary if MongoDB insert fails
-      console.error('[Media] MongoDB insert failed, rolling back Cloudinary upload:', mongoError);
+      // Audit Phase-1 Fix: Use structured logging and Sentry capture
+      const requestLogger = createRequestLogger(req.id || 'unknown', (req as any)?.user?.userId, req.path);
+      requestLogger.error({
+        msg: '[Media] MongoDB insert failed, rolling back Cloudinary upload',
+        error: {
+          message: mongoError.message,
+          stack: mongoError.stack,
+        },
+        publicId: cloudinaryResult.publicId,
+      });
+      captureException(mongoError instanceof Error ? mongoError : new Error(String(mongoError)), {
+        requestId: req.id,
+        route: req.path,
+        publicId: cloudinaryResult.publicId,
+      });
       await deleteFromCloudinary(cloudinaryResult.publicId, cloudinaryResult.resourceType);
       
       // Check for duplicate publicId error
@@ -295,7 +335,16 @@ export const uploadMedia = async (req: Request, res: Response) => {
       status: mediaDoc.status
     });
   } catch (error: any) {
-    console.error('[Media] Upload error:', error);
+    // Audit Phase-1 Fix: Use structured logging and Sentry capture
+    const requestLogger = createRequestLogger(req.id || 'unknown', (req as any)?.user?.userId, req.path);
+    requestLogger.error({
+      msg: '[Media] Upload error',
+      error: {
+        message: error.message,
+        stack: error.stack,
+      },
+    });
+    captureException(error instanceof Error ? error : new Error(String(error)), { requestId: req.id, route: req.path });
     sendInternalError(res);
   }
 };
@@ -357,7 +406,16 @@ export const linkMedia = async (req: Request, res: Response) => {
       }
     });
   } catch (error: any) {
-    console.error('[Media] Link error:', error);
+    // Audit Phase-1 Fix: Use structured logging and Sentry capture
+    const requestLogger = createRequestLogger(req.id || 'unknown', (req as any)?.user?.userId, req.path);
+    requestLogger.error({
+      msg: '[Media] Link error',
+      error: {
+        message: error.message,
+        stack: error.stack,
+      },
+    });
+    captureException(error instanceof Error ? error : new Error(String(error)), { requestId: req.id, route: req.path });
     sendInternalError(res);
   }
 };
@@ -411,7 +469,16 @@ export const deleteMedia = async (req: Request, res: Response) => {
       message: 'Media deleted successfully'
     });
   } catch (error: any) {
-    console.error('[Media] Delete error:', error);
+    // Audit Phase-1 Fix: Use structured logging and Sentry capture
+    const requestLogger = createRequestLogger(req.id || 'unknown', (req as any)?.user?.userId, req.path);
+    requestLogger.error({
+      msg: '[Media] Delete error',
+      error: {
+        message: error.message,
+        stack: error.stack,
+      },
+    });
+    captureException(error instanceof Error ? error : new Error(String(error)), { requestId: req.id, route: req.path });
     sendInternalError(res);
   }
 };
@@ -451,7 +518,16 @@ export const getMedia = async (req: Request, res: Response) => {
       usedBy: media.usedBy
     });
   } catch (error: any) {
-    console.error('[Media] Get error:', error);
+    // Audit Phase-1 Fix: Use structured logging and Sentry capture
+    const requestLogger = createRequestLogger(req.id || 'unknown', (req as any)?.user?.userId, req.path);
+    requestLogger.error({
+      msg: '[Media] Get error',
+      error: {
+        message: error.message,
+        stack: error.stack,
+      },
+    });
+    captureException(error instanceof Error ? error : new Error(String(error)), { requestId: req.id, route: req.path });
     sendInternalError(res);
   }
 };

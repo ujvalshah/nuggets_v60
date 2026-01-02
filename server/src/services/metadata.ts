@@ -61,6 +61,37 @@ const TIER_2_TIMEOUT = 1500; // Open Graph
 const TIER_3_TIMEOUT = 1000; // Image probing
 const TOTAL_TIMEOUT = 5000; // Hard limit
 
+// Audit Phase-2 Fix: Retry wrapper for transient network errors
+async function fetchWithRetry<T>(
+  fn: () => Promise<T>,
+  maxRetries = 2,
+  delay = 1000
+): Promise<T> {
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      return await fn();
+    } catch (error: any) {
+      // Only retry on transient network errors
+      const isTransientError = error.code === 'ETIMEDOUT' || 
+                              error.code === 'ECONNRESET' ||
+                              error.name === 'AbortError' ||
+                              (error.message && (
+                                error.message.includes('timeout') ||
+                                error.message.includes('ECONNRESET') ||
+                                error.message.includes('ETIMEDOUT')
+                              ));
+      
+      if (i === maxRetries - 1 || !isTransientError) {
+        throw error;
+      }
+      
+      // Exponential backoff: delay * (i + 1)
+      await new Promise(resolve => setTimeout(resolve, delay * (i + 1)));
+    }
+  }
+  throw new Error('Max retries exceeded');
+}
+
 // Platform colors
 const PLATFORM_COLORS: Record<string, string> = {
   'youtube.com': '#FF0000',
@@ -239,12 +270,13 @@ async function tier0_5(urlString: string, domain: string): Promise<Partial<Nugge
     const { controller, cleanup } = createTimeoutController(TIER_0_5_TIMEOUT);
 
     const oEmbedUrl = `https://publish.twitter.com/oembed?url=${encodeURIComponent(urlString)}`;
-    const fetchPromise = fetch(oEmbedUrl, {
+    // Audit Phase-2 Fix: Add retry logic for transient network errors
+    const fetchPromise = fetchWithRetry(() => fetch(oEmbedUrl, {
       signal: controller.signal,
       headers: {
         'Accept': 'application/json',
       },
-    });
+    }), 2, 200);
 
     const response = await withTimeout(fetchPromise, TIER_0_5_TIMEOUT, controller.signal);
     cleanup();
@@ -283,12 +315,13 @@ async function tier0_6_youtube(urlString: string, domain: string): Promise<Parti
     const { controller, cleanup } = createTimeoutController(1000); // 1 second timeout
 
     const oEmbedUrl = `https://www.youtube.com/oembed?url=${encodeURIComponent(urlString)}&format=json`;
-    const fetchPromise = fetch(oEmbedUrl, {
+    // Audit Phase-2 Fix: Add retry logic for transient network errors
+    const fetchPromise = fetchWithRetry(() => fetch(oEmbedUrl, {
       signal: controller.signal,
       headers: {
         'Accept': 'application/json',
       },
-    });
+    }), 2, 250);
 
     const response = await withTimeout(fetchPromise, 1000, controller.signal);
     cleanup();
@@ -350,13 +383,14 @@ async function tier1(urlString: string, isAdmin: boolean): Promise<Partial<Nugge
     const { controller, cleanup } = createTimeoutController(TIER_1_TIMEOUT);
 
     const microlinkUrl = `https://api.microlink.io?url=${encodeURIComponent(urlString)}`;
-    const fetchPromise = fetch(microlinkUrl, {
+    // Audit Phase-2 Fix: Add retry logic for transient network errors
+    const fetchPromise = fetchWithRetry(() => fetch(microlinkUrl, {
       signal: controller.signal,
       headers: {
         'x-api-key': MICROLINK_API_KEY,
         'Accept': 'application/json',
       },
-    });
+    }), 2, 300);
 
     const response = await withTimeout(fetchPromise, TIER_1_TIMEOUT, controller.signal);
     cleanup();
@@ -418,13 +452,14 @@ async function tier2(urlString: string): Promise<Partial<Nugget> | null> {
   try {
     const { controller, cleanup } = createTimeoutController(TIER_2_TIMEOUT);
 
-    const ogsPromise = ogs({
+    // Audit Phase-2 Fix: Add retry logic for transient network errors (ogs uses fetch internally)
+    const ogsPromise = fetchWithRetry(() => ogs({
       url: urlString,
       timeout: TIER_2_TIMEOUT,
       fetchOptions: {
         signal: controller.signal,
       },
-    });
+    }), 2, 400);
 
     const result = await withTimeout(ogsPromise, TIER_2_TIMEOUT, controller.signal);
     cleanup();
@@ -493,10 +528,11 @@ async function tier3(imageUrl: string): Promise<{ width: number; height: number;
     const { controller, cleanup } = createTimeoutController(TIER_3_TIMEOUT);
 
     // First, check Content-Length header
-    const headPromise = fetch(imageUrl, {
+    // Audit Phase-2 Fix: Add retry logic for transient network errors
+    const headPromise = fetchWithRetry(() => fetch(imageUrl, {
       method: 'HEAD',
       signal: controller.signal,
-    });
+    }), 2, 200);
 
     const headResponse = await withTimeout(headPromise, TIER_3_TIMEOUT, controller.signal);
     
@@ -515,9 +551,10 @@ async function tier3(imageUrl: string): Promise<{ width: number; height: number;
     }
 
     // Probe image dimensions
-    const probePromise = probe(imageUrl, {
+    // Audit Phase-2 Fix: Add retry logic for transient network errors
+    const probePromise = fetchWithRetry(() => probe(imageUrl, {
       timeout: TIER_3_TIMEOUT,
-    });
+    }), 2, 200);
 
     const result = await withTimeout(probePromise, TIER_3_TIMEOUT, controller.signal);
     cleanup();

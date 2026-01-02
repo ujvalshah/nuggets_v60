@@ -6,6 +6,8 @@ import { createArticleSchema, updateArticleSchema } from '../utils/validation.js
 import { cleanupCollectionEntries } from '../utils/collectionHelpers.js';
 import { escapeRegExp, createSearchRegex, createExactMatchRegex } from '../utils/escapeRegExp.js';
 import { verifyToken } from '../utils/jwt.js';
+import { createRequestLogger } from '../utils/logger.js';
+import { captureException } from '../utils/sentry.js';
 import {
   sendErrorResponse,
   sendValidationError,
@@ -68,10 +70,12 @@ async function resolveCategoryIds(categoryNames: string[]): Promise<string[]> {
       .map(canonical => tagMap.get(canonical))
       .filter((id): id is string => id !== undefined);
 
-    console.log(`[Articles] Resolved ${categoryNames.length} category names to ${categoryIds.length} IDs`);
+    // Audit Phase-3 Fix: Logging consistency - use structured logging (no req context here, so skip requestId)
     return categoryIds;
   } catch (error: any) {
-    console.error('[Articles] Error resolving category IDs:', error);
+    // Audit Phase-3 Fix: Logging consistency - use structured logger (no req context in helper function)
+    const { getLogger } = await import('../utils/logger.js');
+    getLogger().warn({ msg: 'Error resolving category IDs', error: { message: error.message } });
     return []; // Fail gracefully - categoryIds is optional
   }
 }
@@ -225,7 +229,9 @@ export const getArticles = async (req: Request, res: Response) => {
       hasMore: page * limit < total
     });
   } catch (error: any) {
-    console.error('[Articles] Get articles error:', error);
+    // Audit Phase-3 Fix: Logging consistency - use createRequestLogger with requestId + route
+    const requestLogger = createRequestLogger(req.id || 'unknown', getOptionalUserId(req), '/api/articles');
+    requestLogger.error({ msg: 'Get articles error', error: { message: error.message, stack: error.stack } });
     sendInternalError(res);
   }
 };
@@ -252,7 +258,9 @@ export const getArticleById = async (req: Request, res: Response) => {
     
     res.json(normalizeDoc(article));
   } catch (error: any) {
-    console.error('[Articles] Get article by ID error:', error);
+    // Audit Phase-3 Fix: Logging consistency - use createRequestLogger with requestId + route
+    const requestLogger = createRequestLogger(req.id || 'unknown', getOptionalUserId(req), '/api/articles/:id');
+    requestLogger.error({ msg: 'Get article by ID error', error: { message: error.message, stack: error.stack } });
     sendInternalError(res);
   }
 };
@@ -361,14 +369,21 @@ export const createArticle = async (req: Request, res: Response) => {
     
     res.status(201).json(normalizeDoc(newArticle));
   } catch (error: any) {
-    console.error('[Articles] Create article error:', error);
-    console.error('[Articles] Error name:', error.name);
-    console.error('[Articles] Error message:', error.message);
-    console.error('[Articles] Error stack:', error.stack);
+    // Audit Phase-3 Fix: Logging consistency - use createRequestLogger with requestId + route
+    const requestLogger = createRequestLogger(req.id || 'unknown', (req as any).user?.userId, '/api/articles');
+    requestLogger.error({ 
+      msg: 'Create article error', 
+      error: { 
+        name: error.name,
+        message: error.message, 
+        stack: error.stack 
+      } 
+    });
     
     // Log more details for debugging
     if (error.name === 'ValidationError') {
-      console.error('[Articles] Mongoose validation errors:', error.errors);
+      // Audit Phase-3 Fix: Logging consistency - use createRequestLogger
+      requestLogger.warn({ msg: 'Mongoose validation errors', errors: error.errors });
       const errors = Object.keys(error.errors).map(key => ({
         path: key,
         message: error.errors[key].message
@@ -378,7 +393,8 @@ export const createArticle = async (req: Request, res: Response) => {
     
     // Check for BSON size limit (MongoDB document size limit is 16MB)
     if (error.message && error.message.includes('BSON')) {
-      console.error('[Articles] Document size limit exceeded');
+      // Audit Phase-3 Fix: Logging consistency - use createRequestLogger
+      requestLogger.warn({ msg: 'Document size limit exceeded' });
       return sendPayloadTooLargeError(res, 'Payload too large. Please reduce image sizes or use fewer images.');
     }
     
@@ -576,9 +592,11 @@ export const updateArticle = async (req: Request, res: Response) => {
     ).lean();
     
     if (!article) return sendNotFoundError(res, 'Article not found');
-    res.json(normalizeDoc(article));
+      res.json(normalizeDoc(article));
   } catch (error: any) {
-    console.error('[Articles] Update article error:', error);
+    // Audit Phase-3 Fix: Logging consistency - use createRequestLogger with requestId + route
+    const requestLogger = createRequestLogger(req.id || 'unknown', (req as any).user?.userId, '/api/articles/:id');
+    requestLogger.error({ msg: 'Update article error', error: { message: error.message, stack: error.stack } });
     sendInternalError(res);
   }
 };
@@ -607,12 +625,26 @@ export const deleteArticle = async (req: Request, res: Response) => {
       }
     } catch (mediaError: any) {
       // Log but don't fail article deletion if media cleanup fails
-      console.error(`[Articles] Failed to mark media as orphaned:`, mediaError.message);
+      // Audit Phase-1 Fix: Use structured logging and Sentry capture
+      const requestLogger = createRequestLogger(req.id || 'unknown', (req as any).user?.userId, req.path);
+      requestLogger.error({
+        msg: '[Articles] Failed to mark media as orphaned',
+        error: {
+          message: mediaError.message,
+          stack: mediaError.stack,
+        },
+      });
+      captureException(mediaError instanceof Error ? mediaError : new Error(String(mediaError)), {
+        requestId: req.id,
+        route: req.path,
+      });
     }
     
     res.status(204).send();
   } catch (error: any) {
-    console.error('[Articles] Delete article error:', error);
+    // Audit Phase-3 Fix: Logging consistency - use createRequestLogger with requestId + route
+    const requestLogger = createRequestLogger(req.id || 'unknown', (req as any).user?.userId, '/api/articles/:id');
+    requestLogger.error({ msg: 'Delete article error', error: { message: error.message, stack: error.stack } });
     sendInternalError(res);
   }
 };
@@ -873,7 +905,9 @@ export const deleteArticleImage = async (req: Request, res: Response) => {
       images: updatedImages
     });
   } catch (error: any) {
-    console.error('[Articles] Delete image error:', error);
+    // Audit Phase-3 Fix: Logging consistency - use createRequestLogger with requestId + route
+    const requestLogger = createRequestLogger(req.id || 'unknown', (req as any).user?.userId, '/api/articles/:id/images');
+    requestLogger.error({ msg: 'Delete image error', error: { message: error.message, stack: error.stack } });
     sendInternalError(res);
   }
 };
@@ -909,7 +943,9 @@ export const getMyArticleCounts = async (req: Request, res: Response) => {
       private: privateCount
     });
   } catch (error: any) {
-    console.error('[Articles] Get my article counts error:', error);
+    // Audit Phase-3 Fix: Logging consistency - use createRequestLogger with requestId + route
+    const requestLogger = createRequestLogger(req.id || 'unknown', (req as any).user?.userId, '/api/articles/my/counts');
+    requestLogger.error({ msg: 'Get my article counts error', error: { message: error.message, stack: error.stack } });
     sendInternalError(res);
   }
 };

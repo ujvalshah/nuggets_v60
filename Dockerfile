@@ -78,3 +78,5 @@ ENTRYPOINT ["dumb-init", "--"]
 CMD ["node", "--import", "tsx", "server/src/index.ts"]
 
 
+
+

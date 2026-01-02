@@ -36,10 +36,45 @@ export async function connectDB(): Promise<void> {
     }
   }
 
+  // Audit Phase-2 Fix: Wrap connection in retry loop for transient network failures
+  const maxRetries = 3;
+  const retryDelay = 5000; // 5 seconds
+  let lastError: any = null;
+  
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      await mongoose.connect(connectionString);
+      // Audit Phase-1 Fix: Explicitly enable strictQuery to reject unknown query fields
+      mongoose.set('strictQuery', true);
+      const logger = getLogger();
+      logger.info({ msg: 'Database connected', database: 'MongoDB' });
+      // Audit Phase-3 Fix: Log informational message when connection stabilizes after retry
+      if (attempt > 1) {
+        logger.info({ 
+          msg: 'Database connection stabilized after retry', 
+          database: 'MongoDB',
+          attempts: attempt,
+          finalStatus: 'connected'
+        });
+      }
+      return; // Success - exit function
+    } catch (error: any) {
+      lastError = error;
+      if (attempt < maxRetries) {
+        const logger = getLogger();
+        logger.warn({
+          msg: `DB connection failed, retrying... (${attempt}/${maxRetries})`,
+          error: {
+            message: error.message,
+          },
+        });
+        await new Promise(resolve => setTimeout(resolve, retryDelay));
+      }
+    }
+  }
+  
+  // All retries exhausted - throw last error
   try {
-    await mongoose.connect(connectionString);
-    const logger = getLogger();
-    logger.info({ msg: 'Database connected', database: 'MongoDB' });
     
     // Database Performance Monitoring
     // Hook into mongoose queries to detect slow operations
@@ -100,15 +135,16 @@ export async function connectDB(): Promise<void> {
       process.exit(0);
     });
   } catch (error: any) {
+    // This catch block now only handles errors from the retry loop
     const logger = getLogger();
     logger.error({
-      msg: 'Failed to connect to MongoDB',
+      msg: 'Failed to connect to MongoDB after retries',
       error: {
-        message: error.message,
-        stack: error.stack,
+        message: lastError?.message || error.message,
+        stack: lastError?.stack || error.stack,
       },
     });
-    throw error;
+    throw lastError || error;
   }
 }
 

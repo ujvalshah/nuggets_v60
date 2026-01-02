@@ -1,7 +1,25 @@
 import { Request, Response } from 'express';
+import { z } from 'zod';
 import { verifyToken } from '../utils/jwt.js';
 import { fetchUrlMetadata } from '../services/metadata.js';
 import { isUrlSafeForFetch } from '../utils/ssrfProtection.js';
+import { createRequestLogger } from '../utils/logger.js';
+import { captureException } from '../utils/sentry.js';
+
+// Audit Phase-1 Fix: Zod validation schema for unfurl request body
+const unfurlUrlSchema = z.object({
+  url: z.string().url('Invalid URL format').refine(
+    (url) => {
+      try {
+        const parsed = new URL(url);
+        return ['http:', 'https:'].includes(parsed.protocol);
+      } catch {
+        return false;
+      }
+    },
+    'Only http and https URLs are allowed'
+  )
+});
 
 /**
  * POST /api/unfurl
@@ -18,34 +36,17 @@ import { isUrlSafeForFetch } from '../utils/ssrfProtection.js';
  */
 export async function unfurlUrl(req: Request, res: Response) {
   try {
-    const { url } = req.body;
-
-    if (!url || typeof url !== 'string') {
+    // Audit Phase-1 Fix: Zod validation for request body
+    const validationResult = unfurlUrlSchema.safeParse(req.body);
+    if (!validationResult.success) {
       return res.status(400).json({
-        error: 'Invalid request',
-        message: 'URL is required and must be a string',
+        error: 'Validation failed',
+        message: validationResult.error.errors[0].message,
+        errors: validationResult.error.errors
       });
     }
 
-    // Validate URL format and protocol
-    let parsedUrl: URL;
-    try {
-      parsedUrl = new URL(url);
-    } catch {
-      return res.status(400).json({
-        error: 'Invalid URL',
-        message: 'URL format is invalid',
-      });
-    }
-
-    // Security: Only allow http and https protocols
-    const allowedProtocols = ['http:', 'https:'];
-    if (!allowedProtocols.includes(parsedUrl.protocol)) {
-      return res.status(400).json({
-        error: 'Invalid URL protocol',
-        message: 'Only http and https URLs are allowed',
-      });
-    }
+    const { url } = validationResult.data;
 
     // SECURITY: SSRF Protection - Block internal/private IPs and cloud metadata endpoints
     const ssrfCheck = isUrlSafeForFetch(url);
@@ -81,7 +82,16 @@ export async function unfurlUrl(req: Request, res: Response) {
     res.json(nugget);
   } catch (error: any) {
     // This should never happen, but if it does, return a fallback
-    console.error('[Unfurl] Unexpected error:', error);
+    // Audit Phase-1 Fix: Use structured logging and Sentry capture
+    const requestLogger = createRequestLogger(req.id || 'unknown', (req as any)?.user?.id, req.path);
+    requestLogger.error({
+      msg: '[Unfurl] Unexpected error',
+      error: {
+        message: error.message,
+        stack: error.stack,
+      },
+    });
+    captureException(error instanceof Error ? error : new Error(String(error)), { requestId: req.id, route: req.path });
 
     // Create a minimal fallback
     // CRITICAL: Do not generate titles for non-Social/Video content types

@@ -240,3 +240,5 @@ The admin table scroll instability has been resolved. The virtualizer now:
 
 The scrollbar should now be stable and smooth during all operations (filtering, sorting, searching).
 
+
+

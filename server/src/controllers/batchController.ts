@@ -1,6 +1,14 @@
 import { Request, Response } from 'express';
+import { z } from 'zod';
 import { Article } from '../models/Article.js';
 import mongoose from 'mongoose';
+import { createRequestLogger } from '../utils/logger.js';
+import { captureException } from '../utils/sentry.js';
+
+// Audit Phase-1 Fix: Zod validation schema with max 100 items per batch
+const publishBatchSchema = z.object({
+  ids: z.array(z.string().min(1)).min(1, 'At least one ID is required').max(100, 'Maximum 100 items per batch')
+});
 
 /**
  * POST /api/batch/publish
@@ -19,15 +27,17 @@ import mongoose from 'mongoose';
  */
 export const publishBatch = async (req: Request, res: Response) => {
   try {
-    const { ids } = req.body;
-
-    // Validate input
-    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+    // Audit Phase-1 Fix: Zod validation for batch request body with max 100 items
+    const validationResult = publishBatchSchema.safeParse(req.body);
+    if (!validationResult.success) {
       return res.status(400).json({
         success: false,
-        message: 'Array of nugget IDs is required'
+        message: 'Validation failed',
+        errors: validationResult.error.errors
       });
     }
+
+    const { ids } = validationResult.data;
 
     // Validate all IDs are valid MongoDB ObjectIds
     const validIds = ids.filter(id => {
@@ -67,7 +77,16 @@ export const publishBatch = async (req: Request, res: Response) => {
       requestedCount: validIds.length
     });
   } catch (error: any) {
-    console.error('[BatchPublish] Error:', error);
+    // Audit Phase-1 Fix: Use structured logging and Sentry capture
+    const requestLogger = createRequestLogger(req.id || 'unknown', (req as any)?.user?.id, req.path);
+    requestLogger.error({
+      msg: '[BatchPublish] Error',
+      error: {
+        message: error.message,
+        stack: error.stack,
+      },
+    });
+    captureException(error instanceof Error ? error : new Error(String(error)), { requestId: req.id, route: req.path });
     res.status(500).json({
       success: false,
       message: 'Internal server error',
@@ -75,6 +94,8 @@ export const publishBatch = async (req: Request, res: Response) => {
     });
   }
 };
+
+
 
 
 

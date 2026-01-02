@@ -298,3 +298,5 @@ selectedCategories: selectedCategories, // ✅ Pass "Today" to backend
 **Lines Removed:** ~25  
 **Net Change:** +25 lines (better functionality)
 
+
+

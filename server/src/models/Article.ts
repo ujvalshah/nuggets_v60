@@ -171,7 +171,12 @@ ArticleSchema.index({ createdAt: -1 }); // List sorting (if using created_at)
 ArticleSchema.index({ visibility: 1, publishedAt: -1 }); // Visibility filters with sorting
 ArticleSchema.index({ 'categories': 1 }); // Category filtering
 ArticleSchema.index({ tags: 1 }); // Tag filtering
+// Audit Phase-2 Fix: Add compound index for authorId + visibility (common privacy filtering pattern)
 ArticleSchema.index({ authorId: 1, visibility: 1 }); // User's articles by visibility
+// Audit Phase-2 Fix: Add index for categoryIds array field (for stable category references)
+ArticleSchema.index({ categoryIds: 1 });
+// Audit Phase-2 Fix: Add index for media.url field (for YouTube cache lookup in AI controller)
+ArticleSchema.index({ 'media.url': 1 });
 
 export const Article = mongoose.model<IArticle>('Article', ArticleSchema);
 

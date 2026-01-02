@@ -185,3 +185,5 @@ To verify the fixes work:
 - ✅ Improves error visibility and debugging
 - ✅ No breaking changes to public app
 - ✅ Maintains backward compatibility (handles both array and paginated responses, though backend only returns paginated)
+
+

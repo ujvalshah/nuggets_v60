@@ -121,3 +121,5 @@ async function backfillCategoryIds(): Promise<void> {
 // Run migration
 backfillCategoryIds();
 
+
+

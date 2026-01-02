@@ -151,3 +151,5 @@ The infinite scroll pattern was identified in:
 - `src/services/apiClient.ts` - Used for API calls
 - `src/services/adapters/IAdapter.ts` - Type definitions
 
+
+

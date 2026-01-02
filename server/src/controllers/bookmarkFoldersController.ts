@@ -6,6 +6,12 @@ import { normalizeDoc, normalizeDocs } from '../utils/db.js';
 import { ensureDefaultFolder, getOrCreateBookmark, getGeneralFolderId, ensureBookmarkInGeneralFolder } from '../utils/bookmarkHelpers.js';
 import { z } from 'zod';
 import { createExactMatchRegex } from '../utils/escapeRegExp.js';
+import { createRequestLogger } from '../utils/logger.js';
+import { captureException } from '../utils/sentry.js';
+
+// Audit Phase-1 Fix: Maximum bookmark limits to prevent unbounded queries
+const MAX_BOOKMARKS_PER_USER = 10000;
+const MAX_BOOKMARK_IDS_IN_REQUEST = 10000;
 
 // Validation schemas
 const createFolderSchema = z.object({
@@ -46,7 +52,16 @@ export const getBookmarkFolders = async (req: Request, res: Response) => {
 
     res.json(normalizeDocs(folders));
   } catch (error: any) {
-    console.error('[BookmarkFolders] Get folders error:', error);
+    // Audit Phase-1 Fix: Use structured logging and Sentry capture
+    const requestLogger = createRequestLogger(req.id || 'unknown', (req as any)?.user?.userId, req.path);
+    requestLogger.error({
+      msg: '[BookmarkFolders] Get folders error',
+      error: {
+        message: error.message,
+        stack: error.stack,
+      },
+    });
+    captureException(error instanceof Error ? error : new Error(String(error)), { requestId: req.id, route: req.path });
     res.status(500).json({ message: 'Internal server error' });
   }
 };
@@ -98,7 +113,16 @@ export const createBookmarkFolder = async (req: Request, res: Response) => {
 
     res.status(201).json(normalizeDoc(folder));
   } catch (error: any) {
-    console.error('[BookmarkFolders] Create folder error:', error);
+    // Audit Phase-1 Fix: Use structured logging and Sentry capture
+    const requestLogger = createRequestLogger(req.id || 'unknown', (req as any)?.user?.userId, req.path);
+    requestLogger.error({
+      msg: '[BookmarkFolders] Create folder error',
+      error: {
+        message: error.message,
+        stack: error.stack,
+      },
+    });
+    captureException(error instanceof Error ? error : new Error(String(error)), { requestId: req.id, route: req.path });
     res.status(500).json({ message: 'Internal server error' });
   }
 };
@@ -166,7 +190,16 @@ export const updateBookmarkFolder = async (req: Request, res: Response) => {
 
     res.json(normalizeDoc(folder));
   } catch (error: any) {
-    console.error('[BookmarkFolders] Update folder error:', error);
+    // Audit Phase-1 Fix: Use structured logging and Sentry capture
+    const requestLogger = createRequestLogger(req.id || 'unknown', (req as any)?.user?.userId, req.path);
+    requestLogger.error({
+      msg: '[BookmarkFolders] Update folder error',
+      error: {
+        message: error.message,
+        stack: error.stack,
+      },
+    });
+    captureException(error instanceof Error ? error : new Error(String(error)), { requestId: req.id, route: req.path });
     // Handle unique constraint violation (if regex check somehow missed it)
     if (error.code === 11000) {
       return res.status(400).json({ message: 'Folder name already exists' });
@@ -208,7 +241,16 @@ export const deleteBookmarkFolder = async (req: Request, res: Response) => {
 
     res.status(204).send();
   } catch (error: any) {
-    console.error('[BookmarkFolders] Delete folder error:', error);
+    // Audit Phase-1 Fix: Use structured logging and Sentry capture
+    const requestLogger = createRequestLogger(req.id || 'unknown', (req as any)?.user?.userId, req.path);
+    requestLogger.error({
+      msg: '[BookmarkFolders] Delete folder error',
+      error: {
+        message: error.message,
+        stack: error.stack,
+      },
+    });
+    captureException(error instanceof Error ? error : new Error(String(error)), { requestId: req.id, route: req.path });
     res.status(500).json({ message: 'Internal server error' });
   }
 };
@@ -242,17 +284,26 @@ export const getBookmarksByFolder = async (req: Request, res: Response) => {
     if (isGeneralFolder) {
       // For General folder:
       // 1. Get bookmarks explicitly linked to General
-      const generalLinks = await BookmarkFolderLink.find({ folderId: generalFolderId });
+      // Audit Phase-1 Fix: Add limit to prevent unbounded query
+      const generalLinks = await BookmarkFolderLink.find({ folderId: generalFolderId })
+        .limit(MAX_BOOKMARK_IDS_IN_REQUEST)
+        .lean();
       const linkedBookmarkIds = generalLinks.map(link => link.bookmarkId);
 
       // 2. Get all user's bookmarks
-      const allBookmarks = await Bookmark.find({ userId });
+      // Audit Phase-1 Fix: Add limit to prevent unbounded query
+      const allBookmarks = await Bookmark.find({ userId })
+        .limit(MAX_BOOKMARKS_PER_USER)
+        .lean();
       const allBookmarkIds = allBookmarks.map(b => b._id.toString());
 
       // 3. Get bookmarks with folder links
+      // Audit Phase-1 Fix: Add limit to prevent unbounded query
       const allLinks = await BookmarkFolderLink.find({
         bookmarkId: { $in: allBookmarkIds }
-      });
+      })
+        .limit(MAX_BOOKMARK_IDS_IN_REQUEST)
+        .lean();
       const bookmarksWithLinks = new Set(allLinks.map(link => link.bookmarkId));
 
       // 4. Legacy bookmarks = bookmarks with NO folder links
@@ -262,21 +313,42 @@ export const getBookmarksByFolder = async (req: Request, res: Response) => {
       bookmarkIds = [...new Set([...linkedBookmarkIds, ...legacyBookmarkIds])];
     } else {
       // For other folders: only get bookmarks explicitly linked
-      const links = await BookmarkFolderLink.find({ folderId });
+      // Audit Phase-1 Fix: Add limit to prevent unbounded query
+      const links = await BookmarkFolderLink.find({ folderId })
+        .limit(MAX_BOOKMARK_IDS_IN_REQUEST)
+        .lean();
       bookmarkIds = links.map(link => link.bookmarkId);
+    }
+
+    // Audit Phase-1 Fix: Validate bookmarkIds array size before query
+    if (bookmarkIds.length > MAX_BOOKMARK_IDS_IN_REQUEST) {
+      return res.status(400).json({ 
+        message: `Too many bookmarks requested (max ${MAX_BOOKMARK_IDS_IN_REQUEST})` 
+      });
     }
 
     // Get bookmark documents and extract nuggetIds
     const bookmarks = await Bookmark.find({
       _id: { $in: bookmarkIds },
       userId
-    });
+    })
+      .limit(MAX_BOOKMARK_IDS_IN_REQUEST)
+      .lean();
 
     const nuggetIds = bookmarks.map(b => b.nuggetId);
 
     res.json({ nuggetIds });
   } catch (error: any) {
-    console.error('[BookmarkFolders] Get bookmarks by folder error:', error);
+    // Audit Phase-1 Fix: Use structured logging and Sentry capture
+    const requestLogger = createRequestLogger(req.id || 'unknown', (req as any)?.user?.userId, req.path);
+    requestLogger.error({
+      msg: '[BookmarkFolders] Get bookmarks by folder error',
+      error: {
+        message: error.message,
+        stack: error.stack,
+      },
+    });
+    captureException(error instanceof Error ? error : new Error(String(error)), { requestId: req.id, route: req.path });
     res.status(500).json({ message: 'Internal server error' });
   }
 };
@@ -321,7 +393,16 @@ export const createBookmark = async (req: Request, res: Response) => {
 
     res.status(201).json({ bookmarkId, folderIds: [generalFolderId] });
   } catch (error: any) {
-    console.error('[BookmarkFolders] Create bookmark error:', error);
+    // Audit Phase-1 Fix: Use structured logging and Sentry capture
+    const requestLogger = createRequestLogger(req.id || 'unknown', (req as any)?.user?.userId, req.path);
+    requestLogger.error({
+      msg: '[BookmarkFolders] Create bookmark error',
+      error: {
+        message: error.message,
+        stack: error.stack,
+      },
+    });
+    captureException(error instanceof Error ? error : new Error(String(error)), { requestId: req.id, route: req.path });
     res.status(500).json({ message: 'Internal server error' });
   }
 };
@@ -354,7 +435,16 @@ export const deleteBookmark = async (req: Request, res: Response) => {
 
     res.status(204).send();
   } catch (error: any) {
-    console.error('[BookmarkFolders] Delete bookmark error:', error);
+    // Audit Phase-1 Fix: Use structured logging and Sentry capture
+    const requestLogger = createRequestLogger(req.id || 'unknown', (req as any)?.user?.userId, req.path);
+    requestLogger.error({
+      msg: '[BookmarkFolders] Delete bookmark error',
+      error: {
+        message: error.message,
+        stack: error.stack,
+      },
+    });
+    captureException(error instanceof Error ? error : new Error(String(error)), { requestId: req.id, route: req.path });
     res.status(500).json({ message: 'Internal server error' });
   }
 };
@@ -388,7 +478,16 @@ export const getBookmarkFoldersForNugget = async (req: Request, res: Response) =
 
     res.json({ folderIds });
   } catch (error: any) {
-    console.error('[BookmarkFolders] Get bookmark folders error:', error);
+    // Audit Phase-1 Fix: Use structured logging and Sentry capture
+    const requestLogger = createRequestLogger(req.id || 'unknown', (req as any)?.user?.userId, req.path);
+    requestLogger.error({
+      msg: '[BookmarkFolders] Get bookmark folders error',
+      error: {
+        message: error.message,
+        stack: error.stack,
+      },
+    });
+    captureException(error instanceof Error ? error : new Error(String(error)), { requestId: req.id, route: req.path });
     res.status(500).json({ message: 'Internal server error' });
   }
 };
@@ -456,7 +555,16 @@ export const addBookmarkToFolders = async (req: Request, res: Response) => {
       skipped: folderIds.length - createdLinks.length
     });
   } catch (error: any) {
-    console.error('[BookmarkFolders] Add bookmark to folders error:', error);
+    // Audit Phase-1 Fix: Use structured logging and Sentry capture
+    const requestLogger = createRequestLogger(req.id || 'unknown', (req as any)?.user?.userId, req.path);
+    requestLogger.error({
+      msg: '[BookmarkFolders] Add bookmark to folders error',
+      error: {
+        message: error.message,
+        stack: error.stack,
+      },
+    });
+    captureException(error instanceof Error ? error : new Error(String(error)), { requestId: req.id, route: req.path });
     res.status(500).json({ message: 'Internal server error' });
   }
 };
@@ -515,13 +623,18 @@ export const removeBookmarkFromFolder = async (req: Request, res: Response) => {
 
     res.status(204).send();
   } catch (error: any) {
-    console.error('[BookmarkFolders] Remove bookmark from folder error:', error);
-    console.error('[BookmarkFolders] Error details:', {
-      message: error.message,
-      stack: error.stack,
+    // Audit Phase-1 Fix: Use structured logging and Sentry capture
+    const requestLogger = createRequestLogger(req.id || 'unknown', (req as any)?.user?.userId, req.path);
+    requestLogger.error({
+      msg: '[BookmarkFolders] Remove bookmark from folder error',
+      error: {
+        message: error.message,
+        stack: error.stack,
+      },
       bookmarkId: req.query.bookmarkId,
-      folderId: req.query.folderId
+      folderId: req.query.folderId,
     });
+    captureException(error instanceof Error ? error : new Error(String(error)), { requestId: req.id, route: req.path });
     res.status(500).json({ 
       message: 'Internal server error',
       error: process.env.NODE_ENV === 'development' ? error.message : undefined

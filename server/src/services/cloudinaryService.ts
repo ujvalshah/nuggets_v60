@@ -1,5 +1,6 @@
 import { v2 as cloudinary } from 'cloudinary';
 import { getEnv } from '../config/envValidation';
+import { getLogger } from '../utils/logger.js';
 
 /**
  * Cloudinary Service
@@ -15,6 +16,7 @@ let isConfigured = false;
 export function initializeCloudinary(): void {
   const env = getEnv();
   
+  // Audit Phase-3 Fix: Graceful degradation - log warning with structured logger when credentials missing, don't fail startup
   // Cloudinary is optional - only initialize if credentials are provided
   if (env.CLOUDINARY_CLOUD_NAME && env.CLOUDINARY_API_KEY && env.CLOUDINARY_API_SECRET) {
     cloudinary.config({
@@ -24,9 +26,16 @@ export function initializeCloudinary(): void {
       secure: true // Always use HTTPS
     });
     isConfigured = true;
-    console.log('[Cloudinary] Initialized successfully');
+    const logger = getLogger();
+    logger.info({ msg: 'Cloudinary initialized successfully', service: 'cloudinary' });
   } else {
-    console.warn('[Cloudinary] Credentials not provided. Media uploads will be disabled.');
+    // Audit Phase-3 Fix: Use structured logger for graceful degradation warning
+    const logger = getLogger();
+    logger.warn({ 
+      msg: 'Cloudinary credentials not provided - media uploads will be disabled',
+      service: 'cloudinary',
+      featureDisabled: 'media_uploads'
+    });
     isConfigured = false;
   }
 }
@@ -209,6 +218,8 @@ export function sanitizeFolderPath(folder: string): string {
 
   return sanitized;
 }
+
+
 
 
 

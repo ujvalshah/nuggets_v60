@@ -5,6 +5,8 @@ import { normalizeDoc, normalizeDocs } from '../utils/db.js';
 import { z } from 'zod';
 import { createExactMatchRegex } from '../utils/escapeRegExp.js';
 import { calculateTagUsageCounts } from '../utils/tagUsageHelpers.js';
+import { createRequestLogger } from '../utils/logger.js';
+import { captureException } from '../utils/sentry.js';
 
 // Validation schemas
 const createTagSchema = z.object({
@@ -129,7 +131,16 @@ export const getTags = async (req: Request, res: Response) => {
       hasMore: page * limit < total
     });
   } catch (error: any) {
-    console.error('[Tags] Get tags error:', error);
+    // Audit Phase-1 Fix: Use structured logging and Sentry capture
+    const requestLogger = createRequestLogger(req.id || 'unknown', (req as any)?.user?.userId, req.path);
+    requestLogger.error({
+      msg: '[Tags] Get tags error',
+      error: {
+        message: error.message,
+        stack: error.stack,
+      },
+    });
+    captureException(error instanceof Error ? error : new Error(String(error)), { requestId: req.id, route: req.path });
     res.status(500).json({ message: 'Internal server error' });
   }
 };
@@ -168,7 +179,16 @@ export const createTag = async (req: Request, res: Response) => {
 
     res.status(201).json(normalizeDoc(newTag));
   } catch (error: any) {
-    console.error('[Tags] Create tag error:', error);
+    // Audit Phase-1 Fix: Use structured logging and Sentry capture
+    const requestLogger = createRequestLogger(req.id || 'unknown', (req as any)?.user?.userId, req.path);
+    requestLogger.error({
+      msg: '[Tags] Create tag error',
+      error: {
+        message: error.message,
+        stack: error.stack,
+      },
+    });
+    captureException(error instanceof Error ? error : new Error(String(error)), { requestId: req.id, route: req.path });
     
     // Handle duplicate key error (MongoDB unique constraint on canonicalName)
     if (error.code === 11000) {
@@ -425,7 +445,21 @@ export const updateTag = async (req: Request, res: Response) => {
               );
               console.log(`[Tags] Updated article ${article._id}:`, updateFields);
             } catch (updateError: any) {
-              console.error(`[Tags] Failed to update article ${article._id}:`, updateError);
+              // Audit Phase-1 Fix: Use structured logging and Sentry capture
+              const requestLogger = createRequestLogger(req.id || 'unknown', (req as any)?.user?.userId, req.path);
+              requestLogger.error({
+                msg: '[Tags] Failed to update article',
+                articleId: article._id.toString(),
+                error: {
+                  message: updateError.message,
+                  stack: updateError.stack,
+                },
+              });
+              captureException(updateError instanceof Error ? updateError : new Error(String(updateError)), {
+                requestId: req.id,
+                route: req.path,
+                articleId: article._id.toString(),
+              });
               // Continue with other articles even if one fails
             }
           }
@@ -440,14 +474,35 @@ export const updateTag = async (req: Request, res: Response) => {
         });
       } catch (articleUpdateError: any) {
         // Log error but don't fail the tag rename - tag update succeeded
-        console.error('[Tags] Error updating articles with new tag name:', articleUpdateError);
+        // Audit Phase-1 Fix: Use structured logging and Sentry capture
+        const requestLogger = createRequestLogger(req.id || 'unknown', (req as any)?.user?.userId, req.path);
+        requestLogger.error({
+          msg: '[Tags] Error updating articles with new tag name',
+          error: {
+            message: articleUpdateError.message,
+            stack: articleUpdateError.stack,
+          },
+        });
+        captureException(articleUpdateError instanceof Error ? articleUpdateError : new Error(String(articleUpdateError)), {
+          requestId: req.id,
+          route: req.path,
+        });
         // Still return success for tag rename, but log the article update failure
       }
     }
     
     res.json(normalizedTag);
   } catch (error: any) {
-    console.error('[Tags] Update tag error:', error);
+    // Audit Phase-1 Fix: Use structured logging and Sentry capture
+    const requestLogger = createRequestLogger(req.id || 'unknown', (req as any)?.user?.userId, req.path);
+    requestLogger.error({
+      msg: '[Tags] Update tag error',
+      error: {
+        message: error.message,
+        stack: error.stack,
+      },
+    });
+    captureException(error instanceof Error ? error : new Error(String(error)), { requestId: req.id, route: req.path });
     
     // Handle duplicate key error
     if (error.code === 11000) {
@@ -480,7 +535,16 @@ export const deleteTag = async (req: Request, res: Response) => {
     
     res.status(204).send();
   } catch (error: any) {
-    console.error('[Tags] Delete tag error:', error);
+    // Audit Phase-1 Fix: Use structured logging and Sentry capture
+    const requestLogger = createRequestLogger(req.id || 'unknown', (req as any)?.user?.userId, req.path);
+    requestLogger.error({
+      msg: '[Tags] Delete tag error',
+      error: {
+        message: error.message,
+        stack: error.stack,
+      },
+    });
+    captureException(error instanceof Error ? error : new Error(String(error)), { requestId: req.id, route: req.path });
     res.status(500).json({ message: 'Internal server error' });
   }
 };

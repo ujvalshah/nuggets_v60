@@ -5,6 +5,8 @@ import { normalizeDoc, normalizeDocs } from '../utils/db.js';
 import { createCollectionSchema, updateCollectionSchema, addEntrySchema, flagEntrySchema } from '../utils/validation.js';
 import { getCommunityCollections, getCommunityCollectionsCount, CollectionQueryFilters } from '../utils/collectionQueryHelpers.js';
 import { createSearchRegex, createExactMatchRegex } from '../utils/escapeRegExp.js';
+import { createRequestLogger } from '../utils/logger.js';
+import { captureException } from '../utils/sentry.js';
 
 export const getCollections = async (req: Request, res: Response) => {
   try {
@@ -51,19 +53,18 @@ export const getCollections = async (req: Request, res: Response) => {
       Collection.countDocuments(query)
     ]);
     
-    // Validate entries against existing articles and set validEntriesCount
-    // This ensures counts are accurate even if entries contain stale references
-    const allArticleIds = new Set(
-      (await Article.find({}, { _id: 1 }).lean()).map(a => a._id.toString())
-    );
-    
+    // Audit Phase-1 Fix: Replace "load all Article IDs" with exists() checks to avoid memory exhaustion
     // Process collections to validate entries and set validEntriesCount
     const validatedCollections = await Promise.all(
       collections.map(async (collection) => {
-        // Filter out entries referencing non-existent articles
-        const validEntries = collection.entries.filter(entry => 
-          allArticleIds.has(entry.articleId)
+        // Validate each entry individually using exists() instead of loading all article IDs
+        const entryValidationResults = await Promise.all(
+          collection.entries.map(async (entry) => {
+            const exists = await Article.exists({ _id: entry.articleId });
+            return exists ? entry : null;
+          })
         );
+        const validEntries = entryValidationResults.filter((entry): entry is typeof entry & {} => entry !== null);
         
         const validCount = validEntries.length;
         
@@ -98,7 +99,16 @@ export const getCollections = async (req: Request, res: Response) => {
       hasMore: page * limit < total
     });
   } catch (error: any) {
-    console.error('[Collections] Get collections error:', error);
+    // Audit Phase-1 Fix: Use structured logging and Sentry capture
+    const requestLogger = createRequestLogger(req.id || 'unknown', (req as any)?.user?.userId, req.path);
+    requestLogger.error({
+      msg: '[Collections] Get collections error',
+      error: {
+        message: error.message,
+        stack: error.stack,
+      },
+    });
+    captureException(error instanceof Error ? error : new Error(String(error)), { requestId: req.id, route: req.path });
     res.status(500).json({ message: 'Internal server error' });
   }
 };
@@ -108,15 +118,15 @@ export const getCollectionById = async (req: Request, res: Response) => {
     const collection = await Collection.findById(req.params.id).lean();
     if (!collection) return res.status(404).json({ message: 'Collection not found' });
     
-    // Validate entries against existing articles and set validEntriesCount
-    const allArticleIds = new Set(
-      (await Article.find({}, { _id: 1 }).lean()).map(a => a._id.toString())
+    // Audit Phase-1 Fix: Replace "load all Article IDs" with exists() checks to avoid memory exhaustion
+    // Validate each entry individually using exists() instead of loading all article IDs
+    const entryValidationResults = await Promise.all(
+      collection.entries.map(async (entry) => {
+        const exists = await Article.exists({ _id: entry.articleId });
+        return exists ? entry : null;
+      })
     );
-    
-    // Filter out entries referencing non-existent articles
-    const validEntries = collection.entries.filter(entry => 
-      allArticleIds.has(entry.articleId)
-    );
+    const validEntries = entryValidationResults.filter((entry): entry is typeof entry & {} => entry !== null);
     
     const validCount = validEntries.length;
     
@@ -140,7 +150,16 @@ export const getCollectionById = async (req: Request, res: Response) => {
     
     res.json(normalizeDoc(collection));
   } catch (error: any) {
-    console.error('[Collections] Get collection by ID error:', error);
+    // Audit Phase-1 Fix: Use structured logging and Sentry capture
+    const requestLogger = createRequestLogger(req.id || 'unknown', (req as any)?.user?.userId, req.path);
+    requestLogger.error({
+      msg: '[Collections] Get collection by ID error',
+      error: {
+        message: error.message,
+        stack: error.stack,
+      },
+    });
+    captureException(error instanceof Error ? error : new Error(String(error)), { requestId: req.id, route: req.path });
     res.status(500).json({ message: 'Internal server error' });
   }
 };
@@ -192,7 +211,16 @@ export const createCollection = async (req: Request, res: Response) => {
     
     res.status(201).json(normalizeDoc(newCollection));
   } catch (error: any) {
-    console.error('[Collections] Create collection error:', error);
+    // Audit Phase-1 Fix: Use structured logging and Sentry capture
+    const requestLogger = createRequestLogger(req.id || 'unknown', (req as any)?.user?.userId, req.path);
+    requestLogger.error({
+      msg: '[Collections] Create collection error',
+      error: {
+        message: error.message,
+        stack: error.stack,
+      },
+    });
+    captureException(error instanceof Error ? error : new Error(String(error)), { requestId: req.id, route: req.path });
     
     // Handle duplicate key error (MongoDB unique constraint on canonicalName)
     if (error.code === 11000) {
@@ -260,7 +288,16 @@ export const updateCollection = async (req: Request, res: Response) => {
     if (!collection) return res.status(404).json({ message: 'Collection not found' });
     res.json(normalizeDoc(collection));
   } catch (error: any) {
-    console.error('[Collections] Update collection error:', error);
+    // Audit Phase-1 Fix: Use structured logging and Sentry capture
+    const requestLogger = createRequestLogger(req.id || 'unknown', (req as any)?.user?.userId, req.path);
+    requestLogger.error({
+      msg: '[Collections] Update collection error',
+      error: {
+        message: error.message,
+        stack: error.stack,
+      },
+    });
+    captureException(error instanceof Error ? error : new Error(String(error)), { requestId: req.id, route: req.path });
     
     // Handle duplicate key error
     if (error.code === 11000) {
@@ -277,7 +314,16 @@ export const deleteCollection = async (req: Request, res: Response) => {
     if (!collection) return res.status(404).json({ message: 'Collection not found' });
     res.status(204).send();
   } catch (error: any) {
-    console.error('[Collections] Delete collection error:', error);
+    // Audit Phase-1 Fix: Use structured logging and Sentry capture
+    const requestLogger = createRequestLogger(req.id || 'unknown', (req as any)?.user?.userId, req.path);
+    requestLogger.error({
+      msg: '[Collections] Delete collection error',
+      error: {
+        message: error.message,
+        stack: error.stack,
+      },
+    });
+    captureException(error instanceof Error ? error : new Error(String(error)), { requestId: req.id, route: req.path });
     res.status(500).json({ message: 'Internal server error' });
   }
 };
@@ -294,6 +340,14 @@ export const addEntry = async (req: Request, res: Response) => {
     }
 
     const { articleId, userId } = validationResult.data;
+    
+    // Audit Phase-2 Fix: Validate article exists before adding to collection
+    const articleExists = await Article.exists({ _id: articleId });
+    if (!articleExists) {
+      return res.status(400).json({ 
+        message: `Article ${articleId} does not exist` 
+      });
+    }
     
     // Use findOneAndUpdate with $addToSet to atomically add entry if it doesn't exist
     // $addToSet prevents duplicates based on the entire object match
@@ -349,7 +403,16 @@ export const addEntry = async (req: Request, res: Response) => {
 
     res.json(normalizeDoc(collection));
   } catch (error: any) {
-    console.error('[Collections] Add entry error:', error);
+    // Audit Phase-1 Fix: Use structured logging and Sentry capture
+    const requestLogger = createRequestLogger(req.id || 'unknown', (req as any)?.user?.userId, req.path);
+    requestLogger.error({
+      msg: '[Collections] Add entry error',
+      error: {
+        message: error.message,
+        stack: error.stack,
+      },
+    });
+    captureException(error instanceof Error ? error : new Error(String(error)), { requestId: req.id, route: req.path });
     res.status(500).json({ message: 'Internal server error' });
   }
 };
@@ -396,7 +459,16 @@ export const removeEntry = async (req: Request, res: Response) => {
 
     res.json(normalizeDoc(collection));
   } catch (error: any) {
-    console.error('[Collections] Remove entry error:', error);
+    // Audit Phase-1 Fix: Use structured logging and Sentry capture
+    const requestLogger = createRequestLogger(req.id || 'unknown', (req as any)?.user?.userId, req.path);
+    requestLogger.error({
+      msg: '[Collections] Remove entry error',
+      error: {
+        message: error.message,
+        stack: error.stack,
+      },
+    });
+    captureException(error instanceof Error ? error : new Error(String(error)), { requestId: req.id, route: req.path });
     res.status(500).json({ message: 'Internal server error' });
   }
 };
@@ -431,7 +503,16 @@ export const flagEntry = async (req: Request, res: Response) => {
 
     res.json(normalizeDoc(collection));
   } catch (error: any) {
-    console.error('[Collections] Flag entry error:', error);
+    // Audit Phase-1 Fix: Use structured logging and Sentry capture
+    const requestLogger = createRequestLogger(req.id || 'unknown', (req as any)?.user?.userId, req.path);
+    requestLogger.error({
+      msg: '[Collections] Flag entry error',
+      error: {
+        message: error.message,
+        stack: error.stack,
+      },
+    });
+    captureException(error instanceof Error ? error : new Error(String(error)), { requestId: req.id, route: req.path });
     res.status(500).json({ message: 'Internal server error' });
   }
 };
@@ -459,7 +540,16 @@ export const followCollection = async (req: Request, res: Response) => {
 
     res.json(normalizeDoc(collection));
   } catch (error: any) {
-    console.error('[Collections] Follow collection error:', error);
+    // Audit Phase-1 Fix: Use structured logging and Sentry capture
+    const requestLogger = createRequestLogger(req.id || 'unknown', (req as any)?.user?.userId, req.path);
+    requestLogger.error({
+      msg: '[Collections] Follow collection error',
+      error: {
+        message: error.message,
+        stack: error.stack,
+      },
+    });
+    captureException(error instanceof Error ? error : new Error(String(error)), { requestId: req.id, route: req.path });
     res.status(500).json({ message: 'Internal server error' });
   }
 };
@@ -486,7 +576,16 @@ export const unfollowCollection = async (req: Request, res: Response) => {
 
     res.json(normalizeDoc(collection));
   } catch (error: any) {
-    console.error('[Collections] Unfollow collection error:', error);
+    // Audit Phase-1 Fix: Use structured logging and Sentry capture
+    const requestLogger = createRequestLogger(req.id || 'unknown', (req as any)?.user?.userId, req.path);
+    requestLogger.error({
+      msg: '[Collections] Unfollow collection error',
+      error: {
+        message: error.message,
+        stack: error.stack,
+      },
+    });
+    captureException(error instanceof Error ? error : new Error(String(error)), { requestId: req.id, route: req.path });
     res.status(500).json({ message: 'Internal server error' });
   }
 };

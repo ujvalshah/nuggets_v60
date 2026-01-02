@@ -9,6 +9,7 @@
 
 import { Request, Response } from 'express';
 import { GoogleGenAI, Type } from "@google/genai";
+import { z } from 'zod';
 import { 
   extractNuggetIntelligence, 
   isGeminiConfigured, 
@@ -20,9 +21,43 @@ import {
   NuggetIntelligence
 } from '../services/geminiService.js';
 import { Article } from '../models/Article.js';
+import { createRequestLogger } from '../utils/logger.js';
+import { captureException } from '../utils/sentry.js';
+import { getLogger } from '../utils/logger.js';
 
 // Initialize Gemini Client for legacy endpoints
 const genAI = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+
+// Audit Phase-1 Fix: Zod validation schemas for request bodies
+const processYouTubeSchema = z.object({
+  videoUrl: z.string().url('Invalid YouTube URL').refine(
+    (url) => {
+      try {
+        const parsed = new URL(url);
+        const hostname = parsed.hostname.toLowerCase();
+        return hostname.includes('youtube.com') || hostname.includes('youtu.be');
+      } catch {
+        return false;
+      }
+    },
+    'Must be a YouTube URL'
+  )
+});
+
+const extractIntelligenceSchema = z.object({
+  videoUrl: z.string().url('Invalid YouTube URL').refine(
+    (url) => {
+      try {
+        const parsed = new URL(url);
+        const hostname = parsed.hostname.toLowerCase();
+        return hostname.includes('youtube.com') || hostname.includes('youtu.be');
+      } catch {
+        return false;
+      }
+    },
+    'Must be a YouTube URL'
+  )
+});
 
 // ============================================================================
 // CACHE-FIRST LOGIC
@@ -87,7 +122,15 @@ async function getCachedIntelligence(videoId: string): Promise<{ article: any; i
     return { article: cachedArticle, intelligence: cachedIntelligence };
 
   } catch (error) {
-    console.error('[AI] Cache lookup error:', error);
+    // Audit Phase-1 Fix: Use structured logging instead of console.error
+    const logger = getLogger();
+    logger.error({
+      msg: '[AI] Cache lookup error',
+      error: {
+        message: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      },
+    });
     return null; // On error, proceed with API call
   }
 }
@@ -174,28 +217,20 @@ function extractTags(intel: NuggetIntelligence): string[] {
  * Requires authentication (uses req.user for authorId)
  */
 export const processYouTube = async (req: Request, res: Response) => {
-  const { videoUrl } = req.body;
-  const user = (req as any).user;
-
-  if (!videoUrl) {
-    return res.status(400).json({ message: 'videoUrl is required' });
+  // Audit Phase-1 Fix: Zod validation for request body
+  const validationResult = processYouTubeSchema.safeParse(req.body);
+  if (!validationResult.success) {
+    return res.status(400).json({ 
+      message: 'Validation failed', 
+      errors: validationResult.error.errors 
+    });
   }
+
+  const { videoUrl } = validationResult.data;
+  const user = (req as any).user;
 
   if (!user?.id) {
     return res.status(401).json({ message: 'Authentication required' });
-  }
-
-  // Validate it's a YouTube URL
-  try {
-    const url = new URL(videoUrl);
-    const hostname = url.hostname.toLowerCase();
-    const isYouTube = hostname.includes('youtube.com') || hostname.includes('youtu.be');
-    
-    if (!isYouTube) {
-      return res.status(400).json({ message: 'Only YouTube URLs are supported' });
-    }
-  } catch {
-    return res.status(400).json({ message: 'Invalid URL format' });
   }
 
   // Check configuration
@@ -286,7 +321,16 @@ export const processYouTube = async (req: Request, res: Response) => {
 
   } catch (error: unknown) {
     const err = error as Error;
-    console.error("[AI] Process YouTube Error:", err);
+    // Audit Phase-1 Fix: Use structured logging and Sentry capture
+    const requestLogger = createRequestLogger(req.id || 'unknown', (req as any)?.user?.id, req.path);
+    requestLogger.error({
+      msg: '[AI] Process YouTube error',
+      error: {
+        message: err.message,
+        stack: err.stack,
+      },
+    });
+    captureException(err, { requestId: req.id, route: req.path });
     
     const message = err.message || 'Failed to process YouTube video';
     const status = message.includes('exhausted') || message.includes('rate limit') || message.includes('429') ? 429 : 500;
@@ -311,24 +355,16 @@ export const processYouTube = async (req: Request, res: Response) => {
  * Does NOT save - use /process-youtube for save behavior.
  */
 export const extractIntelligence = async (req: Request, res: Response) => {
-  const { videoUrl } = req.body;
-
-  if (!videoUrl) {
-    return res.status(400).json({ message: 'videoUrl is required' });
+  // Audit Phase-1 Fix: Zod validation for request body
+  const validationResult = extractIntelligenceSchema.safeParse(req.body);
+  if (!validationResult.success) {
+    return res.status(400).json({ 
+      message: 'Validation failed', 
+      errors: validationResult.error.errors 
+    });
   }
 
-  // Validate it's a YouTube URL
-  try {
-    const url = new URL(videoUrl);
-    const hostname = url.hostname.toLowerCase();
-    const isYouTube = hostname.includes('youtube.com') || hostname.includes('youtu.be');
-    
-    if (!isYouTube) {
-      return res.status(400).json({ message: 'Only YouTube URLs are supported' });
-    }
-  } catch {
-    return res.status(400).json({ message: 'Invalid URL format' });
-  }
+  const { videoUrl } = validationResult.data;
 
   // Check configuration
   if (!isGeminiConfigured()) {
@@ -377,7 +413,16 @@ export const extractIntelligence = async (req: Request, res: Response) => {
 
   } catch (error: unknown) {
     const err = error as Error;
-    console.error("[AI] Intelligence Extraction Error:", err);
+    // Audit Phase-1 Fix: Use structured logging and Sentry capture
+    const requestLogger = createRequestLogger(req.id || 'unknown', (req as any)?.user?.id, req.path);
+    requestLogger.error({
+      msg: '[AI] Intelligence extraction error',
+      error: {
+        message: err.message,
+        stack: err.stack,
+      },
+    });
+    captureException(err, { requestId: req.id, route: req.path });
     
     const message = err.message || 'Failed to extract intelligence';
     const status = message.includes('exhausted') || message.includes('rate limit') || message.includes('429') ? 429 : 500;
@@ -445,7 +490,16 @@ export const summarizeText = async (req: Request, res: Response) => {
     res.json(JSON.parse(resultText));
 
   } catch (error) {
-    console.error("AI Summarize Error:", error);
+    // Audit Phase-1 Fix: Use structured logging and Sentry capture
+    const requestLogger = createRequestLogger(req.id || 'unknown', (req as any)?.user?.id, req.path);
+    requestLogger.error({
+      msg: '[AI] Summarize error',
+      error: {
+        message: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      },
+    });
+    captureException(error instanceof Error ? error : new Error(String(error)), { requestId: req.id, route: req.path });
     res.status(500).json({ message: 'Failed to generate summary' });
   }
 };
@@ -474,7 +528,16 @@ export const generateTakeaways = async (req: Request, res: Response) => {
 
     res.json({ takeaway: response.text });
   } catch (error) {
-    console.error("AI Takeaways Error:", error);
+    // Audit Phase-1 Fix: Use structured logging and Sentry capture
+    const requestLogger = createRequestLogger(req.id || 'unknown', (req as any)?.user?.id, req.path);
+    requestLogger.error({
+      msg: '[AI] Takeaways error',
+      error: {
+        message: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      },
+    });
+    captureException(error instanceof Error ? error : new Error(String(error)), { requestId: req.id, route: req.path });
     res.status(500).json({ message: 'Failed to generate takeaways' });
   }
 };
@@ -493,7 +556,16 @@ export const getKeyStatusController = async (_req: Request, res: Response) => {
     res.json(keyStatus);
   } catch (error: unknown) {
     const err = error as Error;
-    console.error("[AI] Key Status Error:", err);
+    // Audit Phase-1 Fix: Use structured logging and Sentry capture
+    const requestLogger = createRequestLogger(req.id || 'unknown', undefined, req.path);
+    requestLogger.error({
+      msg: '[AI] Key status error',
+      error: {
+        message: err.message,
+        stack: err.stack,
+      },
+    });
+    captureException(err, { requestId: req.id, route: req.path });
     res.status(500).json({ message: 'Failed to get key status' });
   }
 };
@@ -513,7 +585,16 @@ export const resetKeysController = async (_req: Request, res: Response) => {
     });
   } catch (error: unknown) {
     const err = error as Error;
-    console.error("[AI] Reset Keys Error:", err);
+    // Audit Phase-1 Fix: Use structured logging and Sentry capture
+    const requestLogger = createRequestLogger(req.id || 'unknown', undefined, req.path);
+    requestLogger.error({
+      msg: '[AI] Reset keys error',
+      error: {
+        message: err.message,
+        stack: err.stack,
+      },
+    });
+    captureException(err, { requestId: req.id, route: req.path });
     res.status(500).json({ message: 'Failed to reset keys' });
   }
 };

@@ -245,3 +245,5 @@ The critical scroll performance issues have been resolved by:
 
 The scrollbar should now be stable and smooth, with no console violations.
 
+
+

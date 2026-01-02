@@ -9,6 +9,8 @@ import { Article } from '../models/Article.js';
 import { Collection } from '../models/Collection.js';
 import { User } from '../models/User.js';
 import mongoose from 'mongoose';
+import { createRequestLogger } from '../utils/logger.js';
+import { captureException } from '../utils/sentry.js';
 
 // Validation schemas
 const createReportSchema = z.object({
@@ -69,7 +71,16 @@ export const getReports = async (req: Request, res: Response) => {
       hasMore: page * limit < total
     });
   } catch (error: any) {
-    console.error('[Moderation] Get reports error:', error);
+    // Audit Phase-1 Fix: Use structured logging and Sentry capture
+    const requestLogger = createRequestLogger(req.id || 'unknown', (req as any)?.user?.userId, req.path);
+    requestLogger.error({
+      msg: '[Moderation] Get reports error',
+      error: {
+        message: error.message,
+        stack: error.stack,
+      },
+    });
+    captureException(error instanceof Error ? error : new Error(String(error)), { requestId: req.id, route: req.path });
     res.status(500).json({ message: 'Internal server error' });
   }
 };
@@ -103,7 +114,16 @@ export const createReport = async (req: Request, res: Response) => {
     
     res.status(201).json(normalizeDoc(newReport));
   } catch (error: any) {
-    console.error('[Moderation] Create report error:', error);
+    // Audit Phase-1 Fix: Use structured logging and Sentry capture
+    const requestLogger = createRequestLogger(req.id || 'unknown', (req as any)?.user?.userId, req.path);
+    requestLogger.error({
+      msg: '[Moderation] Create report error',
+      error: {
+        message: error.message,
+        stack: error.stack,
+      },
+    });
+    captureException(error instanceof Error ? error : new Error(String(error)), { requestId: req.id, route: req.path });
     res.status(500).json({ message: 'Internal server error' });
   }
 };
@@ -167,7 +187,16 @@ export const resolveReport = async (req: AdminRequest, res: Response) => {
 
     res.json(normalizeDoc(report));
   } catch (error: any) {
-    console.error('[Moderation] Resolve report error:', error);
+    // Audit Phase-1 Fix: Use structured logging and Sentry capture
+    const requestLogger = createRequestLogger(req.id || 'unknown', (req as any)?.user?.userId, req.path);
+    requestLogger.error({
+      msg: '[Moderation] Resolve report error',
+      error: {
+        message: error.message,
+        stack: error.stack,
+      },
+    });
+    captureException(error instanceof Error ? error : new Error(String(error)), { requestId: req.id, route: req.path });
     res.status(500).json({ message: 'Internal server error' });
   }
 };
@@ -231,7 +260,16 @@ export const dismissReport = async (req: AdminRequest, res: Response) => {
 
     res.json(normalizeDoc(report));
   } catch (error: any) {
-    console.error('[Moderation] Dismiss report error:', error);
+    // Audit Phase-1 Fix: Use structured logging and Sentry capture
+    const requestLogger = createRequestLogger(req.id || 'unknown', (req as any)?.user?.userId, req.path);
+    requestLogger.error({
+      msg: '[Moderation] Dismiss report error',
+      error: {
+        message: error.message,
+        stack: error.stack,
+      },
+    });
+    captureException(error instanceof Error ? error : new Error(String(error)), { requestId: req.id, route: req.path });
     res.status(500).json({ message: 'Internal server error' });
   }
 };
@@ -283,7 +321,23 @@ export const getReportedContent = async (req: AdminRequest, res: Response) => {
 
       exists = content !== null;
     } catch (error: any) {
-      console.error(`[Moderation] Error fetching ${targetType} ${targetId}:`, error);
+      // Audit Phase-1 Fix: Use structured logging and Sentry capture
+      const requestLogger = createRequestLogger(req.id || 'unknown', (req as any)?.user?.userId, req.path);
+      requestLogger.error({
+        msg: `[Moderation] Error fetching ${targetType}`,
+        targetId,
+        targetType,
+        error: {
+          message: error.message,
+          stack: error.stack,
+        },
+      });
+      captureException(error instanceof Error ? error : new Error(String(error)), {
+        requestId: req.id,
+        route: req.path,
+        targetId,
+        targetType,
+      });
       // Continue to return error response below
     }
 
@@ -307,7 +361,16 @@ export const getReportedContent = async (req: AdminRequest, res: Response) => {
       targetId
     });
   } catch (error: any) {
-    console.error('[Moderation] Get reported content error:', error);
+    // Audit Phase-1 Fix: Use structured logging and Sentry capture
+    const requestLogger = createRequestLogger(req.id || 'unknown', (req as any)?.user?.userId, req.path);
+    requestLogger.error({
+      msg: '[Moderation] Get reported content error',
+      error: {
+        message: error.message,
+        stack: error.stack,
+      },
+    });
+    captureException(error instanceof Error ? error : new Error(String(error)), { requestId: req.id, route: req.path });
     res.status(500).json({ message: 'Internal server error' });
   }
 };

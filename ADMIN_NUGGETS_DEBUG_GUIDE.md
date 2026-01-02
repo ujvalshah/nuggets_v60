@@ -94,3 +94,5 @@ When there's an error, you'll see:
 4. Check backend server logs
 
 The enhanced error logging will help identify the exact issue.
+
+

@@ -16,6 +16,7 @@
 import { Router } from 'express';
 import * as aiController from '../controllers/aiController.js';
 import { authenticateToken } from '../middleware/authenticateToken.js';
+import { aiLimiter } from '../middleware/rateLimiter.js';
 
 const router = Router();
 
@@ -32,16 +33,20 @@ const router = Router();
  * 3. If not found, call Gemini and save as 'ai-draft'
  * 
  * Requires authentication.
+ * 
+ * Audit Phase-1 Fix: Rate limited to prevent API quota exhaustion
  */
-router.post('/process-youtube', authenticateToken, aiController.processYouTube);
+router.post('/process-youtube', authenticateToken, aiLimiter, aiController.processYouTube);
 
 /**
  * POST /api/ai/extract-intelligence
  * 
  * Extracts NuggetIntelligence using native multimodal (Gemini watches video)
  * CACHE-FIRST: Checks database before calling Gemini API.
+ * 
+ * Audit Phase-1 Fix: Rate limited to prevent API quota exhaustion
  */
-router.post('/extract-intelligence', aiController.extractIntelligence);
+router.post('/extract-intelligence', aiLimiter, aiController.extractIntelligence);
 
 // ============================================================================
 // LEGACY ENDPOINTS (Backward Compatibility)
@@ -82,6 +87,8 @@ router.get('/admin/key-status', aiController.getKeyStatusController);
 router.post('/admin/reset-keys', aiController.resetKeysController);
 
 export default router;
+
+
 
 
 

@@ -68,3 +68,28 @@ export const unfurlLimiter = rateLimit({
     });
   }
 });
+
+/**
+ * Rate limiter for AI endpoints
+ * Prevents Gemini API quota exhaustion and DoS attacks
+ * 10 requests per minute per IP
+ * 
+ * Audit Phase-1 Fix: Added to protect expensive AI operations
+ */
+export const aiLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 10, // Limit each IP to 10 requests per minute
+  message: 'Too many AI requests. Please try again later.',
+  standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
+  legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+  handler: (req, res) => {
+    const resetTime = (req as any).rateLimit?.resetTime || Date.now() + 60000;
+    const retryAfter = Math.ceil((resetTime - Date.now()) / 1000);
+    
+    res.status(429).json({
+      error: 'Rate limit exceeded',
+      message: 'Too many AI requests. Please try again later.',
+      retryAfter: Math.max(1, retryAfter),
+    });
+  }
+});

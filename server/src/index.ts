@@ -84,7 +84,21 @@ const corsOptions = {
   origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
     // In production, only allow FRONTEND_URL
     if (env.NODE_ENV === 'production') {
-      if (!origin || origin !== env.FRONTEND_URL) {
+      if (!origin) {
+        // Audit Phase-2 Fix: Log missing origin header in production
+        const logger = getLogger();
+        logger.warn({ msg: 'CORS: Missing origin header' });
+        callback(new Error('Origin header required'));
+        return;
+      }
+      if (origin !== env.FRONTEND_URL) {
+        // Audit Phase-2 Fix: Log origin mismatch with structured logging
+        const logger = getLogger();
+        logger.warn({ 
+          msg: 'CORS: Origin mismatch', 
+          origin, 
+          expected: env.FRONTEND_URL
+        });
         callback(new Error('Not allowed by CORS policy'));
         return;
       }
@@ -95,6 +109,13 @@ const corsOptions = {
       if (!origin || allowedOrigins.includes(origin)) {
         callback(null, true);
       } else {
+        // Audit Phase-2 Fix: Log CORS rejection in development
+        const logger = getLogger();
+        logger.warn({ 
+          msg: 'CORS: Origin not allowed in development', 
+          origin,
+          allowedOrigins
+        });
         callback(new Error('Not allowed by CORS policy'));
       }
     }
@@ -141,7 +162,7 @@ if (env.NODE_ENV === 'development') {
 app.use(slowRequestMiddleware);
 
 // Request Timeout Middleware - Apply to all routes
-import { standardTimeout } from './middleware/timeout.js';
+import { standardTimeout, longOperationTimeout } from './middleware/timeout.js';
 app.use(standardTimeout);
 
 // API Routes
@@ -151,10 +172,12 @@ app.use('/api/users', usersRouter);
 app.use('/api/collections', collectionsRouter);
 app.use('/api/categories', tagsRouter);
 app.use('/api/legal', legalRouter);
-app.use('/api/ai', aiRouter);
+// Audit Phase-1 Fix: Apply longOperationTimeout to AI routes (60s for AI processing)
+app.use('/api/ai', longOperationTimeout, aiRouter);
 app.use('/api/feedback', feedbackRouter);
 app.use('/api/moderation', moderationRouter);
-app.use('/api/unfurl', unfurlRouter);
+// Audit Phase-1 Fix: Apply longOperationTimeout to unfurl routes (60s for metadata fetching)
+app.use('/api/unfurl', longOperationTimeout, unfurlRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api/bookmark-folders', bookmarkFoldersRouter);
 app.use('/api/batch', batchRouter);
@@ -162,9 +185,37 @@ app.use('/api/media', mediaRouter);
 
 // Health Check - Enhanced to verify DB connectivity
 app.get('/api/health', async (req, res) => {
+  // Audit Phase-3 Fix: Add debug logging around health checks for observability
+  const requestLogger = createRequestLogger(req.id || 'unknown', undefined, '/api/health');
+  requestLogger.debug({ msg: 'Health check requested' });
+  
   try {
     const dbConnected = isMongoConnected();
     const dbStatus = dbConnected ? 'connected' : 'disconnected';
+    
+    // Audit Phase-2 Fix: Check Redis health if configured (optional service)
+    let redisHealthy = true; // Default to true if Redis not configured
+    if (process.env.REDIS_URL) {
+      try {
+        // Use dynamic import to avoid requiring redis package if not installed
+        const { createClient } = await import('redis');
+        const client = createClient({ url: process.env.REDIS_URL });
+        await client.connect();
+        await client.ping();
+        await client.quit();
+        redisHealthy = true;
+      } catch (redisError: any) {
+        redisHealthy = false;
+        // Log but don't fail health check - Redis is optional
+        const logger = getLogger();
+        logger.warn({
+          msg: 'Redis health check failed',
+          error: {
+            message: redisError.message,
+          },
+        });
+      }
+    }
     
     // Return 503 if database is not connected (unhealthy)
     if (!dbConnected) {
@@ -172,28 +223,43 @@ app.get('/api/health', async (req, res) => {
         status: 'unhealthy',
         timestamp: new Date().toISOString(),
         database: dbStatus,
+        redis: redisHealthy ? 'healthy' : 'unhealthy',
         uptime: Math.floor(process.uptime()),
         environment: env.NODE_ENV || 'development',
         dependencies: {
           database: {
             status: 'down',
             message: 'MongoDB connection is not available'
+          },
+          redis: {
+            status: redisHealthy ? 'up' : 'down',
+            message: redisHealthy ? 'Redis connection is healthy' : 'Redis connection failed'
           }
         }
       });
     }
     
     // Healthy response
+    requestLogger.debug({ 
+      msg: 'Health check passed', 
+      database: dbStatus, 
+      redis: redisHealthy ? 'healthy' : 'unhealthy' 
+    });
     res.json({
       status: 'ok',
       timestamp: new Date().toISOString(),
       database: dbStatus,
+      redis: redisHealthy ? 'healthy' : 'unhealthy',
       uptime: Math.floor(process.uptime()),
       environment: env.NODE_ENV || 'development',
       dependencies: {
         database: {
           status: 'up',
           message: 'MongoDB connection is healthy'
+        },
+        redis: {
+          status: redisHealthy ? 'up' : 'down',
+          message: redisHealthy ? 'Redis connection is healthy' : (process.env.REDIS_URL ? 'Redis connection failed' : 'Redis not configured')
         }
       }
     });
@@ -203,9 +269,14 @@ app.get('/api/health', async (req, res) => {
       status: 'unhealthy',
       timestamp: new Date().toISOString(),
       database: 'unknown',
+      redis: 'unknown',
       error: error.message,
       dependencies: {
         database: {
+          status: 'error',
+          message: 'Health check failed'
+        },
+        redis: {
           status: 'error',
           message: 'Health check failed'
         }

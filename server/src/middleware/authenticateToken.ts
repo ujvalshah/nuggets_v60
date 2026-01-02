@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { verifyToken } from '../utils/jwt.js';
+import { createRequestLogger } from '../utils/logger.js';
 
 /**
  * Express middleware to authenticate JWT tokens
@@ -29,6 +30,12 @@ export function authenticateToken(req: Request, res: Response, next: NextFunctio
     next();
   } catch (error: any) {
     if (error.name === 'TokenExpiredError') {
+      // Audit Phase-2 Fix: Log token expiration using request logger
+      const requestLogger = createRequestLogger(req.id || 'unknown', undefined, req.path);
+      requestLogger.warn({
+        msg: 'Token expired',
+        expiredAt: (error as any).expiredAt,
+      });
       return res.status(401).json({ message: 'Token expired' });
     }
     if (error.name === 'JsonWebTokenError') {

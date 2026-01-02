@@ -4,6 +4,8 @@ import { normalizeDoc, normalizeDocs } from '../utils/db.js';
 import { Article } from '../models/Article.js';
 import { updateUserSchema } from '../utils/validation.js';
 import { createSearchRegex } from '../utils/escapeRegExp.js';
+import { createRequestLogger } from '../utils/logger.js';
+import { captureException } from '../utils/sentry.js';
 
 export const getUsers = async (req: Request, res: Response) => {
   try {
@@ -40,7 +42,16 @@ export const getUsers = async (req: Request, res: Response) => {
       hasMore: page * limit < total
     });
   } catch (error: any) {
-    console.error('[Users] Get users error:', error);
+    // Audit Phase-1 Fix: Use structured logging and Sentry capture
+    const requestLogger = createRequestLogger(req.id || 'unknown', (req as any)?.user?.userId, req.path);
+    requestLogger.error({
+      msg: '[Users] Get users error',
+      error: {
+        message: error.message,
+        stack: error.stack,
+      },
+    });
+    captureException(error instanceof Error ? error : new Error(String(error)), { requestId: req.id, route: req.path });
     res.status(500).json({ message: 'Internal server error' });
   }
 };
@@ -51,7 +62,16 @@ export const getUserById = async (req: Request, res: Response) => {
     if (!user) return res.status(404).json({ message: 'User not found' });
     res.json(normalizeDoc(user));
   } catch (error: any) {
-    console.error('[Users] Get user by ID error:', error);
+    // Audit Phase-1 Fix: Use structured logging and Sentry capture
+    const requestLogger = createRequestLogger(req.id || 'unknown', (req as any)?.user?.userId, req.path);
+    requestLogger.error({
+      msg: '[Users] Get user by ID error',
+      error: {
+        message: error.message,
+        stack: error.stack,
+      },
+    });
+    captureException(error instanceof Error ? error : new Error(String(error)), { requestId: req.id, route: req.path });
     res.status(500).json({ message: 'Internal server error' });
   }
 };
@@ -187,7 +207,16 @@ export const updateUser = async (req: Request, res: Response) => {
     if (!user) return res.status(404).json({ message: 'User not found' });
     res.json(normalizeDoc(user));
   } catch (error: any) {
-    console.error('[Users] Update user error:', error);
+    // Audit Phase-1 Fix: Use structured logging and Sentry capture
+    const requestLogger = createRequestLogger(req.id || 'unknown', (req as any)?.user?.userId, req.path);
+    requestLogger.error({
+      msg: '[Users] Update user error',
+      error: {
+        message: error.message,
+        stack: error.stack,
+      },
+    });
+    captureException(error instanceof Error ? error : new Error(String(error)), { requestId: req.id, route: req.path });
     
     // Handle duplicate key error (MongoDB unique constraint)
     if (error.code === 11000) {
@@ -219,7 +248,16 @@ export const deleteUser = async (req: Request, res: Response) => {
     if (!user) return res.status(404).json({ message: 'User not found' });
     res.status(204).send();
   } catch (error: any) {
-    console.error('[Users] Delete user error:', error);
+    // Audit Phase-1 Fix: Use structured logging and Sentry capture
+    const requestLogger = createRequestLogger(req.id || 'unknown', (req as any)?.user?.userId, req.path);
+    requestLogger.error({
+      msg: '[Users] Delete user error',
+      error: {
+        message: error.message,
+        stack: error.stack,
+      },
+    });
+    captureException(error instanceof Error ? error : new Error(String(error)), { requestId: req.id, route: req.path });
     res.status(500).json({ message: 'Internal server error' });
   }
 };
@@ -281,7 +319,16 @@ export const getPersonalizedFeed = async (req: Request, res: Response) => {
       newCount 
     });
   } catch (error: any) {
-    console.error('[Users] Get personalized feed error:', error);
+    // Audit Phase-1 Fix: Use structured logging and Sentry capture
+    const requestLogger = createRequestLogger(req.id || 'unknown', (req as any)?.user?.userId, req.path);
+    requestLogger.error({
+      msg: '[Users] Get personalized feed error',
+      error: {
+        message: error.message,
+        stack: error.stack,
+      },
+    });
+    captureException(error instanceof Error ? error : new Error(String(error)), { requestId: req.id, route: req.path });
     res.status(500).json({ message: 'Internal server error' });
   }
 };
