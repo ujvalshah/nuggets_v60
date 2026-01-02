@@ -149,6 +149,7 @@ export const MasonryAtom: React.FC<MasonryAtomProps> = ({
             <MediaBlock
               article={article}
               onCategoryClick={onCategoryClick}
+              onArticleClick={onArticleClick}
             />
           ) : (
             <TextBlock

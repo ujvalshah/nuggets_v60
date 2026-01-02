@@ -13,7 +13,7 @@ import { aiService } from '@/services/aiService';
 import { useToast } from '@/hooks/useToast';
 import { compressImage, isImageFile, formatFileSize } from '@/utils/imageOptimizer';
 import { unfurlUrl } from '@/services/unfurlService';
-import type { NuggetMedia } from '@/types';
+import type { NuggetMedia, MediaType } from '@/types';
 import { formatApiError, getUserFriendlyMessage, logError } from '@/utils/errorHandler';
 import { processNuggetUrl, detectUrlChanges, getPrimaryUrl } from '@/utils/processNuggetUrl';
 import { useMediaUpload } from '@/hooks/useMediaUpload';
@@ -27,6 +27,9 @@ import { ContentEditor } from './CreateNuggetModal/ContentEditor';
 import { UrlInput } from './CreateNuggetModal/UrlInput';
 import { AttachmentManager, FileAttachment } from './CreateNuggetModal/AttachmentManager';
 import { FormFooter } from './CreateNuggetModal/FormFooter';
+import { MasonryMediaToggle } from './CreateNuggetModal/MasonryMediaToggle';
+import { collectMasonryMediaItems, MasonryMediaItem } from '@/utils/masonryMediaHelper';
+import { classifyArticleMedia } from '@/utils/mediaClassifier';
 import type { Article } from '@/types';
 
 interface CreateNuggetModalProps {
@@ -90,6 +93,9 @@ export const CreateNuggetModal: React.FC<CreateNuggetModalProps> = ({ isOpen, on
   
   // Existing images from article (for edit mode)
   const [existingImages, setExistingImages] = useState<string[]>([]);
+  
+  // Masonry media items (for toggle controls)
+  const [masonryMediaItems, setMasonryMediaItems] = useState<MasonryMediaItem[]>([]);
   
   // Media upload hook
   const mediaUpload = useMediaUpload({ purpose: 'nugget' });
@@ -219,6 +225,26 @@ export const CreateNuggetModal: React.FC<CreateNuggetModalProps> = ({ isOpen, on
         }
         
         setExistingImages(allExistingImages);
+        
+        // Initialize Masonry media items from article
+        const mediaItems = collectMasonryMediaItems(initialData);
+        
+        // TEMPORARY: Log loaded media items to verify masonryTitle was loaded
+        console.log('[CreateNuggetModal] Edit mode - Loaded masonry media items:', {
+            articleId: initialData.id,
+            hasMedia: !!initialData.media,
+            mediaMasonryTitle: initialData.media?.masonryTitle,
+            mediaShowInMasonry: initialData.media?.showInMasonry,
+            mediaItemsCount: mediaItems.length,
+            mediaItems: mediaItems.map(item => ({
+                id: item.id,
+                source: item.source,
+                masonryTitle: item.masonryTitle,
+                showInMasonry: item.showInMasonry,
+            })),
+        });
+        
+        setMasonryMediaItems(mediaItems);
         
         initializedFromDataRef.current = initialData.id;
       } else if (mode === 'create') {
@@ -995,6 +1021,157 @@ export const CreateNuggetModal: React.FC<CreateNuggetModalProps> = ({ isOpen, on
   // removeAttachment is now handled by AttachmentManager component
   // CRITICAL: convertFileToBase64 removed - Base64 storage is FORBIDDEN
 
+  // Handle Masonry media toggle
+  const handleMasonryMediaToggle = (itemId: string, showInMasonry: boolean) => {
+    setMasonryMediaItems(prev => 
+      prev.map(item => 
+        item.id === itemId ? { ...item, showInMasonry } : item
+      )
+    );
+  };
+
+  // Handle Masonry tile title change
+  const handleMasonryTitleChange = (itemId: string, title: string) => {
+    setMasonryMediaItems(prev => 
+      prev.map(item => 
+        item.id === itemId ? { ...item, masonryTitle: title || undefined } : item
+      )
+    );
+  };
+
+  /**
+   * ============================================================================
+   * ROOT CAUSE ANALYSIS: Masonry Options Missing in Create Mode
+   * ============================================================================
+   * 
+   * PROBLEM:
+   * - MasonryMediaToggle was conditionally rendered only when mode === 'edit'
+   * - masonryMediaItems was only populated in Edit mode from initialData
+   * - In Create mode, masonryMediaItems remained empty, so options never appeared
+   * 
+   * SOLUTION:
+   * - Populate masonryMediaItems in Create mode from attachments and URLs
+   * - Remove mode === 'edit' condition to show options in both modes
+   * 
+   * CREATE MODE DEFAULT BEHAVIOR:
+   * - Primary media: showInMasonry: true (selected by default), isLocked: false (can be unselected)
+   * - Supporting media: showInMasonry: false (opt-in)
+   * - If user unselects primary media, nugget won't appear in Masonry (no fallback)
+   * 
+   * EDIT MODE BEHAVIOR:
+   * - Respects whatever values are stored in the DB
+   * - Does not override existing showInMasonry values
+   * 
+   * BACKWARD COMPATIBILITY:
+   * - Existing nuggets with showInMasonry: true continue to display normally
+   * - Edit mode preserves existing DB values
+   * ============================================================================
+   */
+
+  // Populate masonryMediaItems in Create mode from attachments and URLs
+  useEffect(() => {
+    // Only populate in Create mode (Edit mode uses collectMasonryMediaItems from initialData)
+    if (mode !== 'create') return;
+
+    const items: MasonryMediaItem[] = [];
+    
+    // Determine primary media using same logic as submission (getPrimaryUrl)
+    // Priority: first non-image URL that should fetch metadata > first URL > first image attachment
+    const imageUrls: string[] = [];
+    const nonImageUrls: string[] = [];
+    
+    // Separate image URLs from non-image URLs
+    for (const url of urls) {
+      const urlType = detectProviderFromUrl(url);
+      if (urlType === 'image') {
+        imageUrls.push(url);
+      } else {
+        nonImageUrls.push(url);
+      }
+    }
+    
+    // Collect image attachments (uploaded files)
+    const imageAttachments = attachments.filter(att => att.type === 'image' && att.secureUrl);
+    
+    // Determine primary media: use getPrimaryUrl for URLs, then fall back to first attachment
+    const primaryUrlFromUrls = getPrimaryUrl(urls);
+    const primaryUrl = primaryUrlFromUrls || imageAttachments[0]?.secureUrl || null;
+    const primaryUrlType = primaryUrl ? detectProviderFromUrl(primaryUrl) : null;
+    
+    // 1. Primary media (SELECTED by default in Create mode, but NOT locked)
+    // CREATE MODE DEFAULT BEHAVIOR:
+    // - Primary media defaults to showInMasonry: true (selected by default)
+    // - Primary media is NOT locked (isLocked: false) - user can unselect it
+    // - If user unselects primary media, nugget won't appear in Masonry (no fallback)
+    // - Supporting media remain opt-in (default to false)
+    if (primaryUrl) {
+      items.push({
+        id: 'primary',
+        type: (primaryUrlType || 'image') as MediaType,
+        url: primaryUrl,
+        thumbnail: primaryUrl,
+        source: 'primary',
+        showInMasonry: true, // Selected by default in Create mode
+        isLocked: false, // NOT locked - user can unselect if they don't want nugget in Masonry
+        masonryTitle: '', // Default empty, user can set
+      });
+    }
+    
+    // 2. Additional image URLs (supporting media)
+    imageUrls.forEach((url, index) => {
+      // Skip if this is the primary media
+      if (url === primaryUrl) return;
+      
+      items.push({
+        id: `url-image-${index}`,
+        type: 'image',
+        url: url,
+        thumbnail: url,
+        source: 'supporting',
+        showInMasonry: false, // Default to false, user can opt-in
+        isLocked: false,
+        masonryTitle: '', // Default empty
+      });
+    });
+    
+    // 3. Additional non-image URLs (supporting media)
+    nonImageUrls.forEach((url, index) => {
+      // Skip if this is the primary media
+      if (url === primaryUrl) return;
+      
+      const urlType = detectProviderFromUrl(url);
+      items.push({
+        id: `url-${urlType}-${index}`,
+        type: urlType as MediaType,
+        url: url,
+        thumbnail: undefined,
+        source: 'supporting',
+        showInMasonry: false, // Default to false, user can opt-in
+        isLocked: false,
+        masonryTitle: '', // Default empty
+      });
+    });
+    
+    // 4. Image attachments (supporting media)
+    imageAttachments.forEach((att, index) => {
+      // Skip if this is the primary media
+      if (att.secureUrl === primaryUrl) return;
+      
+      items.push({
+        id: `attachment-image-${index}`,
+        type: 'image',
+        url: att.secureUrl || att.previewUrl,
+        thumbnail: att.secureUrl || att.previewUrl,
+        source: 'supporting',
+        showInMasonry: false, // Default to false, user can opt-in
+        isLocked: false,
+        masonryTitle: '', // Default empty
+      });
+    });
+    
+    setMasonryMediaItems(items);
+  }, [mode, urls, attachments]);
+
   // --- AI HANDLER ---
   const handleAISummarize = async () => {
     if (!content || content.length < 10) {
@@ -1119,11 +1296,15 @@ export const CreateNuggetModal: React.FC<CreateNuggetModalProps> = ({ isOpen, on
             }
             
             // Prepare update payload with only editable fields
+            // FIX: Include readTime in update payload to ensure it updates when content changes.
+            // This matches create-mode behavior where readTime is calculated and included.
+            // The readTime calculation uses the same formula (200 words per minute) as create mode.
             const updatePayload: Partial<Article> = {
                 title: finalTitle,
                 content: content.trim() || '',
                 categories,
                 visibility,
+                readTime, // Recalculated readTime based on updated content (matches create-mode behavior)
             };
             
             // Admin-only: Custom creation date
@@ -1243,8 +1424,94 @@ export const CreateNuggetModal: React.FC<CreateNuggetModalProps> = ({ isOpen, on
                 updatePayload.images = allImages;
             }
             
+            // Apply showInMasonry flags and masonryTitle from masonryMediaItems state
+            // CRITICAL: Backend only stores media in the 'media' field, not primaryMedia/supportingMedia
+            // We need to map masonryTitle to the actual 'media' field that gets persisted
+            if (masonryMediaItems.length > 0) {
+                // CRITICAL FIX: Update the 'media' field with masonryTitle
+                // The backend Article model only has 'media' field, not primaryMedia/supportingMedia
+                // masonryTitle must be stored in article.media.masonryTitle
+                const primaryItem = masonryMediaItems.find(item => item.source === 'primary');
+                const legacyMediaItem = masonryMediaItems.find(item => item.source === 'legacy-media');
+                
+                // Determine which media item should have masonryTitle
+                // Priority: legacy-media > primary (if legacy-media exists, it's the actual stored media)
+                const mediaItemWithTitle = legacyMediaItem || primaryItem;
+                
+                if (mediaItemWithTitle && initialData.media) {
+                    // Update the media field with masonryTitle and showInMasonry
+                    updatePayload.media = {
+                        ...initialData.media,
+                        showInMasonry: mediaItemWithTitle.showInMasonry,
+                        masonryTitle: mediaItemWithTitle.masonryTitle || undefined, // Persist masonry tile title
+                    };
+                } else if (mediaItemWithTitle && !updatePayload.media && primaryItem) {
+                    // If media doesn't exist yet but we have primary media, create it
+                    // This handles edge cases where primaryMedia exists but media field doesn't
+                    const classified = classifyArticleMedia(initialData);
+                    if (classified.primaryMedia) {
+                        updatePayload.media = {
+                            type: classified.primaryMedia.type,
+                            url: classified.primaryMedia.url,
+                            thumbnail_url: classified.primaryMedia.thumbnail,
+                            aspect_ratio: classified.primaryMedia.aspect_ratio,
+                            previewMetadata: classified.primaryMedia.previewMetadata,
+                            showInMasonry: primaryItem.showInMasonry,
+                            masonryTitle: primaryItem.masonryTitle || undefined,
+                        };
+                    }
+                }
+                
+                // Also update primaryMedia/supportingMedia for frontend consistency
+                // (These are computed fields, but we preserve them for UI state)
+                if (initialData.primaryMedia) {
+                    if (primaryItem) {
+                        updatePayload.primaryMedia = {
+                            ...initialData.primaryMedia,
+                            showInMasonry: primaryItem.showInMasonry,
+                            masonryTitle: primaryItem.masonryTitle || undefined,
+                        };
+                    }
+                }
+                
+                if (initialData.supportingMedia && initialData.supportingMedia.length > 0) {
+                    updatePayload.supportingMedia = initialData.supportingMedia.map((media, index) => {
+                        const item = masonryMediaItems.find(item => item.id === `supporting-${index}`);
+                        if (item) {
+                            return {
+                                ...media,
+                                showInMasonry: item.showInMasonry,
+                                masonryTitle: item.masonryTitle || undefined,
+                            };
+                        }
+                        return media;
+                    });
+                }
+            }
+            
+            // TEMPORARY: Log payload before sending to trace masonryTitle flow
+            console.log('[CreateNuggetModal] Edit mode - Update payload media:', {
+                hasMedia: !!updatePayload.media,
+                mediaMasonryTitle: updatePayload.media?.masonryTitle,
+                mediaShowInMasonry: updatePayload.media?.showInMasonry,
+                masonryItemsCount: masonryMediaItems.length,
+                masonryItems: masonryMediaItems.map(item => ({
+                    id: item.id,
+                    source: item.source,
+                    masonryTitle: item.masonryTitle,
+                    showInMasonry: item.showInMasonry,
+                })),
+            });
+            
             // Call update
             const updatedArticle = await storageService.updateArticle(initialData.id, updatePayload);
+            
+            // TEMPORARY: Log response to verify masonryTitle was saved
+            console.log('[CreateNuggetModal] Edit mode - Updated article media:', {
+                hasMedia: !!updatedArticle?.media,
+                mediaMasonryTitle: updatedArticle?.media?.masonryTitle,
+                mediaShowInMasonry: updatedArticle?.media?.showInMasonry,
+            });
             
             if (!updatedArticle) {
                 throw new Error('Failed to update nugget');
@@ -1453,35 +1720,55 @@ export const CreateNuggetModal: React.FC<CreateNuggetModalProps> = ({ isOpen, on
             // Store multiple URLs in a custom field if supported, or use first URL for media
             // For now, using first URL for media compatibility
             // Also create media object for text nuggets if customDomain is set (for source badge display)
-            media: linkMetadata ? {
-                ...linkMetadata,
-                previewMetadata: linkMetadata.previewMetadata ? {
-                    ...linkMetadata.previewMetadata,
-                    url: linkMetadata.previewMetadata.url || primaryUrl || '',
-                    siteName: customDomain || linkMetadata.previewMetadata.siteName,
-                } : {
-                    url: primaryUrl || '',
-                    title: finalTitle,
-                    siteName: customDomain || undefined,
-                }
-            } : (primaryUrl ? {
-                type: detectProviderFromUrl(primaryUrl),
-                url: primaryUrl,
-                previewMetadata: {
+            // CRITICAL: Apply masonry fields from masonryMediaItems state
+            media: (() => {
+                // Find primary media item from masonryMediaItems
+                const primaryItem = masonryMediaItems.find(item => item.source === 'primary');
+                
+                const baseMedia = linkMetadata ? {
+                    ...linkMetadata,
+                    previewMetadata: linkMetadata.previewMetadata ? {
+                        ...linkMetadata.previewMetadata,
+                        url: linkMetadata.previewMetadata.url || primaryUrl || '',
+                        siteName: customDomain || linkMetadata.previewMetadata.siteName,
+                    } : {
+                        url: primaryUrl || '',
+                        title: finalTitle,
+                        siteName: customDomain || undefined,
+                    }
+                } : (primaryUrl ? {
+                    type: detectProviderFromUrl(primaryUrl),
                     url: primaryUrl,
-                    title: finalTitle,
-                    siteName: customDomain || undefined,
-                }
-            } : (customDomain ? {
-                // For text nuggets with custom domain, create minimal media object for source badge
-                type: 'link' as const,
-                url: `https://${customDomain}`,
-                previewMetadata: {
+                    previewMetadata: {
+                        url: primaryUrl,
+                        title: finalTitle,
+                        siteName: customDomain || undefined,
+                    }
+                } : (customDomain ? {
+                    // For text nuggets with custom domain, create minimal media object for source badge
+                    type: 'link' as const,
                     url: `https://${customDomain}`,
-                    title: finalTitle,
-                    siteName: customDomain,
+                    previewMetadata: {
+                        url: `https://${customDomain}`,
+                        title: finalTitle,
+                        siteName: customDomain,
+                    }
+                } : null));
+                
+                // Apply masonry fields if primary media item exists
+                // CREATE MODE: Primary media defaults to showInMasonry: true (selected by default)
+                // Use value from masonryMediaItems state (user may have unselected it)
+                if (baseMedia && primaryItem) {
+                    return {
+                        ...baseMedia,
+                        // Use value from masonryMediaItems state (defaults to true in Create mode, but user can unselect)
+                        showInMasonry: primaryItem.showInMasonry !== undefined ? primaryItem.showInMasonry : true,
+                        masonryTitle: primaryItem.masonryTitle || undefined,
+                    };
                 }
-            } : null)),
+                
+                return baseMedia;
+            })(),
             source_type: (primaryUrl || imageUrls.length > 0) ? 'link' : 'text',
             // Store additional URLs in content or a notes field if needed
             // For now, we'll append URLs to content if they're not already there
@@ -1924,6 +2211,22 @@ export const CreateNuggetModal: React.FC<CreateNuggetModalProps> = ({ isOpen, on
                     </div>
                     );
                 })()}
+
+                {/* Masonry Media Toggle (Create and Edit Mode) */}
+                {/* 
+                  ROOT CAUSE FIX: Previously only shown in Edit mode due to mode === 'edit' condition.
+                  Now shown in both modes when media items exist. In Create mode, masonryMediaItems
+                  is populated from attachments and URLs via useEffect hook.
+                */}
+                {masonryMediaItems.length > 0 && (
+                  <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
+                    <MasonryMediaToggle
+                      items={masonryMediaItems}
+                      onToggle={handleMasonryMediaToggle}
+                      onTitleChange={handleMasonryTitleChange}
+                    />
+                  </div>
+                )}
 
                 {/* Link Preview */}
                 {(urls.length > 0 || detectedLink) && (() => {

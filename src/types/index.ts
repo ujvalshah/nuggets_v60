@@ -35,6 +35,16 @@ export interface NuggetMedia {
   aspect_ratio?: string;
   filename?: string;
   previewMetadata?: PreviewMetadata;
+  // Masonry layout visibility flag
+  // If true, this media item will appear as an individual tile in Masonry layout
+  // Defaults: primary media → true, all other media → false
+  // Backward compatibility: if missing, treat only primary media as selected
+  showInMasonry?: boolean;
+  // Masonry tile title (optional)
+  // Displayed as hover caption at bottom of tile in Masonry layout
+  // Max 80 characters, single-line, no markdown
+  // Backward compatibility: if missing, no caption is shown
+  masonryTitle?: string;
 }
 
 export interface Engagement {
@@ -100,6 +110,15 @@ export interface PrimaryMedia {
   thumbnail?: string; // Cached thumbnail URL (YouTube thumbnail or image URL)
   aspect_ratio?: string;
   previewMetadata?: PreviewMetadata;
+  // Masonry layout visibility flag
+  // Primary media always shows in Masonry (defaults to true, cannot be deselected)
+  // Backward compatibility: if missing, treat as true (primary media always visible)
+  showInMasonry?: boolean;
+  // Masonry tile title (optional)
+  // Displayed as hover caption at bottom of tile in Masonry layout
+  // Max 80 characters, single-line, no markdown
+  // Backward compatibility: if missing, no caption is shown
+  masonryTitle?: string;
 }
 
 export interface SupportingMediaItem {
@@ -109,6 +128,16 @@ export interface SupportingMediaItem {
   filename?: string;
   title?: string;
   previewMetadata?: PreviewMetadata;
+  // Masonry layout visibility flag
+  // If true, this supporting media item will appear as an individual tile in Masonry layout
+  // Defaults to false (only primary media shows by default)
+  // Backward compatibility: if missing, treat as false (not shown in Masonry)
+  showInMasonry?: boolean;
+  // Masonry tile title (optional)
+  // Displayed as hover caption at bottom of tile in Masonry layout
+  // Max 80 characters, single-line, no markdown
+  // Backward compatibility: if missing, no caption is shown
+  masonryTitle?: string;
 }
 
 export interface Article {
