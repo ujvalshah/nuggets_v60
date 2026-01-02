@@ -198,5 +198,84 @@ body {
   display: block;
 }
 
+/* ============================================
+   Masonry Tile Hover Interaction (Premium Subtle UX)
+   ============================================
+   
+   Applies only to image/media tiles – NOT YouTube thumbnails
+   - Subtle elevation + soft shadow on hover
+   - Very light dim overlay (2-4% max)
+   - Small contextual hover icon fades in (top-right)
+   - Scale: 1.01–1.015 max
+   - Duration: 120–180ms
+   - Easing: ease-out
+   - Disabled on mobile/touch devices
+   ============================================ */
+
+/* Base transition styles for masonry tiles */
+.masonry-tile {
+  transition: transform 0.16s ease-out,
+              box-shadow 0.16s ease-out;
+  position: relative;
+}
+
+/* Hover effects (desktop only - disabled on touch devices) */
+@media (hover: hover) and (pointer: fine) {
+  .masonry-tile:hover {
+    transform: translateY(-2px) scale(1.015);
+    box-shadow: 0 10px 18px rgba(0, 0, 0, 0.08);
+  }
+  
+  /* Dark mode shadow adjustment */
+  .dark .masonry-tile:hover {
+    box-shadow: 0 10px 18px rgba(0, 0, 0, 0.25);
+  }
+}
+
+/* Dim overlay (2-4% opacity) */
+.masonry-tile .hover-overlay {
+  opacity: 0;
+  transition: opacity 0.14s linear;
+  border-radius: 0.5rem; /* Match rounded-lg */
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .masonry-tile:hover .hover-overlay {
+    opacity: 0.04;
+  }
+}
+
+/* Hover icon (top-right) */
+.masonry-tile .hover-icon {
+  opacity: 0;
+  transform: translateY(2px);
+  transition: opacity 0.14s ease-out,
+              transform 0.14s ease-out;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .masonry-tile:hover .hover-icon {
+    opacity: 0.9;
+    transform: translateY(0);
+  }
+}
+
+/* Keyboard focus ring (accessible, no scale animation) */
+.masonry-tile:focus-visible {
+  outline: 2px solid rgb(59, 130, 246); /* blue-500 */
+  outline-offset: 2px;
+  transform: none; /* Do not scale on focus */
+  border-radius: 0.5rem; /* Match rounded-lg */
+}
+
+/* Dark mode focus ring */
+.dark .masonry-tile:focus-visible {
+  outline-color: rgb(96, 165, 250); /* blue-400 */
+}
+
+/* PART C: Masonry tile title caption (hover-only) */
+/* Caption uses group-hover:opacity-100 directly in component classes */
+/* No additional CSS needed - handled by Tailwind group-hover utility */
+
 
 
