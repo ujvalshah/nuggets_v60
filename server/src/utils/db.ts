@@ -174,8 +174,13 @@ function transformArticle(doc: any): any {
     tags: rest.tags || [],
     readTime: rest.readTime || calculateReadTime(rest.content || ''),
     visibility: rest.visibility || 'public',
-    // Preserve media and metadata fields
-    media: rest.media || null,
+    // Preserve media and metadata fields (including masonryTitle)
+    // CRITICAL: masonryTitle must flow through all layers to persist correctly
+    media: rest.media ? {
+      ...rest.media,
+      masonryTitle: rest.media.masonryTitle, // Preserve masonryTitle from DB
+      showInMasonry: rest.media.showInMasonry, // Preserve showInMasonry from DB
+    } : null,
     images: rest.images || [],
     video: rest.video,
     documents: rest.documents || [],

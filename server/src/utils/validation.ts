@@ -30,6 +30,10 @@ const mediaSchema = z.object({
   aspect_ratio: z.string().optional(),
   filename: z.string().optional(),
   previewMetadata: previewMetadataSchema,
+  // Masonry layout visibility flag (optional for backward compatibility)
+  showInMasonry: z.boolean().optional(),
+  // Masonry tile title (optional, max 80 characters, single-line)
+  masonryTitle: z.string().max(80, 'Masonry title must be 80 characters or less').optional(),
 }).optional().nullable();
 
 // Schema for document object

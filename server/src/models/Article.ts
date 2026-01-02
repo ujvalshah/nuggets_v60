@@ -25,6 +25,16 @@ export interface INuggetMedia {
     titleSource?: string; // e.g., "youtube-oembed"
     titleFetchedAt?: string; // ISO timestamp
   };
+  // Masonry layout visibility flag (optional for backward compatibility)
+  // If true, this media item will appear as an individual tile in Masonry layout
+  // Defaults: primary media → true, all other media → false
+  // Backward compatibility: if missing, treat only primary media as selected
+  showInMasonry?: boolean;
+  // Masonry tile title (optional)
+  // Displayed as hover caption at bottom of tile in Masonry layout
+  // Max 80 characters, single-line, no markdown
+  // Backward compatibility: if missing, no caption is shown
+  masonryTitle?: string;
 }
 
 export interface IEngagement {
@@ -98,7 +108,11 @@ const NuggetMediaSchema = new Schema<INuggetMedia>({
       titleFetchedAt: String
     },
     required: false
-  }
+  },
+  // Masonry layout visibility flag (optional for backward compatibility)
+  showInMasonry: { type: Boolean, required: false },
+  // Masonry tile title (optional)
+  masonryTitle: { type: String, required: false, maxlength: 80 }
 }, { _id: false });
 
 const EngagementSchema = new Schema<IEngagement>({
