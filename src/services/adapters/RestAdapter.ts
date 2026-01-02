@@ -122,7 +122,19 @@ export class RestAdapter implements IAdapter {
     // Phase 2: Include categoryIds if present
     if (updates.categoryIds !== undefined) payload.categoryIds = updates.categoryIds;
     if (updates.visibility !== undefined) payload.visibility = updates.visibility;
-    if (updates.media !== undefined) payload.media = updates.media;
+    // CRITICAL: Preserve masonryTitle when updating media field
+    // masonryTitle must flow through all layers to persist correctly
+    if (updates.media !== undefined) {
+      payload.media = updates.media;
+      // Ensure masonryTitle is explicitly included (defensive against field dropping)
+      if (updates.media && typeof updates.media === 'object' && 'masonryTitle' in updates.media) {
+        payload.media = {
+          ...updates.media,
+          masonryTitle: updates.media.masonryTitle, // Explicitly preserve masonryTitle
+          showInMasonry: updates.media.showInMasonry, // Explicitly preserve showInMasonry
+        };
+      }
+    }
     if (updates.images !== undefined) payload.images = updates.images;
     if (updates.documents !== undefined) payload.documents = updates.documents;
     // CRITICAL: Include mediaIds for Cloudinary-uploaded media

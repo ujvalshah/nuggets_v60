@@ -214,7 +214,12 @@ export const NewsCard = forwardRef<HTMLDivElement, NewsCardProps>(
         )}
         <ImageLightbox
           isOpen={modals.showLightbox}
-          onClose={() => modals.setShowLightbox(false)}
+          onClose={(e) => {
+            // Stop event bubbling from image tiles so closing the carousel
+            // does not trigger the masonry tile drawer click handler.
+            e?.stopPropagation?.();
+            modals.setShowLightbox(false);
+          }}
           images={originalArticle.images || []}
           initialIndex={modals.lightboxInitialIndex || 0}
           sidebarContent={

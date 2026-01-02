@@ -47,7 +47,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Article } from '@/types';
 import { X, Clock, ExternalLink, FolderPlus, MoreVertical, Flag, Trash2, Edit2, Globe, Lock } from 'lucide-react';
-import { formatDate } from '@/utils/formatters';
+import { formatDate, formatReadTime } from '@/utils/formatters';
 import { Avatar } from './shared/Avatar';
 import { AddToCollectionModal } from './AddToCollectionModal';
 import { ShareMenu } from './shared/ShareMenu';
@@ -280,7 +280,7 @@ export const ArticleDetail: React.FC<ArticleDetailProps> = ({
                    <div className="flex items-center gap-4 text-xs font-medium text-slate-500 dark:text-slate-400">
                        <div className="flex items-center gap-1.5">
                            <Clock size={14} />
-                           <span>{article?.readTime ?? 1} min read</span>
+                           <span>{formatReadTime(article?.readTime ?? 1)}</span>
                        </div>
                        {article?.publishedAt && (
                            <div>{formatDate(article.publishedAt)}</div>
