@@ -81,18 +81,18 @@
     "@types/express": "^4.17.21",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/morgan": "^1.9.9",
-    "@types/node": "^22.14.0",
-    "@types/pino": "^7.0.4",
+    "@types/node": "^22.19.3",
+    "@types/pino": "^7.0.5",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.0.0",
-    "autoprefixer": "^10.4.20",
+    "autoprefixer": "^10.4.23",
     "concurrently": "^8.2.2",
     "cross-env": "^10.1.0",
     "postcss": "^8.4.49",
     "tailwindcss": "^3.4.17",
     "tsx": "^4.7.0",
-    "typescript": "~5.8.2",
+    "typescript": "~5.9.3",
     "vite": "^7.2.7"
   }
 }
