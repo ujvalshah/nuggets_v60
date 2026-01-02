@@ -48,9 +48,15 @@ export const TableView: React.FC<TableViewProps> = ({ collections, onClick }) =>
                                     </div>
                                 </td>
                                 <td className="px-4 py-3 text-slate-500 text-xs">{formatDate(col.createdAt, false)}</td>
-                                <td className="px-4 py-3 text-slate-500 text-xs font-medium">{col.updatedAt ? formatDate(col.updatedAt, false) : '-'}</td>
-                                <td className="px-4 py-3 text-center text-slate-600 dark:text-slate-300 font-medium text-xs"><span className="px-2 py-0.5 bg-slate-100 dark:bg-slate-800 rounded-full">{col.entries.length}</span></td>
-                                <td className="px-4 py-3 text-center text-slate-600 dark:text-slate-300 font-medium text-xs">{col.followersCount}</td>
+                                <td className="px-4 py-3 text-slate-500 text-xs font-medium">{col.updatedAt ? formatDate(col.updatedAt, false) : '—'}</td>
+                                <td className="px-4 py-3 text-center text-slate-600 dark:text-slate-300 font-medium text-xs">
+                                    <span className="px-2 py-0.5 bg-slate-100 dark:bg-slate-800 rounded-full">
+                                        {col.validEntriesCount ?? col.entries?.length ?? 0}
+                                    </span>
+                                </td>
+                                <td className="px-4 py-3 text-center text-slate-600 dark:text-slate-300 font-medium text-xs">
+                                    {col.followersCount ?? 0}
+                                </td>
                                 <td className="px-4 py-3 text-right"><div className="flex justify-end text-slate-300 group-hover:text-primary-500 transition-colors"><ChevronRight size={16} /></div></td>
                             </tr>
                         ))}

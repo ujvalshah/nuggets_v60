@@ -4,7 +4,7 @@ import { X, ChevronLeft, ChevronRight } from 'lucide-react';
 
 interface ImageLightboxProps {
   isOpen: boolean;
-  onClose: () => void;
+  onClose: (e?: React.MouseEvent) => void;
   images: string[];
   initialIndex?: number;
   sidebarContent?: React.ReactNode;
@@ -41,30 +41,42 @@ export const ImageLightbox: React.FC<ImageLightboxProps> = ({
     setCurrentIndex(prev => (prev === images.length - 1 ? 0 : prev + 1));
   }, [images.length]);
 
+  // handleClose must be declared before use — avoid circular reference.
+  // Stop event bubbling from image tiles so closing the carousel
+  // does not trigger the masonry tile drawer click handler.
+  const handleClose = useCallback((e?: React.MouseEvent) => {
+    e?.stopPropagation?.();
+    onClose(e);
+  }, [onClose]);
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (!isOpen) return;
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') {
+        // Stop event bubbling from image tiles so closing the carousel
+        // does not trigger the masonry tile drawer click handler.
+        handleClose();
+      }
       if (e.key === 'ArrowLeft') handlePrev();
       if (e.key === 'ArrowRight') handleNext();
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose, handlePrev, handleNext]);
+  }, [isOpen, handleClose, handlePrev, handleNext]);
 
   if (!isOpen) return null;
 
   return createPortal(
     <div 
       className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-sm flex animate-in fade-in duration-200"
-      onClick={onClose}
+      onClick={handleClose}
     >
       {/* Image Area */}
       <div className="flex-1 relative flex items-center justify-center h-full overflow-hidden w-full">
           {/* Close Button */}
           <button 
-            onClick={onClose}
+            onClick={handleClose}
             className={`absolute top-4 ${sidebarContent ? 'left-4' : 'right-4'} p-2 text-white/70 hover:text-white hover:bg-white/10 rounded-full transition-colors z-50`}
           >
             <X size={24} />
@@ -115,7 +127,7 @@ export const ImageLightbox: React.FC<ImageLightboxProps> = ({
            <div className="relative h-full overflow-y-auto custom-scrollbar">
               <div className="absolute top-2 right-2 z-20">
                  <button 
-                   onClick={onClose} 
+                   onClick={handleClose} 
                    className="p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors"
                  >
                    <X size={20} />

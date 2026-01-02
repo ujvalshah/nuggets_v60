@@ -1,113 +1,210 @@
-
 import { AdminTag, AdminTagRequest } from '../types/admin';
-import { MOCK_ADMIN_TAGS } from './mockData';
+import { apiClient } from '@/services/apiClient';
+import { mapTagToAdminTag, RawTag } from './adminApiMappers';
 
-const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+interface PaginatedResponse<T> {
+  data: T[];
+  total: number;
+  page: number;
+  limit: number;
+  hasMore: boolean;
+}
 
 class AdminTagsService {
-  private tags = [...MOCK_ADMIN_TAGS];
-
   async listTags(query?: string): Promise<AdminTag[]> {
-    await delay(500);
-    let result = this.tags.filter(t => t.status !== 'pending');
-    
-    if (query) {
-      const q = query.toLowerCase();
-      result = result.filter(t => t.name.toLowerCase().includes(q));
+    try {
+      // Get all tags (without format=simple to get full objects)
+      // Request high limit (100) to get all tags for admin panel
+      const endpoint = query 
+        ? `/categories?q=${encodeURIComponent(query)}&limit=100` 
+        : '/categories?limit=100';
+      const response = await apiClient.get<PaginatedResponse<RawTag>>(endpoint, undefined, 'adminTagsService.listTags');
+      
+      // Backend always returns paginated response format { data: [...], total, ... }
+      const tags = response?.data || [];
+      
+      if (!Array.isArray(tags)) {
+        console.error('[AdminTagsService.listTags] Expected tags array but got:', typeof tags, response);
+        return [];
+      }
+      
+      // Filter out pending
+      const filtered = tags.filter(t => t.status !== 'pending');
+      
+      return filtered.map(mapTagToAdminTag).sort((a, b) => b.usageCount - a.usageCount);
+    } catch (error: any) {
+      console.error('[AdminTagsService.listTags] Error fetching tags:', error);
+      throw error;
     }
-    
-    return result.sort((a, b) => b.usageCount - a.usageCount);
   }
 
   async listRequests(): Promise<AdminTagRequest[]> {
-    await delay(400);
-    return this.tags
-      .filter(t => t.status === 'pending')
-      .map(t => ({
-        id: t.id,
-        name: t.name,
+    try {
+      // Get all tags and filter for pending
+      // Request high limit (100) to get all tags
+      const response = await apiClient.get<PaginatedResponse<RawTag>>('/categories?limit=100');
+      const tags = response?.data || [];
+      
+      if (!Array.isArray(tags)) {
+        console.error('[AdminTagsService.listRequests] Expected tags array but got:', typeof tags, response);
+        return [];
+      }
+      
+      const pending = tags.filter(t => t.status === 'pending');
+      
+      return pending.map(tag => ({
+        id: tag.id,
+        name: tag.rawName || tag.name || '',
         requestedBy: {
-          id: 'u-unknown',
-          name: t.requestedBy || 'Unknown User'
+          id: 'u-unknown', // Backend doesn't track requester
+          name: tag.requestedBy || 'Unknown User'
         },
-        requestedAt: new Date().toISOString(), // Mock date
+        requestedAt: new Date().toISOString(), // Backend doesn't track request date
         status: 'pending'
       }));
+    } catch (error: any) {
+      console.error('[AdminTagsService.listRequests] Error fetching tag requests:', error);
+      throw error;
+    }
   }
 
   async getStats(): Promise<{ total: number; totalTags: number; pending: number; categories: number }> {
-    await delay(200);
-    return {
-      total: this.tags.length,
-      totalTags: this.tags.filter(t => t.status !== 'pending').length,
-      pending: this.tags.filter(t => t.status === 'pending').length,
-      categories: this.tags.filter(t => t.type === 'category' && t.status !== 'pending').length
-    };
+    try {
+      // Request high limit (100) to get accurate stats
+      const response = await apiClient.get<PaginatedResponse<RawTag>>('/categories?limit=100', undefined, 'adminTagsService.getStats');
+      const tags = response?.data || [];
+      
+      if (!Array.isArray(tags)) {
+        console.error('[AdminTagsService.getStats] Expected tags array but got:', typeof tags, response);
+        return { total: 0, totalTags: 0, pending: 0, categories: 0 };
+      }
+      
+      return {
+        total: response?.total || tags.length,
+        totalTags: tags.filter(t => t.status !== 'pending').length,
+        pending: tags.filter(t => t.status === 'pending').length,
+        categories: tags.filter(t => t.type === 'category' && t.status !== 'pending').length
+      };
+    } catch (error: any) {
+      console.error('[AdminTagsService.getStats] Error fetching stats:', error);
+      throw error;
+    }
   }
 
   async toggleOfficialStatus(id: string): Promise<void> {
-    await delay(300);
-    this.tags = this.tags.map(t => t.id === id ? { ...t, isOfficial: !t.isOfficial, type: !t.isOfficial ? 'category' : 'tag' } : t);
+    try {
+      // Get current tag
+      const response = await apiClient.get<PaginatedResponse<RawTag>>('/categories?limit=100');
+      const tags = response?.data || [];
+      
+      if (!Array.isArray(tags)) {
+        throw new Error('Failed to fetch tags');
+      }
+      
+      const tag = tags.find(t => t.id === id);
+      if (!tag) throw new Error('Tag not found');
+      
+      // Backend doesn't support updating isOfficial or type
+      // This would need backend support
+      throw new Error('Toggle official status not supported by backend');
+    } catch (error: any) {
+      console.error('[AdminTagsService.toggleOfficialStatus] Error:', error);
+      throw error;
+    }
   }
 
   async updateTag(id: string, updates: Partial<AdminTag>): Promise<void> {
-    await delay(300);
-    this.tags = this.tags.map(t => t.id === id ? { ...t, ...updates } : t);
+    const payload: any = {};
+    
+    if (updates.name !== undefined) {
+      payload.name = updates.name;
+    }
+    if (updates.type !== undefined) {
+      payload.type = updates.type;
+    }
+    if (updates.status !== undefined) {
+      payload.status = updates.status;
+    }
+    if (updates.isOfficial !== undefined) {
+      payload.isOfficial = updates.isOfficial;
+    }
+    
+    await apiClient.put(`/categories/${id}`, payload, 'adminTagsService.updateTag');
   }
 
   async renameTag(id: string, newName: string): Promise<void> {
-    await delay(600);
-    // In a real app, this would trigger a massive DB update for all related nuggets
-    this.tags = this.tags.map(t => t.id === id ? { ...t, name: newName } : t);
+    // Log rename attempt for debugging
+    console.log('[AdminTagsService.renameTag] Renaming tag:', { id, newName });
+    
+    try {
+      const response = await apiClient.put(`/categories/${id}`, { name: newName }, 'adminTagsService.renameTag');
+      
+      // Log successful response
+      console.log('[AdminTagsService.renameTag] Rename successful:', response);
+      
+      return response;
+    } catch (error: any) {
+      console.error('[AdminTagsService.renameTag] Rename failed:', error);
+      throw error;
+    }
   }
 
   async deleteTag(id: string): Promise<void> {
-    await delay(400);
-    this.tags = this.tags.filter(t => t.id !== id);
+    try {
+      // Get tag name first
+      const response = await apiClient.get<PaginatedResponse<RawTag>>('/categories?limit=100');
+      const tags = response?.data || [];
+      
+      if (!Array.isArray(tags)) {
+        throw new Error('Failed to fetch tags');
+      }
+      
+      const tag = tags.find(t => t.id === id);
+      if (!tag) throw new Error('Tag not found');
+      
+      const tagName = tag.name || tag.rawName || '';
+      if (!tagName) {
+        throw new Error('Tag name not found');
+      }
+      
+      await apiClient.delete(`/categories/${encodeURIComponent(tagName)}`);
+    } catch (error: any) {
+      console.error('[AdminTagsService.deleteTag] Error:', error);
+      throw error;
+    }
   }
 
   async approveRequest(id: string): Promise<void> {
-    await delay(500);
-    const tag = this.tags.find(t => t.id === id);
-    if (tag) {
-        tag.status = 'active';
-        tag.isOfficial = true; 
-        tag.type = 'category';
+    try {
+      // Get tag and update status
+      const response = await apiClient.get<PaginatedResponse<RawTag>>('/categories?limit=100');
+      const tags = response?.data || [];
+      
+      if (!Array.isArray(tags)) {
+        throw new Error('Failed to fetch tags');
+      }
+      
+      const tag = tags.find(t => t.id === id);
+      if (!tag) throw new Error('Tag not found');
+      
+      // Backend doesn't support updating tag status
+      // This would need backend support
+      throw new Error('Tag approval not supported by backend');
+    } catch (error: any) {
+      console.error('[AdminTagsService.approveRequest] Error:', error);
+      throw error;
     }
   }
 
   async rejectRequest(id: string): Promise<void> {
-    await delay(500);
-    this.tags = this.tags.filter(t => t.id !== id);
+    // Delete the pending tag
+    await this.deleteTag(id);
   }
 
   async mergeTags(sourceIds: string[], targetName: string): Promise<void> {
-    await delay(800);
-    
-    // 1. Calculate total usage of source tags
-    const sources = this.tags.filter(t => sourceIds.includes(t.id));
-    const totalUsage = sources.reduce((acc, t) => acc + t.usageCount, 0);
-
-    // 2. Remove source tags
-    this.tags = this.tags.filter(t => !sourceIds.includes(t.id));
-
-    // 3. Find or Create target tag
-    const existingTargetIndex = this.tags.findIndex(t => t.name.toLowerCase() === targetName.toLowerCase());
-    
-    if (existingTargetIndex !== -1) {
-        // Update existing
-        this.tags[existingTargetIndex].usageCount += totalUsage;
-    } else {
-        // Create new
-        this.tags.push({
-            id: `t-merged-${Date.now()}`,
-            name: targetName,
-            type: 'tag',
-            status: 'active',
-            isOfficial: false,
-            usageCount: totalUsage
-        });
-    }
+    // Backend doesn't support tag merging
+    // This would need backend support
+    throw new Error('Tag merging not supported by backend');
   }
 }
 

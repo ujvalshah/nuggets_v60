@@ -10,6 +10,8 @@ import { useToast } from '@/hooks/useToast';
 import { AdminDrawer } from '../components/AdminDrawer';
 import { ConfirmActionModal } from '@/components/settings/ConfirmActionModal';
 import { useAdminHeader } from '../layout/AdminLayout';
+import { useSearchParams } from 'react-router-dom';
+import { queryClient } from '@/queryClient';
 
 // --- Merge Modal Component ---
 const MergeModal: React.FC<{ isOpen: boolean; onClose: () => void; onConfirm: (name: string) => void; count: number }> = ({ isOpen, onClose, onConfirm, count }) => {
@@ -88,6 +90,7 @@ export const AdminTagsPage: React.FC = () => {
   const [tags, setTags] = useState<AdminTag[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [stats, setStats] = useState({ totalTags: 0, pending: 0, categories: 0 });
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   
   // Table State
   const [searchQuery, setSearchQuery] = useState('');
@@ -102,8 +105,10 @@ export const AdminTagsPage: React.FC = () => {
   const [isMergeOpen, setIsMergeOpen] = useState(false);
   const [renameTarget, setRenameTarget] = useState<AdminTag | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<{ tag: AdminTag; timeoutId: number } | null>(null);
 
   const toast = useToast();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const openCreate = () => {
       setTagNameInput('');
@@ -120,6 +125,20 @@ export const AdminTagsPage: React.FC = () => {
     );
   }, []);
 
+  // Initialize filters from URL
+  useEffect(() => {
+    const q = searchParams.get('q');
+    if (q) setSearchQuery(q);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Sync filters to URL
+  useEffect(() => {
+    const params: Record<string, string> = {};
+    if (searchQuery) params.q = searchQuery;
+    setSearchParams(params, { replace: true });
+  }, [searchQuery, setSearchParams]);
+
   const loadData = async () => {
     setIsLoading(true);
     try {
@@ -129,8 +148,11 @@ export const AdminTagsPage: React.FC = () => {
       ]);
       setTags(data);
       setStats(statsData);
-    } catch (e) {
-      toast.error("Failed to load tags");
+      setErrorMessage(null);
+    } catch (e: any) {
+      if (e.message !== 'Request cancelled') {
+        setErrorMessage("Could not load tags. Please retry.");
+      }
     } finally {
       setIsLoading(false);
     }
@@ -169,13 +191,83 @@ export const AdminTagsPage: React.FC = () => {
 
   const handleRename = async (newName: string) => {
       if (!renameTarget) return;
+      
+      const oldName = renameTarget.name;
+      const tagId = renameTarget.id;
+      
+      // Log rename attempt
+      console.log('[AdminTagsPage.handleRename] Starting rename:', { 
+        tagId, 
+        oldName, 
+        newName 
+      });
+      
+      // Optimistic update: update UI immediately
+      setTags(prev => prev.map(t => t.id === tagId ? { ...t, name: newName } : t));
+      
       try {
-          await adminTagsService.renameTag(renameTarget.id, newName);
-          setTags(prev => prev.map(t => t.id === renameTarget.id ? { ...t, name: newName } : t));
+          // Call backend API to persist the rename
+          const response = await adminTagsService.renameTag(tagId, newName);
+          
+          // Log successful response
+          console.log('[AdminTagsPage.handleRename] Backend response:', response);
+          
+          // Verify the response contains the updated name
+          if (response && response.name) {
+              console.log('[AdminTagsPage.handleRename] Confirmed updated name in response:', response.name);
+          }
+          
+          // Invalidate React Query cache for categories/tags to refresh homepage
+          // This ensures the category bar shows the new tag name
+          // Note: Homepage calculates categories from articles, so invalidating articles will refresh categories
+          // Wait a brief moment to ensure backend article updates have completed
+          await new Promise(resolve => setTimeout(resolve, 500));
+          
+          // Invalidate all article-related queries (including infinite queries)
+          // The query key structure is ['articles', 'infinite', ...] so invalidating ['articles'] will match all
+          await queryClient.invalidateQueries({ 
+              queryKey: ['articles'],
+              refetchType: 'all',
+              exact: false // Match all queries that start with ['articles']
+          });
+          
+          // Also invalidate categories query if it exists
+          await queryClient.invalidateQueries({ 
+              queryKey: ['categories'],
+              refetchType: 'all',
+              exact: false
+          });
+          
+          // Force refetch of active queries to ensure immediate update
+          // This will refetch all active queries that match ['articles']
+          await queryClient.refetchQueries({ 
+              queryKey: ['articles'],
+              type: 'active'
+          });
+          
+          console.log('[AdminTagsPage.handleRename] Cache invalidated and queries refetched');
+          
+          // Also trigger a manual refetch after a short delay to ensure data is fresh
+          setTimeout(() => {
+              queryClient.refetchQueries({ 
+                  queryKey: ['articles'],
+                  type: 'active'
+              });
+          }, 1000);
+          
           toast.success("Tag renamed successfully");
           setRenameTarget(null);
-      } catch (e) {
-          toast.error("Rename failed");
+          
+          // Reload tag list to ensure consistency
+          await loadData();
+      } catch (e: any) {
+          // Rollback optimistic update on error
+          console.error('[AdminTagsPage.handleRename] Rename failed, rolling back:', e);
+          setTags(prev => prev.map(t => t.id === tagId ? { ...t, name: oldName } : t));
+          
+          // Show user-friendly error message
+          const errorMessage = e?.response?.data?.message || e?.message || "Rename failed";
+          toast.error(errorMessage);
       }
   };
 
@@ -193,14 +285,22 @@ export const AdminTagsPage: React.FC = () => {
 
   const handleDelete = async () => {
       if (!deleteId) return;
-      try {
-          await adminTagsService.deleteTag(deleteId);
-          setTags(prev => prev.filter(t => t.id !== deleteId));
-          toast.success("Tag deleted");
-          setDeleteId(null);
-      } catch (e) {
-          toast.error("Delete failed");
-      }
+      const tag = tags.find(t => t.id === deleteId);
+      if (!tag) return;
+      setTags(prev => prev.filter(t => t.id !== deleteId));
+      setDeleteId(null);
+      const timeoutId = window.setTimeout(async () => {
+          try {
+              await adminTagsService.deleteTag(deleteId);
+              setPendingDelete(null);
+              toast.success("Tag deleted");
+          } catch (e) {
+              setTags(prev => [...prev, tag]);
+              setPendingDelete(null);
+              toast.error("Delete failed. Changes reverted.");
+          }
+      }, 5000);
+      setPendingDelete({ tag, timeoutId });
   };
 
   const handleBulkDelete = async () => {
@@ -239,7 +339,7 @@ export const AdminTagsPage: React.FC = () => {
       render: (t) => (
         <div className="flex items-center gap-2 group/name">
             <span className="text-slate-400 font-bold">#</span>
-            <span className="font-bold text-slate-900 dark:text-white">{t.name}</span>
+            <span className="font-bold text-slate-900 dark:text-white">{t.name || 'Unnamed Tag'}</span>
             <button 
                 onClick={(e) => { e.stopPropagation(); setRenameTarget(t); }}
                 className="opacity-0 group-hover/name:opacity-100 p-1 text-slate-400 hover:text-primary-600 transition-all"
@@ -354,7 +454,37 @@ export const AdminTagsPage: React.FC = () => {
   ) : null;
 
   return (
-    <div>
+    <div className="space-y-4">
+      {pendingDelete && (
+        <div className="flex items-center justify-between rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <span>Deleted “{pendingDelete.tag.name}”. Undo?</span>
+          <div className="flex gap-2 items-center">
+            <button
+              onClick={() => {
+                clearTimeout(pendingDelete.timeoutId);
+                setTags(prev => [pendingDelete.tag, ...prev]);
+                setPendingDelete(null);
+              }}
+              className="px-3 py-1 rounded-md bg-amber-100 text-amber-900 font-semibold hover:bg-amber-200 transition-colors"
+            >
+              Undo
+            </button>
+            <span className="text-[10px] text-slate-500">5s</span>
+          </div>
+        </div>
+      )}
+      {errorMessage && (
+        <div className="flex items-center justify-between rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <span>{errorMessage}</span>
+          <button
+            onClick={loadData}
+            className="px-3 py-1 rounded-md bg-amber-100 text-amber-900 font-semibold hover:bg-amber-200 transition-colors"
+          >
+            Retry
+          </button>
+        </div>
+      )}
+
       <AdminSummaryBar 
         items={[
             { label: 'Total Tags', value: stats.totalTags, icon: <Hash size={18} /> },
@@ -370,6 +500,27 @@ export const AdminTagsPage: React.FC = () => {
         isLoading={isLoading} 
         placeholder="Search tags..."
         actions={BulkActions}
+        virtualized
+        emptyState={
+          <div className="flex flex-col items-center justify-center text-slate-500 space-y-2">
+            <p className="text-sm font-semibold">No tags match the current filters.</p>
+            <p className="text-xs text-slate-400">Try clearing search filters.</p>
+            <div className="flex gap-2 mt-2">
+              <button
+                onClick={() => { setSearchQuery(''); loadData(); }}
+                className="px-3 py-1 text-xs font-bold rounded-md bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
+              >
+                Clear filters
+              </button>
+              <button
+                onClick={loadData}
+                className="px-3 py-1 text-xs font-bold rounded-md bg-primary-50 text-primary-700 hover:bg-primary-100 transition-colors"
+              >
+                Retry
+              </button>
+            </div>
+          </div>
+        }
         
         sortKey={sortKey}
         sortDirection={sortDirection}

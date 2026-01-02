@@ -3,7 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { adminConfigService } from '@/admin/services/adminConfigService';
 import { LegalPage } from '@/types/legal';
-import { RichTextRenderer } from '@/components/RichTextRenderer';
+import { MarkdownRenderer } from '@/components/MarkdownRenderer';
 import { Loader2, ArrowLeft, Clock } from 'lucide-react';
 import { formatDate } from '@/utils/formatters';
 
@@ -58,7 +58,7 @@ export const LegalPageRenderer: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen py-12 px-4 sm:px-6">
+    <div className="py-12 px-4 sm:px-6">
         <div className="max-w-3xl mx-auto">
             
             {/* Back Link */}
@@ -80,7 +80,7 @@ export const LegalPageRenderer: React.FC = () => {
 
                 {/* Content */}
                 <div className="prose prose-slate dark:prose-invert prose-lg max-w-none prose-headings:font-bold prose-headings:tracking-tight prose-a:text-primary-600">
-                    <RichTextRenderer content={page.content} />
+                    <MarkdownRenderer content={page.content} prose />
                 </div>
 
             </article>

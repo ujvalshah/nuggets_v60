@@ -1,38 +1,20 @@
 import { Router } from 'express';
+import * as tagsController from '../controllers/tagsController.js';
+import { authenticateToken } from '../middleware/authenticateToken.js';
 
 const router = Router();
 
-// Mock categories/tags data
-let CATEGORIES_DB: string[] = ['Tech', 'Business', 'Finance', 'Design', 'Lifestyle'];
+// GET /api/categories - Get all categories (public)
+router.get('/', tagsController.getTags);
 
-// GET /api/categories - Get all categories
-router.get('/', (req, res) => {
-  res.json(CATEGORIES_DB);
-});
+// POST /api/categories - Add a new category (requires authentication)
+router.post('/', authenticateToken, tagsController.createTag);
 
-// POST /api/categories - Add a new category
-router.post('/', (req, res) => {
-  const { name } = req.body;
-  if (!name) return res.status(400).json({ message: 'Category name is required' });
-  
-  if (!CATEGORIES_DB.includes(name)) {
-    CATEGORIES_DB.push(name);
-  }
-  res.status(201).json({ name });
-});
+// PUT /api/categories/:id - Update a tag (requires authentication)
+router.put('/:id', authenticateToken, tagsController.updateTag);
 
-// DELETE /api/categories/:name - Delete a category
-router.delete('/:name', (req, res) => {
-  const { name } = req.params;
-  const index = CATEGORIES_DB.indexOf(name);
-  
-  if (index === -1) {
-    return res.status(404).json({ message: 'Category not found' });
-  }
-  
-  CATEGORIES_DB = CATEGORIES_DB.filter(c => c !== name);
-  res.status(204).send();
-});
+// DELETE /api/categories/:name - Delete a category (requires authentication)
+router.delete('/:name', authenticateToken, tagsController.deleteTag);
 
 export default router;
 

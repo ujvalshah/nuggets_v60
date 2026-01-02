@@ -109,7 +109,7 @@ export class LocalAdapter implements IAdapter {
     }
   }
 
-  async getAllArticles(): Promise<Article[]> {
+  async getAllArticles(params?: { q?: string; page?: number; limit?: number }): Promise<Article[]> {
     this.initStorage();
     try {
       const data = localStorage.getItem(STORAGE_KEY);
@@ -120,6 +120,10 @@ export class LocalAdapter implements IAdapter {
     }
   }
 
+  async getArticlesPaginated(): Promise<import('./IAdapter').PaginatedArticlesResponse> {
+    throw new Error('Pagination not supported by LocalAdapter. Use RestAdapter for paginated queries.');
+  }
+
   async getArticleById(id: string): Promise<Article | undefined> {
     const articles = await this.getAllArticles();
     return articles.find(a => a.id === id);
@@ -128,6 +132,23 @@ export class LocalAdapter implements IAdapter {
   async getArticlesByAuthor(authorId: string): Promise<Article[]> {
     const articles = await this.getAllArticles();
     return articles.filter(a => a.author.id === authorId);
+  }
+
+  async getMyArticleCounts(): Promise<import('./IAdapter').ArticleCountsResponse> {
+    // For LocalAdapter, get current user ID from localStorage or return mock data
+    // This is a simplified implementation since LocalAdapter doesn't have authentication
+    const articles = await this.getAllArticles();
+    // Since we don't have auth context in LocalAdapter, return counts for all articles
+    // In practice, LocalAdapter is mainly for development/testing
+    const total = articles.length;
+    const publicCount = articles.filter(a => (a.visibility ?? 'public') === 'public').length;
+    const privateCount = articles.filter(a => a.visibility === 'private').length;
+    
+    return {
+      total,
+      public: publicCount,
+      private: privateCount
+    };
   }
 
   async createArticle(article: Omit<Article, 'id' | 'publishedAt'>): Promise<Article> {
@@ -292,20 +313,35 @@ export class LocalAdapter implements IAdapter {
     }
   }
 
-  async getCollections(): Promise<Collection[]> {
+  async getCollections(params?: { type?: 'public' | 'private'; includeCount?: boolean }): Promise<Collection[] | { data: Collection[]; count: number }> {
     this.initStorage();
     try {
       const data = localStorage.getItem(COLLECTIONS_KEY);
       const parsed: Collection[] = data ? JSON.parse(data) : [];
-      return parsed.map(c => ({ 
+      let collections = parsed.map(c => ({ 
           ...c, 
           entries: c.entries || [],
           type: c.type || 'public',
           updatedAt: c.updatedAt || c.createdAt
       }));
+      
+      // Apply type filter if specified
+      if (params?.type) {
+        collections = collections.filter(c => c.type === params.type);
+      }
+      
+      // Return with count if requested
+      if (params?.includeCount) {
+        return {
+          data: collections,
+          count: collections.length
+        };
+      }
+      
+      return collections;
     } catch (e) {
       console.warn('Failed to get collections from storage:', e);
-      return [];
+      return params?.includeCount ? { data: [], count: 0 } : [];
     }
   }
 

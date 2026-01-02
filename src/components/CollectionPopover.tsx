@@ -35,16 +35,16 @@ export const CollectionPopover: React.FC<CollectionPopoverProps> = ({
   }, [isOpen, mode]);
 
   const handleCloseInternal = async () => {
-      // Fallback: If in private mode (folders), ensure the nugget is at least in "General Bookmarks"
-      // if it's not in any other folder.
+      // Fallback: If in private mode (collections), ensure the nugget is at least in a "General" collection
+      // if it's not in any other private collection. This ensures users don't lose their saved items.
       if (mode === 'private' && collections.length > 0) {
           const inAny = collections.some(c => c.entries.some(e => e.articleId === articleId));
           if (!inAny) {
-              const general = collections.find(c => c.name === 'General Bookmarks');
+              const general = collections.find(c => c.name === 'General' || c.name === 'General Bookmarks');
               if (general) {
                   try {
                       await storageService.addArticleToCollection(general.id, articleId, currentUserId);
-                      toast.success("Saved to General Bookmarks");
+                      toast.success(`Saved to ${general.name}`);
                   } catch (e) {
                       console.error("Auto-save failed", e);
                   }
@@ -55,31 +55,59 @@ export const CollectionPopover: React.FC<CollectionPopoverProps> = ({
   };
 
   // Handle clicking outside & scroll
+  // PERFORMANCE FIX: Throttle scroll handler to prevent performance violations
+  // Closing on scroll is intentional UX, but we throttle it to avoid blocking scroll
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
         if (modalRef.current && !modalRef.current.contains(e.target as Node)) {
             handleCloseInternal();
         }
     };
+    
     if (isOpen) {
+        let rafId: number | null = null;
+        let isScheduled = false;
+
+        // Throttled scroll handler - batches close action to next paint cycle
+        const handleScrollThrottled = () => {
+          if (isScheduled) return;
+          
+          isScheduled = true;
+          rafId = requestAnimationFrame(() => {
+            handleCloseInternal();
+            isScheduled = false;
+            rafId = null;
+          });
+        };
+
         // slight delay to prevent immediate close if the click that opened it bubbles
         setTimeout(() => {
             window.addEventListener('mousedown', handleClickOutside);
-            window.addEventListener('scroll', handleCloseInternal, { capture: true });
+            // Mark as passive for better scroll performance
+            window.addEventListener('scroll', handleScrollThrottled, { passive: true, capture: true });
             window.addEventListener('resize', handleCloseInternal);
         }, 100);
+        
+        return () => {
+            window.removeEventListener('mousedown', handleClickOutside);
+            window.removeEventListener('scroll', handleScrollThrottled, true);
+            window.removeEventListener('resize', handleCloseInternal);
+            if (rafId !== null) {
+              cancelAnimationFrame(rafId);
+            }
+        };
     }
-    return () => {
-        window.removeEventListener('mousedown', handleClickOutside);
-        window.removeEventListener('scroll', handleCloseInternal, { capture: true });
-        window.removeEventListener('resize', handleCloseInternal);
-    };
   }, [isOpen, onClose, collections]); 
 
   const loadCollections = async () => {
     const cols = await storageService.getCollections();
-    // Filter by mode and user ownership
-    setCollections(cols.filter(c => c.creatorId === currentUserId && c.type === mode));
+    // For public collections, show all public collections (user can add to any)
+    // For private collections, show only user's own collections
+    if (mode === 'public') {
+      setCollections(cols.filter(c => c.type === 'public'));
+    } else {
+      setCollections(cols.filter(c => c.creatorId === currentUserId && c.type === mode));
+    }
   };
 
   const toggleCollection = async (collectionId: string, isInCollection: boolean, colName: string) => {
@@ -103,8 +131,10 @@ export const CollectionPopover: React.FC<CollectionPopoverProps> = ({
         await storageService.addArticleToCollection(collectionId, articleId, currentUserId);
         toast.success(`Added to "${colName}"`);
       }
-    } catch (e) {
-      toast.error("Failed to update");
+    } catch (e: any) {
+      console.error('Failed to update collection:', e);
+      const errorMessage = e?.response?.data?.message || e?.message || "Failed to update collection";
+      toast.error(errorMessage);
       loadCollections(); // Revert on error
     }
   };
@@ -149,8 +179,8 @@ export const CollectionPopover: React.FC<CollectionPopoverProps> = ({
   }
 
   // Dynamic naming based on mode
-  const headerText = mode === 'private' ? 'Save to Folder' : 'Add to Collection';
-  const entityName = mode === 'private' ? 'folder' : 'collection';
+  const headerText = mode === 'private' ? 'Save to Collection' : 'Add to Collection';
+  const entityName = 'collection';
 
   return createPortal(
     <div 

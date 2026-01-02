@@ -12,6 +12,7 @@ interface RichTextEditorProps {
   placeholder?: string;
   className?: string;
   error?: string;
+  onImagePaste?: (file: File) => void; // Callback when image is pasted
 }
 
 interface ToolbarButtonProps {
@@ -85,7 +86,8 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
   onChange,
   placeholder,
   className = '',
-  error
+  error,
+  onImagePaste
 }) => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -139,6 +141,64 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
   };
 
   const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    // Check for image files first - improved detection for screenshots
+    // Support multiple images in a single paste operation
+    const items = e.clipboardData.items;
+    if (items && items.length > 0) {
+      const imageFiles: File[] = [];
+      
+      // Collect all images from clipboard
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        const itemType = item.type.toLowerCase();
+        
+        // Check if item is an image type
+        const isImageType = itemType.startsWith('image/') || 
+                           (item.kind === 'file' && itemType.includes('image'));
+        
+        if (isImageType) {
+          // Try to get the file
+          const file = item.getAsFile();
+          
+          // Verify it's actually an image file
+          if (file) {
+            // Check file type or size (images usually have a reasonable size)
+            const isImageFile = file.type.startsWith('image/') || 
+                               (!file.type && file.size > 0 && file.size < 50 * 1024 * 1024); // < 50MB, likely image
+            
+            if (isImageFile) {
+              // Ensure file has proper type if missing (common with screenshots)
+              if (!file.type || file.type === '') {
+                // Try to infer from item type, default to PNG for screenshots
+                const inferredType = itemType.startsWith('image/') ? itemType : 'image/png';
+                const timestamp = Date.now();
+                const typedFile = new File([file], `screenshot-${timestamp}-${i}.png`, {
+                  type: inferredType
+                });
+                imageFiles.push(typedFile);
+              } else {
+                imageFiles.push(file);
+              }
+            }
+          }
+        }
+      }
+      
+      // If we found any images, process them all
+      if (imageFiles.length > 0) {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        if (onImagePaste) {
+          // Process each image (callback handles single file, so call for each)
+          imageFiles.forEach((file) => {
+            onImagePaste(file);
+          });
+        }
+        return;
+      }
+    }
+
     // Check if clipboard has HTML content
     const html = e.clipboardData.getData('text/html');
     

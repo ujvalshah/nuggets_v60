@@ -15,6 +15,9 @@ import { ProfileFormData, UserPreferences, AVATAR_COLORS } from '../types/settin
 import { userToProfileForm, userToPreferencesForm } from '../models/userFormMappers';
 import { Avatar } from '../components/shared/Avatar';
 import { adminConfigService } from '../admin/services/adminConfigService';
+import { HeaderSpacer } from '../components/layouts/HeaderSpacer';
+import { LAYOUT_CLASSES } from '../constants/layout';
+import { Z_INDEX } from '../constants/zIndex';
 
 const Label: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1.5 ml-1">
@@ -186,12 +189,16 @@ export const AccountSettingsPage: React.FC<{ userId: string }> = ({ userId }) =>
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 pb-20">
+      <HeaderSpacer />
       
-      {/* Page Header */}
-      <div className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 pt-8 pb-8 sticky top-[4.5rem] z-20">
+      {/* Page Header - Unified Light Theme */}
+      <div 
+        className={`sticky ${LAYOUT_CLASSES.STICKY_BELOW_HEADER} ${LAYOUT_CLASSES.PAGE_TOOLBAR} pt-8 pb-8`}
+        style={{ zIndex: Z_INDEX.CATEGORY_BAR }}
+      >
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-          <h1 className="text-3xl font-bold text-slate-900 dark:text-white tracking-tight">Settings</h1>
-          <p className="text-slate-500 dark:text-slate-400 mt-1">Manage your identity, security, and preferences.</p>
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white tracking-tight">Settings</h1>
+          <p className="text-gray-500 dark:text-slate-400 mt-1">Manage your identity, security, and preferences.</p>
         </div>
       </div>
 
@@ -454,7 +461,7 @@ export const AccountSettingsPage: React.FC<{ userId: string }> = ({ userId }) =>
                 <div className="px-6 pb-6 pt-2">
                   <div className="h-px w-full bg-red-200/50 dark:bg-red-900/30 mb-6" />
                   <p className="text-sm text-slate-600 dark:text-slate-300 mb-6 max-w-xl leading-relaxed">
-                    Deleting your account is permanent. All your nuggets, collections, and bookmarks will be wiped immediately. This action cannot be undone.
+                    Deleting your account is permanent. All your nuggets and collections will be wiped immediately. This action cannot be undone.
                   </p>
                   <button 
                     onClick={() => setShowDeleteModal(true)}

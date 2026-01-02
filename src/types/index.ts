@@ -23,6 +23,9 @@ export interface PreviewMetadata {
   authorName?: string;
   publishDate?: string;
   mediaType?: MediaType;
+  // YouTube title persistence fields (backend as source of truth)
+  titleSource?: string; // e.g., "youtube-oembed"
+  titleFetchedAt?: string; // ISO timestamp
 }
 
 export interface NuggetMedia {
@@ -32,6 +35,16 @@ export interface NuggetMedia {
   aspect_ratio?: string;
   filename?: string;
   previewMetadata?: PreviewMetadata;
+  // Masonry layout visibility flag
+  // If true, this media item will appear as an individual tile in Masonry layout
+  // Defaults: primary media → true, all other media → false
+  // Backward compatibility: if missing, treat only primary media as selected
+  showInMasonry?: boolean;
+  // Masonry tile title (optional)
+  // Displayed as hover caption at bottom of tile in Masonry layout
+  // Max 80 characters, single-line, no markdown
+  // Backward compatibility: if missing, no caption is shown
+  masonryTitle?: string;
 }
 
 export interface Engagement {
@@ -54,9 +67,82 @@ export interface DisplayAuthor {
   avatarUrl?: string;
 }
 
+/**
+ * Tag interface for Phase 2 implementation
+ * Tags have stable IDs that don't change when renamed
+ */
+export interface Tag {
+  id: string; // MongoDB ObjectId
+  rawName: string; // Display name (user-entered casing)
+  canonicalName: string; // Normalized lowercase for matching
+  usageCount: number;
+  type: 'category' | 'tag';
+  status: 'active' | 'pending' | 'deprecated';
+  isOfficial: boolean;
+}
+
+/**
+ * ============================================================================
+ * MEDIA CLASSIFICATION: PRIMARY vs SUPPORTING
+ * ============================================================================
+ * 
+ * PRIMARY MEDIA:
+ * - Exactly ONE primary media item per nugget (or none)
+ * - Determines thumbnail representation in cards
+ * - Priority: YouTube > Image > Document
+ * - Explicitly selected OR inferred once and stored
+ * 
+ * SUPPORTING MEDIA:
+ * - Zero or more additional media items
+ * - Rendered in drawer only, never in cards
+ * - Includes: additional images, videos, documents
+ * - Never influences thumbnail or card layout
+ * 
+ * DETERMINISTIC THUMBNAIL LOGIC:
+ * - IF primaryMedia.type === "youtube" → use YouTube thumbnail
+ * - ELSE IF primaryMedia.type === "image" → use that image
+ * - ELSE → use system fallback
+ */
+
+export interface PrimaryMedia {
+  type: MediaType;
+  url: string;
+  thumbnail?: string; // Cached thumbnail URL (YouTube thumbnail or image URL)
+  aspect_ratio?: string;
+  previewMetadata?: PreviewMetadata;
+  // Masonry layout visibility flag
+  // Primary media always shows in Masonry (defaults to true, cannot be deselected)
+  // Backward compatibility: if missing, treat as true (primary media always visible)
+  showInMasonry?: boolean;
+  // Masonry tile title (optional)
+  // Displayed as hover caption at bottom of tile in Masonry layout
+  // Max 80 characters, single-line, no markdown
+  // Backward compatibility: if missing, no caption is shown
+  masonryTitle?: string;
+}
+
+export interface SupportingMediaItem {
+  type: MediaType;
+  url: string;
+  thumbnail?: string;
+  filename?: string;
+  title?: string;
+  previewMetadata?: PreviewMetadata;
+  // Masonry layout visibility flag
+  // If true, this supporting media item will appear as an individual tile in Masonry layout
+  // Defaults to false (only primary media shows by default)
+  // Backward compatibility: if missing, treat as false (not shown in Masonry)
+  showInMasonry?: boolean;
+  // Masonry tile title (optional)
+  // Displayed as hover caption at bottom of tile in Masonry layout
+  // Max 80 characters, single-line, no markdown
+  // Backward compatibility: if missing, no caption is shown
+  masonryTitle?: string;
+}
+
 export interface Article {
   id: string;
-  title: string;
+  title?: string;
   excerpt: string;
   content: string;
   author: {
@@ -68,13 +154,34 @@ export interface Article {
   displayAuthor?: DisplayAuthor;
   
   publishedAt: string; // ISO date string
-  categories: string[]; 
+  categories: string[]; // Display names (user-facing)
+  categoryIds?: string[]; // Phase 2: Tag ObjectIds for stable references
   tags: string[];
   readTime: number; 
   visibility?: 'public' | 'private';
   
-  // Media
+  // ============================================================================
+  // MEDIA FIELDS (NEW ARCHITECTURE)
+  // ============================================================================
+  
+  // Primary media - exactly one (or null)
+  // This is the SOURCE OF TRUTH for thumbnail and card representation
+  primaryMedia?: PrimaryMedia | null;
+  
+  // Supporting media - zero or more
+  // Rendered only in drawer, never in cards or inline expansion
+  supportingMedia?: SupportingMediaItem[];
+  
+  // ============================================================================
+  // LEGACY MEDIA FIELDS (BACKWARDS COMPATIBILITY)
+  // ============================================================================
+  // These fields are maintained for backwards compatibility
+  // New code should use primaryMedia/supportingMedia
+  
   media?: NuggetMedia | null;
+  // Media IDs array - explicit references to MongoDB Media documents
+  // CRITICAL: Never parse media IDs from content text. Media references are explicit.
+  mediaIds?: string[]; // Array of MongoDB Media document IDs (ObjectId as strings)
   // Legacy fields
   images?: string[]; 
   video?: string; 
@@ -133,7 +240,9 @@ export interface Collection {
   createdAt: string;
   updatedAt?: string;
   followersCount: number;
+  followers?: string[]; // Array of userIds who follow this collection
   entries: CollectionEntry[];
+  validEntriesCount?: number; // Backend-validated count (preferred over entries.length)
   type: 'public' | 'private';
   
   // Display

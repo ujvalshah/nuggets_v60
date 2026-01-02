@@ -8,11 +8,12 @@ interface FilterScrollRowProps {
   onClear: () => void;
 }
 
+// REGRESSION CHECK: Category filter chips must be text-xs (12px) font-medium - do not change
 const CategoryChip: React.FC<{ label: string; isActive: boolean; onClick: () => void }> = ({ label, isActive, onClick }) => (
   <button 
     onClick={onClick} 
     className={`
-      px-3 py-1.5 text-xs font-bold rounded-full border shrink-0 transition-all 
+      px-3 py-1.5 text-xs font-medium rounded-full border shrink-0 transition-all 
       ${isActive 
         ? 'bg-primary-500 border-primary-500 text-slate-900 shadow-sm' 
         : 'bg-slate-100/50 dark:bg-slate-800/50 border-transparent text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
@@ -52,7 +53,7 @@ export const FilterScrollRow: React.FC<FilterScrollRowProps> = ({ categories, se
         <button 
             onClick={onClear} 
             className={`
-              px-4 py-1.5 rounded-full text-xs font-bold border shrink-0 transition-all 
+              px-4 py-1.5 rounded-full text-xs font-medium border shrink-0 transition-all 
               ${selectedCategories.length === 0 
                 ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 border-transparent shadow-sm' 
                 : 'bg-slate-100/50 dark:bg-slate-800/50 border-transparent text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'

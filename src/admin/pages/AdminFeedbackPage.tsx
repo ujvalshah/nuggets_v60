@@ -1,6 +1,6 @@
 
 import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { AdminTable, Column } from '../components/AdminTable';
 import { AdminFeedback } from '../types/admin';
 import { adminFeedbackService } from '@/admin/services/adminFeedbackService';
@@ -10,15 +10,19 @@ import { formatDate } from '@/utils/formatters';
 import { Avatar } from '@/components/shared/Avatar';
 import { useAdminHeader } from '../layout/AdminLayout';
 
+type FeedbackFilter = 'new' | 'read' | 'archived' | 'all';
+
 export const AdminFeedbackPage: React.FC = () => {
   const { setPageHeader } = useAdminHeader();
   const [feedback, setFeedback] = useState<AdminFeedback[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [filter, setFilter] = useState<'new' | 'read' | 'archived'>('new');
+  const [filter, setFilter] = useState<FeedbackFilter>('new');
   const [dateFilter, setDateFilter] = useState('');
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   
   const toast = useToast();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   useEffect(() => {
     setPageHeader(
@@ -26,8 +30,14 @@ export const AdminFeedbackPage: React.FC = () => {
       "Listen to your users.",
       <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl items-center gap-2">
           <div className="flex">
-              {['new', 'read', 'archived'].map(s => (
-                  <button key={s} onClick={() => setFilter(s as any)} className={`px-3 py-1.5 text-xs font-bold capitalize rounded-lg transition-all ${filter === s ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500'}`}>{s}</button>
+              {(['new', 'read', 'archived', 'all'] as FeedbackFilter[]).map(s => (
+                  <button 
+                    key={s} 
+                    onClick={() => setFilter(s)} 
+                    className={`px-3 py-1.5 text-xs font-bold capitalize rounded-lg transition-all ${filter === s ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500'}`}
+                  >
+                    {s === 'all' ? 'All' : s}
+                  </button>
               ))}
           </div>
           <input 
@@ -52,8 +62,11 @@ export const AdminFeedbackPage: React.FC = () => {
       }
 
       setFeedback(filtered);
-    } catch (e) {
-      toast.error("Failed to load feedback");
+      setErrorMessage(null);
+    } catch (e: any) {
+      if (e.message !== 'Request cancelled') {
+        setErrorMessage("Could not load feedback. Please retry.");
+      }
     } finally {
       setIsLoading(false);
     }
@@ -63,10 +76,72 @@ export const AdminFeedbackPage: React.FC = () => {
     loadData();
   }, [filter, dateFilter]);
 
+  // Initialize filters from URL
+  useEffect(() => {
+    const statusParam = searchParams.get('status');
+    const date = searchParams.get('date');
+    if (statusParam === 'new' || statusParam === 'read' || statusParam === 'archived' || statusParam === 'all') {
+      setFilter(statusParam as FeedbackFilter);
+    }
+    if (date) setDateFilter(date);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Sync filters to URL
+  useEffect(() => {
+    const params: Record<string, string> = {};
+    if (filter) params.status = filter;
+    if (dateFilter) params.date = dateFilter;
+    setSearchParams(params, { replace: true });
+  }, [filter, dateFilter, setSearchParams]);
+
   const handleStatus = async (id: string, status: 'read' | 'archived') => {
-      await adminFeedbackService.updateStatus(id, status);
-      setFeedback(prev => prev.filter(f => f.id !== id));
-      toast.success("Updated");
+      // Find the item being updated
+      const item = feedback.find(f => f.id === id);
+      if (!item) return;
+      
+      const previousStatus = item.status;
+      const previousFeedback = [...feedback];
+      
+      // Optimistically update the item's status in state
+      setFeedback(prev => prev.map(f => 
+        f.id === id ? { ...f, status } : f
+      ));
+      
+      try {
+        await adminFeedbackService.updateStatus(id, status);
+        
+        // Show success message with appropriate text
+        const message = status === 'read' 
+          ? 'Feedback marked as resolved' 
+          : 'Feedback archived';
+        
+        // Show toast with undo option (only for 'read' status, not archived)
+        if (status === 'read') {
+          toast.success(message, {
+            duration: 5000,
+            actionLabel: 'Undo',
+            onAction: async () => {
+              try {
+                // Revert to 'new' status (since we're undoing a 'read' action)
+                await adminFeedbackService.updateStatus(id, 'new');
+                setFeedback(prev => prev.map(f => 
+                  f.id === id ? { ...f, status: 'new' } : f
+                ));
+                toast.success('Changes reverted');
+              } catch (e) {
+                toast.error('Failed to undo. Please refresh the page.');
+              }
+            }
+          });
+        } else {
+          toast.success(message);
+        }
+      } catch (e) {
+        // Rollback on failure
+        setFeedback(previousFeedback);
+        toast.error("Update failed. Changes reverted.");
+      }
   };
 
   const columns: Column<AdminFeedback>[] = [
@@ -130,10 +205,24 @@ export const AdminFeedbackPage: React.FC = () => {
       render: (f) => (
           <div className="flex justify-end gap-2">
               {f.status === 'new' && (
-                  <button onClick={() => handleStatus(f.id, 'read')} className="p-1.5 text-green-600 hover:bg-green-50 rounded" title="Mark Read"><Check size={14} /></button>
+                <button 
+                  aria-label="Mark feedback as read"
+                  onClick={() => handleStatus(f.id, 'read')} 
+                  className="p-1.5 text-green-600 hover:bg-green-50 rounded focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2" 
+                  title="Mark Read"
+                >
+                  <Check size={14} />
+                </button>
               )}
               {f.status !== 'archived' && (
-                  <button onClick={() => handleStatus(f.id, 'archived')} className="p-1.5 text-slate-400 hover:bg-slate-100 rounded" title="Archive"><Archive size={14} /></button>
+                <button 
+                  aria-label="Archive feedback"
+                  onClick={() => handleStatus(f.id, 'archived')} 
+                  className="p-1.5 text-slate-400 hover:bg-slate-100 rounded focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2" 
+                  title="Archive"
+                >
+                  <Archive size={14} />
+                </button>
               )}
           </div>
       )
@@ -141,8 +230,66 @@ export const AdminFeedbackPage: React.FC = () => {
   ];
 
   return (
-    <div>
-      <AdminTable columns={columns} data={feedback} isLoading={isLoading} />
+    <div className="space-y-4">
+      {errorMessage && (
+        <div className="flex items-center justify-between rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <span>{errorMessage}</span>
+          <button
+            onClick={loadData}
+            className="px-3 py-1 rounded-md bg-amber-100 text-amber-900 font-semibold hover:bg-amber-200 transition-colors"
+          >
+            Retry
+          </button>
+        </div>
+      )}
+      
+      {/* Filter controls - visible above table */}
+      <div className="flex flex-wrap items-center gap-3 bg-white dark:bg-slate-900 p-3 rounded-lg border border-slate-200 dark:border-slate-800">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Filter:</span>
+          <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-lg">
+            {(['new', 'read', 'archived', 'all'] as FeedbackFilter[]).map(s => (
+              <button 
+                key={s} 
+                onClick={() => setFilter(s)} 
+                className={`px-3 py-1.5 text-xs font-bold capitalize rounded-md transition-all ${
+                  filter === s 
+                    ? 'bg-white dark:bg-slate-700 shadow-sm text-slate-900 dark:text-white' 
+                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'
+                }`}
+              >
+                {s === 'all' ? 'All' : s}
+              </button>
+            ))}
+          </div>
+        </div>
+        
+        <div className="h-4 w-px bg-slate-200 dark:bg-slate-700" />
+        
+        <div className="flex items-center gap-2">
+          <label htmlFor="date-filter" className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+            Date:
+          </label>
+          <input 
+            id="date-filter"
+            type="date" 
+            value={dateFilter}
+            onChange={(e) => setDateFilter(e.target.value)}
+            className="px-3 py-1.5 text-xs font-medium bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+          />
+          {dateFilter && (
+            <button
+              onClick={() => setDateFilter('')}
+              className="px-2 py-1 text-xs text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+              title="Clear date filter"
+            >
+              ✕
+            </button>
+          )}
+        </div>
+      </div>
+      
+      <AdminTable columns={columns} data={feedback} isLoading={isLoading} virtualized />
     </div>
   );
 };

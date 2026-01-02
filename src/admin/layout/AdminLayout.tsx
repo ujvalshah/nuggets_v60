@@ -1,8 +1,9 @@
 
-import React, { useState } from 'react';
-import { Outlet, useOutletContext } from 'react-router-dom';
+import React, { useEffect, useState } from 'react';
+import { Outlet, useLocation, useOutletContext } from 'react-router-dom';
 import { AdminSidebar } from '../components/AdminSidebar';
 import { AdminTopbar } from '../components/AdminTopbar';
+import { markPagePerformance } from '@/observability/telemetry';
 
 export interface AdminHeaderContext {
   setPageHeader: (title: string, description?: string, actions?: React.ReactNode) => void;
@@ -11,6 +12,7 @@ export interface AdminHeaderContext {
 export const useAdminHeader = () => useOutletContext<AdminHeaderContext>();
 
 export const AdminLayout: React.FC = () => {
+  const location = useLocation();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [headerState, setHeaderState] = useState({
     title: '',
@@ -25,6 +27,10 @@ export const AdminLayout: React.FC = () => {
       return { title, description, actions };
     });
   };
+
+  useEffect(() => {
+    markPagePerformance({ name: 'admin:navigation', detail: { path: location.pathname } });
+  }, [location.pathname]);
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex font-sans">

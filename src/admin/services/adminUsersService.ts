@@ -1,58 +1,68 @@
-
 import { AdminUser, AdminUserStatus, AdminRole } from '../types/admin';
-import { MOCK_ADMIN_USERS } from './mockData';
-
-const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+import { apiClient } from '@/services/apiClient';
+import { mapUserToAdminUser } from './adminApiMappers';
+import { User } from '@/types/user';
 
 class AdminUsersService {
-  private users = [...MOCK_ADMIN_USERS];
-
   async listUsers(query?: string): Promise<AdminUser[]> {
-    await delay(300); // Snappy
-    if (!query) return this.users;
-    const q = query.toLowerCase();
-    return this.users.filter(u => 
-      u.name.toLowerCase().includes(q) || 
-      u.username.toLowerCase().includes(q) ||
-      u.email.toLowerCase().includes(q)
-    );
+    // Use query param for backend filtering if available, otherwise client-side filter
+    const endpoint = query ? `/users?q=${encodeURIComponent(query)}` : '/users';
+    const response = await apiClient.get<{ data: User[] } | User[]>(endpoint, undefined, 'adminUsersService.listUsers');
+    
+    // Handle paginated response format { data: [...], total, ... } or direct array
+    const users = Array.isArray(response) ? response : (response.data || []);
+    
+    // Map to AdminUser format
+    return users.map(user => mapUserToAdminUser(user));
   }
 
   async getUserDetails(id: string): Promise<AdminUser | undefined> {
-    await delay(200);
-    return this.users.find(u => u.id === id);
+    const user = await apiClient.get<User>(`/users/${id}`).catch(() => undefined);
+    if (!user) return undefined;
+    return mapUserToAdminUser(user);
   }
 
-  async getStats(): Promise<{ total: number; active: number; newToday: number; admins: number; bookmarks: number }> {
-    await delay(200);
+  async getStats(): Promise<{ total: number; active: number; newToday: number; admins: number }> {
+    const response = await apiClient.get<{ data: User[]; total?: number } | User[]>('/users', undefined, 'adminUsersService.getStats');
+    
+    // Handle paginated response format { data: [...], total, ... } or direct array
+    const users = Array.isArray(response) ? response : (response.data || []);
+    
+    // Ensure users is an array
+    if (!Array.isArray(users)) {
+      console.error('Expected users array but got:', typeof users, users);
+      return { total: 0, active: 0, newToday: 0, admins: 0 };
+    }
+    
     const now = new Date();
     const todayStr = now.toDateString();
     
-    // Simulate bookmarks count (randomized based on user count for mock realism)
-    const simulatedBookmarks = this.users.length * 12 + 45;
-
-    return {
-      total: this.users.length,
-      active: this.users.filter(u => u.status === 'active').length,
-      newToday: this.users.filter(u => new Date(u.joinedAt).toDateString() === todayStr).length,
-      admins: this.users.filter(u => u.role === 'admin').length,
-      bookmarks: simulatedBookmarks
-    };
+    // Compute stats from users
+    const total = users.length;
+    const active = users.length; // Backend doesn't track status, assume all active
+    const newToday = users.filter(u => {
+      const createdAt = u.auth?.createdAt;
+      if (!createdAt) return false;
+      const joinedDate = new Date(createdAt).toDateString();
+      return joinedDate === todayStr;
+    }).length;
+    const admins = users.filter(u => u.role === 'admin').length;
+    
+    return { total, active, newToday, admins };
   }
 
   async updateUserStatus(id: string, status: AdminUserStatus): Promise<void> {
-    await delay(300);
-    this.users = this.users.map(u => u.id === id ? { ...u, status } : u);
+    // Backend doesn't have status field, this would need backend support
+    // For now, we can't update status via API
+    throw new Error('User status update not supported by backend');
   }
 
   async updateUserRole(id: string, role: AdminRole): Promise<void> {
-    await delay(300);
-    this.users = this.users.map(u => u.id === id ? { ...u, role } : u);
+    await apiClient.put(`/users/${id}`, { role });
   }
 
   async deleteUser(id: string): Promise<void> {
-    await delay(500);
-    this.users = this.users.filter(u => u.id !== id);
+    await apiClient.delete(`/users/${id}`);
   }
 }
 

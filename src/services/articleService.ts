@@ -1,58 +1,54 @@
 import { storageService } from './storageService';
+import { PaginatedArticlesResponse } from './adapters/IAdapter';
 import { Article, FilterState } from '@/types';
 
-const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+export type { PaginatedArticlesResponse };
 
 export const articleService = {
-  getArticles: async (filters: FilterState): Promise<Article[]> => {
-    // Simulate network delay
-    await delay(300);
-
-    // Fetch from dynamic storage
-    let filtered = await storageService.getAllArticles();
-
-    // 1. Filter by Query
-    if (filters.query) {
-      const q = filters.query.toLowerCase();
-      filtered = filtered.filter(a => 
-        a.title.toLowerCase().includes(q) || 
-        a.excerpt.toLowerCase().includes(q) ||
-        a.content.toLowerCase().includes(q) ||
-        a.categories.some(cat => cat.toLowerCase().includes(q)) ||
-        a.tags.some(tag => tag.toLowerCase().includes(q))
-      );
+  getArticles: async (filters: FilterState, page: number = 1): Promise<PaginatedArticlesResponse> => {
+    // Backend pagination is the single source of truth
+    // Backend supports: q (search), category, sort, page, limit
+    // Backend does NOT support: tag filter (still ignored)
+    // Note: Only first category is sent (single-select pattern)
+    
+    const limit = filters.limit || 25;
+    
+    // Extract category (single-select: use first category if available)
+    const category = filters.categories && filters.categories.length > 0 
+      ? filters.categories[0] 
+      : undefined;
+    
+    // Map sort order (frontend → backend)
+    const sortMap: Record<string, string> = {
+      'latest': 'latest',
+      'oldest': 'oldest',
+      'title': 'title'
+    };
+    const sort = sortMap[filters.sort || 'latest'] || 'latest';
+    
+    // Use type-safe interface method - no casting required
+    // If adapter doesn't support pagination, it will throw a clear error
+    try {
+      // Trim search query to prevent issues with leading/trailing spaces
+      const trimmedQuery = filters.query?.trim() || undefined;
+      return await storageService.getArticlesPaginated({
+        q: trimmedQuery || undefined,
+        category: category,
+        sort: sort,
+        page,
+        limit
+      });
+    } catch (error: any) {
+      // Re-throw with context if it's an adapter capability error
+      if (error.message && error.message.includes('not supported')) {
+        throw new Error(`Pagination not available: ${error.message}`);
+      }
+      // Propagate API errors as-is
+      throw error;
     }
-
-    // 2. Filter by Categories (Multiple)
-    if (filters.categories && filters.categories.length > 0) {
-      // Check if the article has ANY of the selected categories
-      filtered = filtered.filter(a => 
-        a.categories.some(cat => filters.categories.includes(cat))
-      );
-    }
-
-    // 3. Filter by Tag
-    if (filters.tag) {
-      filtered = filtered.filter(a => a.tags.includes(filters.tag!));
-    }
-
-    // 4. Sort
-    filtered.sort((a, b) => {
-      const dateA = new Date(a.publishedAt).getTime();
-      const dateB = new Date(b.publishedAt).getTime();
-      return filters.sort === 'oldest' ? dateA - dateB : dateB - dateA;
-    });
-
-    // 5. Limit
-    if (filters.limit && filters.limit > 0) {
-      filtered = filtered.slice(0, filters.limit);
-    }
-
-    return filtered;
   },
 
   getArticleById: async (id: string): Promise<Article | undefined> => {
-    await delay(200);
     return storageService.getArticleById(id);
   }
 };

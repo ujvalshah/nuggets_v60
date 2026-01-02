@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { Megaphone, Save, Info, AlertTriangle, XCircle, CheckCircle2, Clock, Shield, Check, ToggleLeft, ToggleRight, Settings, Users, Mail, ClipboardType, Eye, EyeOff } from 'lucide-react';
 import { useToast } from '@/hooks/useToast';
 import { RichTextEditor } from '@/components/RichTextEditor';
-import { RichTextRenderer } from '@/components/RichTextRenderer';
+import { MarkdownRenderer } from '@/components/MarkdownRenderer';
 import { useAdminHeader } from '../layout/AdminLayout';
 import { adminConfigService, AVAILABLE_SERVICES } from '../services/adminConfigService';
 import { RolePermissions, ServiceId, AdminRole, FeatureFlags, SignupConfig } from '../types/admin';
@@ -472,7 +472,7 @@ export const AdminConfigPage: React.FC = () => {
                         {announcement.type === 'success' && <CheckCircle2 size={18} />}
                     </div>
                     <div className="flex-1">
-                        <RichTextRenderer content={announcement.message} className="prose-sm max-w-none" />
+                        <MarkdownRenderer content={announcement.message} className="prose-sm max-w-none" />
                     </div>
                     </div>
                 </div>

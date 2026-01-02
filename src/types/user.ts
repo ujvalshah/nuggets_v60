@@ -27,6 +27,14 @@ export interface UserProfile {
   gender?: string;
   dateOfBirth?: string;
   website?: string;
+  // Professional fields
+  title?: string;
+  company?: string;
+  twitter?: string;
+  linkedin?: string;
+  youtube?: string;
+  instagram?: string;
+  facebook?: string;
 }
 
 export interface UserSecurity {

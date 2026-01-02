@@ -9,27 +9,31 @@ import { useToast } from '@/hooks/useToast';
 import { AdminDrawer } from '../components/AdminDrawer';
 import { ConfirmActionModal } from '@/components/settings/ConfirmActionModal';
 import { useAdminPermissions } from '../hooks/useAdminPermissions';
-import { formatDate } from '@/utils/formatters';
 import { useAdminHeader } from '../layout/AdminLayout';
+import { useSearchParams } from 'react-router-dom';
 
 export const AdminCollectionsPage: React.FC = () => {
   const { setPageHeader } = useAdminHeader();
   const [collections, setCollections] = useState<AdminCollection[]>([]);
   const [stats, setStats] = useState({ totalCommunity: 0, totalNuggetsInCommunity: 0 });
   const [isLoading, setIsLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [selectedCollection, setSelectedCollection] = useState<AdminCollection | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState<{ collection: AdminCollection; timeoutId: number } | null>(null);
   
   // Sorting & Filtering
   const [sortKey, setSortKey] = useState<string>('createdAt');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [dateFilter, setDateFilter] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
 
   // Selection
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
   const toast = useToast();
   const { can } = useAdminPermissions();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const loadData = async (q?: string) => {
     setIsLoading(true);
@@ -40,8 +44,11 @@ export const AdminCollectionsPage: React.FC = () => {
       ]);
       setCollections(colsData);
       setStats(statsData);
-    } catch (e) {
-      toast.error("Failed to load collections");
+      setErrorMessage(null);
+    } catch (e: any) {
+      if (e.message !== 'Request cancelled') {
+        setErrorMessage("Could not load collections. Please retry.");
+      }
     } finally {
       setIsLoading(false);
     }
@@ -51,6 +58,23 @@ export const AdminCollectionsPage: React.FC = () => {
     setPageHeader("Collections", "Review and manage user collections.");
     loadData();
   }, []);
+
+  // Initialize filters from URL
+  useEffect(() => {
+    const q = searchParams.get('q');
+    const date = searchParams.get('date');
+    if (q) setSearchQuery(q);
+    if (date) setDateFilter(date);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Sync filters to URL
+  useEffect(() => {
+    const params: Record<string, string> = {};
+    if (searchQuery) params.q = searchQuery;
+    if (dateFilter) params.date = dateFilter;
+    setSearchParams(params, { replace: true });
+  }, [searchQuery, dateFilter, setSearchParams]);
 
   // Derived state
   const processedCollections = useMemo(() => {
@@ -84,17 +108,24 @@ export const AdminCollectionsPage: React.FC = () => {
 
   const handleDelete = async () => {
     if (!selectedCollection) return;
-    try {
-      await adminCollectionsService.deleteCollection(selectedCollection.id);
-      setCollections(prev => prev.filter(c => c.id !== selectedCollection.id));
-      const newStats = await adminCollectionsService.getStats();
-      setStats(newStats);
-      toast.success("Collection deleted");
-      setSelectedCollection(null);
-      setShowDeleteConfirm(false);
-    } catch (e) {
-      toast.error("Delete failed");
-    }
+    const col = selectedCollection;
+    setCollections(prev => prev.filter(c => c.id !== col.id));
+    setSelectedCollection(null);
+    setShowDeleteConfirm(false);
+    const timeoutId = window.setTimeout(async () => {
+      try {
+        await adminCollectionsService.deleteCollection(col.id);
+        const newStats = await adminCollectionsService.getStats();
+        setStats(newStats);
+        setPendingDelete(null);
+        toast.success("Collection deleted");
+      } catch (e) {
+        setCollections(prev => [...prev, col]);
+        setPendingDelete(null);
+        toast.error("Delete failed. Changes reverted.");
+      }
+    }, 5000);
+    setPendingDelete({ collection: col, timeoutId });
   };
 
   const handleToggleStatus = async (col: AdminCollection) => {
@@ -229,7 +260,37 @@ export const AdminCollectionsPage: React.FC = () => {
   ) : null;
 
   return (
-    <div>
+    <div className="space-y-4">
+      {pendingDelete && (
+        <div className="flex items-center justify-between rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <span>Deleted “{pendingDelete.collection.name}”. Undo?</span>
+          <div className="flex gap-2 items-center">
+            <button
+              onClick={() => {
+                clearTimeout(pendingDelete.timeoutId);
+                setCollections(prev => [pendingDelete.collection, ...prev]);
+                setPendingDelete(null);
+              }}
+              className="px-3 py-1 rounded-md bg-amber-100 text-amber-900 font-semibold hover:bg-amber-200 transition-colors"
+            >
+              Undo
+            </button>
+            <span className="text-[10px] text-slate-500">5s</span>
+          </div>
+        </div>
+      )}
+      {errorMessage && (
+        <div className="flex items-center justify-between rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <span>{errorMessage}</span>
+          <button
+            onClick={() => loadData(searchQuery)}
+            className="px-3 py-1 rounded-md bg-amber-100 text-amber-900 font-semibold hover:bg-amber-200 transition-colors"
+          >
+            Retry
+          </button>
+        </div>
+      )}
+
       <AdminSummaryBar 
         items={[
           { label: 'Community Collections', value: stats.totalCommunity, icon: <Layers size={18} /> },
@@ -244,9 +305,28 @@ export const AdminCollectionsPage: React.FC = () => {
         isLoading={isLoading} 
         actions={BulkActions}
         onSearch={(q) => loadData(q)} 
+        virtualized
         placeholder="Search collections..."
-        
-        // Add date filter to toolbar
+        emptyState={
+          <div className="flex flex-col items-center justify-center text-slate-500 space-y-2">
+            <p className="text-sm font-semibold">No collections match the current filters.</p>
+            <p className="text-xs text-slate-400">Try clearing search or date filters.</p>
+            <div className="flex gap-2 mt-2">
+              <button
+                onClick={() => { setSearchQuery(''); setDateFilter(''); loadData(); }}
+                className="px-3 py-1 text-xs font-bold rounded-md bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
+              >
+                Clear filters
+              </button>
+              <button
+                onClick={() => loadData(searchQuery)}
+                className="px-3 py-1 text-xs font-bold rounded-md bg-primary-50 text-primary-700 hover:bg-primary-100 transition-colors"
+              >
+                Retry
+              </button>
+            </div>
+          </div>
+        }
         filters={
             <input 
                 type="date" 
